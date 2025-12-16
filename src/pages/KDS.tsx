@@ -35,8 +35,15 @@ export default function KDS() {
   const notifiedOrdersRef = useRef<Set<string>>(new Set());
   const previousOrdersRef = useRef<Order[]>([]);
 
-  // Listen for scheduled announcements
-  useScheduledAnnouncements('kds');
+  // Calculate order counts for condition-based announcements
+  const orderCounts = {
+    pending: orders.filter(o => o.status === 'pending').length,
+    preparing: orders.filter(o => o.status === 'preparing').length,
+    total: orders.filter(o => o.status === 'pending' || o.status === 'preparing' || o.status === 'ready').length
+  };
+
+  // Listen for scheduled announcements (now with order counts for demand-based triggers)
+  useScheduledAnnouncements('kds', orderCounts);
 
   // Save filter preference
   useEffect(() => {

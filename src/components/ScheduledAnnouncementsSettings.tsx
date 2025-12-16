@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Slider } from '@/components/ui/slider';
 import { AudioRecorder } from '@/components/AudioRecorder';
 import { useScheduledAnnouncements, ScheduledAnnouncement } from '@/hooks/useScheduledAnnouncements';
-import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2 } from 'lucide-react';
+import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2, Activity, AlertTriangle, Timer } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DAYS_OF_WEEK = [
@@ -28,6 +28,18 @@ const TARGET_SCREENS = [
   { value: 'kds', label: 'KDS (Cozinha)' },
   { value: 'counter', label: 'Balcão' },
   { value: 'order-management', label: 'Gestão de Pedidos' },
+];
+
+const CONDITION_TYPES = [
+  { value: 'orders_in_production', label: 'Pedidos em Produção', description: 'Pedidos com status "Em Preparo"' },
+  { value: 'orders_pending', label: 'Pedidos Pendentes', description: 'Pedidos aguardando início do preparo' },
+  { value: 'orders_total_active', label: 'Total de Pedidos Ativos', description: 'Soma de pendentes + em preparo + prontos' },
+];
+
+const CONDITION_COMPARISONS = [
+  { value: 'greater_than', label: 'Maior que' },
+  { value: 'less_than', label: 'Menor que' },
+  { value: 'equals', label: 'Igual a' },
 ];
 
 export function ScheduledAnnouncementsSettings() {
@@ -48,10 +60,15 @@ export function ScheduledAnnouncementsSettings() {
   const [form, setForm] = useState({
     name: '',
     file_path: '',
+    trigger_type: 'scheduled' as 'scheduled' | 'condition',
     schedule_type: 'daily' as 'once' | 'daily' | 'weekly',
     scheduled_time: '18:00',
     scheduled_days: [2, 3, 4, 5, 6], // Mon-Fri
     scheduled_date: '',
+    condition_type: 'orders_in_production' as 'orders_in_production' | 'orders_pending' | 'orders_total_active',
+    condition_threshold: 15,
+    condition_comparison: 'greater_than' as 'greater_than' | 'less_than' | 'equals',
+    cooldown_minutes: 30,
     target_screens: ['kds'],
     volume: 1.0,
     is_active: true
@@ -61,10 +78,15 @@ export function ScheduledAnnouncementsSettings() {
     setForm({
       name: '',
       file_path: '',
+      trigger_type: 'scheduled',
       schedule_type: 'daily',
       scheduled_time: '18:00',
       scheduled_days: [2, 3, 4, 5, 6],
       scheduled_date: '',
+      condition_type: 'orders_in_production',
+      condition_threshold: 15,
+      condition_comparison: 'greater_than',
+      cooldown_minutes: 30,
       target_screens: ['kds'],
       volume: 1.0,
       is_active: true
@@ -78,10 +100,15 @@ export function ScheduledAnnouncementsSettings() {
       setForm({
         name: announcement.name,
         file_path: announcement.file_path,
+        trigger_type: announcement.trigger_type || 'scheduled',
         schedule_type: announcement.schedule_type,
         scheduled_time: announcement.scheduled_time.slice(0, 5),
         scheduled_days: announcement.scheduled_days || [2, 3, 4, 5, 6],
         scheduled_date: announcement.scheduled_date || '',
+        condition_type: announcement.condition_type || 'orders_in_production',
+        condition_threshold: announcement.condition_threshold || 15,
+        condition_comparison: announcement.condition_comparison || 'greater_than',
+        cooldown_minutes: announcement.cooldown_minutes || 30,
         target_screens: announcement.target_screens || ['kds'],
         volume: announcement.volume || 1.0,
         is_active: announcement.is_active
@@ -173,6 +200,22 @@ export function ScheduledAnnouncementsSettings() {
     }));
   };
 
+  const getAnnouncementDescription = (announcement: ScheduledAnnouncement) => {
+    if (announcement.trigger_type === 'condition') {
+      const conditionLabel = CONDITION_TYPES.find(c => c.value === announcement.condition_type)?.label || '';
+      const comparisonLabel = CONDITION_COMPARISONS.find(c => c.value === announcement.condition_comparison)?.label || '';
+      return `${conditionLabel} ${comparisonLabel} ${announcement.condition_threshold}`;
+    }
+    
+    if (announcement.schedule_type === 'once') {
+      return announcement.scheduled_date || 'Uma vez';
+    }
+    if (announcement.schedule_type === 'daily') {
+      return 'Diariamente';
+    }
+    return announcement.scheduled_days.map(d => DAYS_OF_WEEK.find(x => x.value === d)?.label).join(', ');
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -181,7 +224,7 @@ export function ScheduledAnnouncementsSettings() {
           Anúncios Agendados
         </CardTitle>
         <CardDescription>
-          Grave mensagens e agende reprodução automática em horários específicos
+          Grave mensagens e configure reprodução por horário ou demanda
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -195,7 +238,7 @@ export function ScheduledAnnouncementsSettings() {
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
-                {editingAnnouncement ? 'Editar Anúncio' : 'Novo Anúncio Agendado'}
+                {editingAnnouncement ? 'Editar Anúncio' : 'Novo Anúncio'}
               </DialogTitle>
             </DialogHeader>
             
@@ -275,69 +318,183 @@ export function ScheduledAnnouncementsSettings() {
                 </div>
               )}
 
-              {/* Schedule Type */}
-              <div className="space-y-2">
-                <Label>Tipo de Agendamento</Label>
-                <Select 
-                  value={form.schedule_type} 
-                  onValueChange={(v) => setForm({ ...form, schedule_type: v as any })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="once">Uma vez</SelectItem>
-                    <SelectItem value="daily">Diariamente</SelectItem>
-                    <SelectItem value="weekly">Dias da semana</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Time */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  Horário
-                </Label>
-                <Input
-                  type="time"
-                  value={form.scheduled_time}
-                  onChange={(e) => setForm({ ...form, scheduled_time: e.target.value })}
-                />
-              </div>
-
-              {/* Date (for once) */}
-              {form.schedule_type === 'once' && (
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    Data
-                  </Label>
-                  <Input
-                    type="date"
-                    value={form.scheduled_date}
-                    onChange={(e) => setForm({ ...form, scheduled_date: e.target.value })}
-                  />
+              {/* Trigger Type */}
+              <div className="space-y-3">
+                <Label>Tipo de Disparo</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant={form.trigger_type === 'scheduled' ? 'default' : 'outline'}
+                    className="h-auto py-3 flex flex-col items-center gap-1"
+                    onClick={() => setForm({ ...form, trigger_type: 'scheduled' })}
+                  >
+                    <Clock className="h-5 w-5" />
+                    <span className="text-xs">Por Horário</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={form.trigger_type === 'condition' ? 'default' : 'outline'}
+                    className="h-auto py-3 flex flex-col items-center gap-1"
+                    onClick={() => setForm({ ...form, trigger_type: 'condition' })}
+                  >
+                    <Activity className="h-5 w-5" />
+                    <span className="text-xs">Por Demanda</span>
+                  </Button>
                 </div>
+              </div>
+
+              {/* Scheduled trigger options */}
+              {form.trigger_type === 'scheduled' && (
+                <>
+                  {/* Schedule Type */}
+                  <div className="space-y-2">
+                    <Label>Frequência</Label>
+                    <Select 
+                      value={form.schedule_type} 
+                      onValueChange={(v) => setForm({ ...form, schedule_type: v as any })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="once">Uma vez</SelectItem>
+                        <SelectItem value="daily">Diariamente</SelectItem>
+                        <SelectItem value="weekly">Dias da semana</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Time */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      Horário
+                    </Label>
+                    <Input
+                      type="time"
+                      value={form.scheduled_time}
+                      onChange={(e) => setForm({ ...form, scheduled_time: e.target.value })}
+                    />
+                  </div>
+
+                  {/* Date (for once) */}
+                  {form.schedule_type === 'once' && (
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        Data
+                      </Label>
+                      <Input
+                        type="date"
+                        value={form.scheduled_date}
+                        onChange={(e) => setForm({ ...form, scheduled_date: e.target.value })}
+                      />
+                    </div>
+                  )}
+
+                  {/* Days of Week (for weekly) */}
+                  {form.schedule_type === 'weekly' && (
+                    <div className="space-y-2">
+                      <Label>Dias da Semana</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {DAYS_OF_WEEK.map(day => (
+                          <Button
+                            key={day.value}
+                            type="button"
+                            variant={form.scheduled_days.includes(day.value) ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => toggleDay(day.value)}
+                          >
+                            {day.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
-              {/* Days of Week (for weekly) */}
-              {form.schedule_type === 'weekly' && (
-                <div className="space-y-2">
-                  <Label>Dias da Semana</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {DAYS_OF_WEEK.map(day => (
-                      <Button
-                        key={day.value}
-                        variant={form.scheduled_days.includes(day.value) ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => toggleDay(day.value)}
-                      >
-                        {day.label}
-                      </Button>
-                    ))}
+              {/* Condition trigger options */}
+              {form.trigger_type === 'condition' && (
+                <>
+                  <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                      <p className="text-xs text-yellow-700 dark:text-yellow-400">
+                        O anúncio será disparado automaticamente quando a condição for atingida, respeitando o tempo de cooldown configurado.
+                      </p>
+                    </div>
                   </div>
-                </div>
+
+                  {/* Condition Type */}
+                  <div className="space-y-2">
+                    <Label>Condição</Label>
+                    <Select 
+                      value={form.condition_type} 
+                      onValueChange={(v) => setForm({ ...form, condition_type: v as any })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CONDITION_TYPES.map(ct => (
+                          <SelectItem key={ct.value} value={ct.value}>
+                            <div>
+                              <div>{ct.label}</div>
+                              <div className="text-xs text-muted-foreground">{ct.description}</div>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Condition Comparison & Threshold */}
+                  <div className="space-y-2">
+                    <Label>Disparar quando for</Label>
+                    <div className="flex gap-2">
+                      <Select 
+                        value={form.condition_comparison} 
+                        onValueChange={(v) => setForm({ ...form, condition_comparison: v as any })}
+                      >
+                        <SelectTrigger className="w-[140px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CONDITION_COMPARISONS.map(cc => (
+                            <SelectItem key={cc.value} value={cc.value}>{cc.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={form.condition_threshold}
+                        onChange={(e) => setForm({ ...form, condition_threshold: parseInt(e.target.value) || 1 })}
+                        className="w-24"
+                      />
+                      <span className="flex items-center text-sm text-muted-foreground">pedidos</span>
+                    </div>
+                  </div>
+
+                  {/* Cooldown */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Timer className="h-4 w-4 text-muted-foreground" />
+                      <Label>Cooldown: {form.cooldown_minutes} minutos</Label>
+                    </div>
+                    <Slider
+                      value={[form.cooldown_minutes]}
+                      onValueChange={([value]) => setForm({ ...form, cooldown_minutes: value })}
+                      min={5}
+                      max={120}
+                      step={5}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Após disparar, o anúncio não tocará novamente por {form.cooldown_minutes} minutos, mesmo que a condição continue ativa.
+                    </p>
+                  </div>
+                </>
               )}
 
               {/* Target Screens */}
@@ -416,23 +573,34 @@ export function ScheduledAnnouncementsSettings() {
                 className="flex items-center justify-between p-3 border rounded-lg"
               >
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Badge variant={announcement.is_active ? 'default' : 'secondary'}>
                       {announcement.is_active ? 'Ativo' : 'Inativo'}
+                    </Badge>
+                    <Badge variant="outline" className={announcement.trigger_type === 'condition' ? 'border-orange-500 text-orange-500' : ''}>
+                      {announcement.trigger_type === 'condition' ? (
+                        <><Activity className="h-3 w-3 mr-1" />Demanda</>
+                      ) : (
+                        <><Clock className="h-3 w-3 mr-1" />Horário</>
+                      )}
                     </Badge>
                     <span className="font-medium truncate">{announcement.name}</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                    <Clock className="h-3 w-3" />
-                    <span>{announcement.scheduled_time.slice(0, 5)}</span>
-                    <span>•</span>
-                    <span>
-                      {announcement.schedule_type === 'once' && announcement.scheduled_date}
-                      {announcement.schedule_type === 'daily' && 'Diariamente'}
-                      {announcement.schedule_type === 'weekly' && 
-                        announcement.scheduled_days.map(d => DAYS_OF_WEEK.find(x => x.value === d)?.label).join(', ')
-                      }
-                    </span>
+                    {announcement.trigger_type === 'scheduled' && (
+                      <>
+                        <Clock className="h-3 w-3" />
+                        <span>{announcement.scheduled_time.slice(0, 5)}</span>
+                        <span>•</span>
+                      </>
+                    )}
+                    <span>{getAnnouncementDescription(announcement)}</span>
+                    {announcement.trigger_type === 'condition' && (
+                      <>
+                        <span>•</span>
+                        <span>Cooldown: {announcement.cooldown_minutes}min</span>
+                      </>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                     {announcement.target_screens.map(s => 
