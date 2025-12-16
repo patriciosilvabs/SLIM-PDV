@@ -54,7 +54,7 @@ interface ProductForm {
 }
 
 const LABEL_OPTIONS = [
-  { value: '', label: 'Nenhuma' },
+  { value: 'none', label: 'Nenhuma' },
   { value: 'novidade', label: 'Novidade' },
   { value: 'mais_vendido', label: 'Mais Vendido' },
   { value: 'vegetariano', label: 'Vegetariano' },
@@ -89,7 +89,7 @@ export default function Menu() {
   const [productForm, setProductForm] = useState<ProductForm>({
     name: '', description: '', price: 0, cost_price: 0, category_id: '', 
     is_available: true, is_featured: false, is_promotion: false, promotion_price: 0,
-    label: '', internal_code: '', pdv_code: '', image_url: null
+    label: 'none', internal_code: '', pdv_code: '', image_url: null
   });
   const [productLinkedExtras, setProductLinkedExtras] = useState<string[]>([]);
 
@@ -157,7 +157,7 @@ export default function Menu() {
       is_featured: productForm.is_featured,
       is_promotion: productForm.is_promotion,
       promotion_price: productForm.is_promotion ? productForm.promotion_price : null,
-      label: productForm.label || null,
+      label: productForm.label === 'none' ? null : (productForm.label || null),
       internal_code: productForm.internal_code || null,
       pdv_code: productForm.pdv_code || null,
       image_url: productForm.image_url,
@@ -268,7 +268,7 @@ export default function Menu() {
     setProductForm({
       name: '', description: '', price: 0, cost_price: 0, category_id: '', 
       is_available: true, is_featured: false, is_promotion: false, promotion_price: 0,
-      label: '', internal_code: '', pdv_code: '', image_url: null
+      label: 'none', internal_code: '', pdv_code: '', image_url: null
     });
     setProductLinkedExtras([]);
   };
@@ -285,7 +285,7 @@ export default function Menu() {
       is_featured: product.is_featured ?? false,
       is_promotion: product.is_promotion ?? false,
       promotion_price: product.promotion_price || 0,
-      label: product.label || '',
+      label: product.label || 'none',
       internal_code: product.internal_code || '',
       pdv_code: product.pdv_code || '',
       image_url: product.image_url
@@ -623,7 +623,7 @@ export default function Menu() {
                             <span className="font-semibold">{formatCurrency(product.price)}</span>
                           )}
                         </div>
-                        {product.label && (
+                        {product.label && product.label !== 'none' && (
                           <Badge variant="outline" className="mt-2 text-xs">
                             {LABEL_OPTIONS.find(l => l.value === product.label)?.label || product.label}
                           </Badge>
