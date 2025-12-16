@@ -12,6 +12,23 @@ import { Plus, Trash2, GripVertical, Lock, Package } from 'lucide-react';
 import { ComplementGroup } from '@/hooks/useComplementGroups';
 import { ComplementOption } from '@/hooks/useComplementOptions';
 import { Product } from '@/hooks/useProducts';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface ComplementGroupDialogProps {
   open: boolean;
@@ -42,6 +59,54 @@ const CHANNEL_OPTIONS = [
   { value: 'table', label: 'Mesa' },
 ];
 
+interface SortableOptionProps {
+  option: ComplementOption;
+  onRemove: () => void;
+}
+
+function SortableOption({ option, onRemove }: SortableOptionProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: option.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-3 p-3 border rounded-lg bg-card"
+    >
+      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
+        <GripVertical className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <Lock className="h-4 w-4 text-muted-foreground" />
+      <span className="flex-1 font-medium">{option.name}</span>
+      <span className="text-sm text-muted-foreground">
+        R$ {option.price.toFixed(2)}
+      </span>
+      <Switch checked={option.is_active ?? true} disabled />
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 text-destructive"
+        onClick={onRemove}
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
 export function ComplementGroupDialog({
   open,
   onOpenChange,
@@ -68,6 +133,13 @@ export function ComplementGroupDialog({
   const [selectedProductIds, setSelectedProductIds] = React.useState<string[]>([]);
   const [showOptionPicker, setShowOptionPicker] = React.useState(false);
   const [showProductPicker, setShowProductPicker] = React.useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   React.useEffect(() => {
     if (group) {
@@ -117,7 +189,20 @@ export function ComplementGroupDialog({
     }));
   };
 
-  const selectedOptions = options.filter(o => selectedOptionIds.includes(o.id));
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setSelectedOptionIds(prev => {
+        const oldIndex = prev.indexOf(active.id as string);
+        const newIndex = prev.indexOf(over.id as string);
+        return arrayMove(prev, oldIndex, newIndex);
+      });
+    }
+  };
+
+  const selectedOptions = selectedOptionIds
+    .map(id => options.find(o => o.id === id))
+    .filter((o): o is ComplementOption => !!o);
   const selectedProducts = products.filter(p => selectedProductIds.includes(p.id));
 
   return (
@@ -210,33 +295,32 @@ export function ComplementGroupDialog({
                 </div>
               )}
 
-              {/* Selected Options List */}
-              <div className="space-y-2">
-                {selectedOptions.map(option => (
-                  <div key={option.id} className="flex items-center gap-3 p-3 border rounded-lg bg-card">
-                    <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
-                    <Lock className="h-4 w-4 text-muted-foreground" />
-                    <span className="flex-1 font-medium">{option.name}</span>
-                    <span className="text-sm text-muted-foreground">
-                      R$ {option.price.toFixed(2)}
-                    </span>
-                    <Switch checked={option.is_active ?? true} disabled />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive"
-                      onClick={() => toggleOption(option.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+              {/* Selected Options List with Drag and Drop */}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={selectedOptionIds}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-2">
+                    {selectedOptions.map(option => (
+                      <SortableOption
+                        key={option.id}
+                        option={option}
+                        onRemove={() => toggleOption(option.id)}
+                      />
+                    ))}
+                    {selectedOptions.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4 border rounded-lg border-dashed">
+                        Nenhuma opção adicionada
+                      </p>
+                    )}
                   </div>
-                ))}
-                {selectedOptions.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4 border rounded-lg border-dashed">
-                    Nenhuma opção adicionada
-                  </p>
-                )}
-              </div>
+                </SortableContext>
+              </DndContext>
             </div>
 
             {/* Selection Type */}
