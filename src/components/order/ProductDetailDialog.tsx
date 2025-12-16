@@ -64,9 +64,10 @@ interface ProductDetailDialogProps {
   onOpenChange: (open: boolean) => void;
   product: Product | null;
   onAdd: (product: Product, quantity: number, complements: SelectedComplement[], notes: string) => void;
+  duplicateItems?: boolean;
 }
 
-export function ProductDetailDialog({ open, onOpenChange, product, onAdd }: ProductDetailDialogProps) {
+export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplicateItems }: ProductDetailDialogProps) {
   const [groups, setGroups] = useState<GroupWithOptions[]>([]);
   const [selections, setSelections] = useState<Record<string, SelectedComplement[]>>({});
   const [quantity, setQuantity] = useState(1);
@@ -553,27 +554,29 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd }: Prod
           )}
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Button
-                size="icon"
-                variant="outline"
-                onClick={() => setQuantity(q => Math.max(1, q - 1))}
-              >
-                <Minus className="h-4 w-4" />
-              </Button>
-              <span className="text-xl font-bold w-8 text-center">{quantity}</span>
-              <Button
-                size="icon"
-                variant="outline"
-                onClick={() => setQuantity(q => q + 1)}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
+            {!duplicateItems && (
+              <div className="flex items-center gap-3">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
+                <span className="text-xl font-bold w-8 text-center">{quantity}</span>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => setQuantity(q => q + 1)}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
 
             <Button 
               size="lg" 
-              className="min-w-[180px]"
+              className={duplicateItems ? "flex-1" : "min-w-[180px]"}
               onClick={handleAdd}
               disabled={!canAdd}
             >
