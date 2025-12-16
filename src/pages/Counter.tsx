@@ -27,6 +27,7 @@ import {
   ChevronDown, 
   ChevronUp,
   MessageSquare,
+  MessageCircle,
   X,
   Minus as MinimizeIcon,
   Gift,
@@ -39,6 +40,21 @@ import { cn } from '@/lib/utils';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+}
+
+function formatPhoneNumber(value: string): string {
+  const numbers = value.replace(/\D/g, '');
+  const limited = numbers.slice(0, 11);
+  
+  if (limited.length <= 2) {
+    return limited.length ? `(${limited}` : '';
+  } else if (limited.length <= 6) {
+    return `(${limited.slice(0, 2)}) ${limited.slice(2)}`;
+  } else if (limited.length <= 10) {
+    return `(${limited.slice(0, 2)}) ${limited.slice(2, 6)}-${limited.slice(6)}`;
+  } else {
+    return `(${limited.slice(0, 2)}) ${limited.slice(2, 7)}-${limited.slice(7)}`;
+  }
 }
 
 interface OrderItem {
@@ -712,15 +728,31 @@ export default function Counter() {
             )}
 
             {/* Phone field */}
-            <div className="relative">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Telefone (WhatsApp)..."
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                className="h-9 pl-9"
-                type="tel"
-              />
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="(11) 99999-9999"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(formatPhoneNumber(e.target.value))}
+                  className="h-9 pl-9"
+                  type="tel"
+                />
+              </div>
+              {customerPhone && customerPhone.replace(/\D/g, '').length >= 10 && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950"
+                  onClick={() => {
+                    const numbers = customerPhone.replace(/\D/g, '');
+                    window.open(`https://wa.me/55${numbers}`, '_blank');
+                  }}
+                  title="Abrir WhatsApp"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                </Button>
+              )}
             </div>
             
             {/* Order Type */}
