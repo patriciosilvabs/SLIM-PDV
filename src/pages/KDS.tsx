@@ -76,7 +76,8 @@ export default function KDS() {
     o.status === 'pending' || o.status === 'preparing'
   );
   
-  const waitTimesForAlerts = ordersForAlerts.map(o => getWaitTimeMinutes(o.created_at));
+  // Use updated_at for wait time calculation - this resets when new items are added to a ready order
+  const waitTimesForAlerts = ordersForAlerts.map(o => getWaitTimeMinutes(o.updated_at || o.created_at));
   const defaultDelayThreshold = 20; // Default minutes to consider order as delayed
 
   const orderCounts = {
@@ -411,7 +412,7 @@ export default function KDS() {
     showReadyButton?: boolean;
   }) => {
     const origin = getOrderOrigin(order);
-    const timeInfo = getTimeInfo(order.created_at);
+    const timeInfo = getTimeInfo(order.updated_at || order.created_at);
     const OriginIcon = origin.icon;
 
     return (
