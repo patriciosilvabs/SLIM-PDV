@@ -7,10 +7,15 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2 } from 'lucide-react';
+import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
+import { useScheduledAnnouncements } from '@/hooks/useScheduledAnnouncements';
+
+type OrderTypeFilter = 'all' | 'table' | 'takeaway' | 'delivery';
+
+const FILTER_STORAGE_KEY = 'kds-order-type-filter';
 
 export default function KDS() {
   const { data: orders = [], isLoading, refetch } = useOrders();
@@ -19,14 +24,44 @@ export default function KDS() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const { playNewOrderSound, settings } = useAudioNotification();
+  const [orderTypeFilter, setOrderTypeFilter] = useState<OrderTypeFilter>(() => {
+    try {
+      return (localStorage.getItem(FILTER_STORAGE_KEY) as OrderTypeFilter) || 'all';
+    } catch {
+      return 'all';
+    }
+  });
+  const { playKdsNewOrderSound, settings } = useAudioNotification();
   const notifiedOrdersRef = useRef<Set<string>>(new Set());
   const previousOrdersRef = useRef<Order[]>([]);
 
+  // Listen for scheduled announcements
+  useScheduledAnnouncements('kds');
+
+  // Save filter preference
+  useEffect(() => {
+    localStorage.setItem(FILTER_STORAGE_KEY, orderTypeFilter);
+  }, [orderTypeFilter]);
+
   // Filter active orders (pending, preparing, ready)
-  const activeOrders = orders.filter(
+  const activeOrders = orders.filter(order => {
+    const isActive = order.status === 'pending' || order.status === 'preparing' || order.status === 'ready';
+    if (!isActive) return false;
+
+    if (orderTypeFilter === 'all') return true;
+    if (orderTypeFilter === 'table') return order.order_type === 'dine_in';
+    if (orderTypeFilter === 'takeaway') return order.order_type === 'takeaway';
+    if (orderTypeFilter === 'delivery') return order.order_type === 'delivery';
+    return true;
+  });
+
+  // Count by type (unfiltered)
+  const allActiveOrders = orders.filter(
     order => order.status === 'pending' || order.status === 'preparing' || order.status === 'ready'
   );
+  const tableCount = allActiveOrders.filter(o => o.order_type === 'dine_in').length;
+  const takeawayCount = allActiveOrders.filter(o => o.order_type === 'takeaway').length;
+  const deliveryCount = allActiveOrders.filter(o => o.order_type === 'delivery').length;
 
   const pendingOrders = activeOrders.filter(o => o.status === 'pending');
   const preparingOrders = activeOrders.filter(o => o.status === 'preparing');
@@ -94,14 +129,14 @@ export default function KDS() {
 
     if (newPendingOrders.length > 0) {
       if (soundEnabled && settings.enabled) {
-        playNewOrderSound();
+        playKdsNewOrderSound();
       }
       toast.success(`🔔 ${newPendingOrders.length} novo(s) pedido(s)!`, { duration: 4000 });
       newPendingOrders.forEach(o => notifiedOrdersRef.current.add(o.id));
     }
 
     previousOrdersRef.current = [...orders];
-  }, [orders, soundEnabled, settings.enabled, playNewOrderSound]);
+  }, [orders, soundEnabled, settings.enabled, playKdsNewOrderSound]);
 
   const handleStartPreparation = async (orderId: string) => {
     try {
@@ -274,6 +309,7 @@ export default function KDS() {
             <h1 className={cn("font-bold", isFullscreen ? "text-3xl" : "text-2xl")}>KDS - Cozinha</h1>
             <p className="text-muted-foreground text-sm">
               {activeOrders.length} pedido{activeOrders.length !== 1 ? 's' : ''} ativo{activeOrders.length !== 1 ? 's' : ''}
+              {orderTypeFilter !== 'all' && ` (filtrado)`}
             </p>
           </div>
         </div>
@@ -316,6 +352,58 @@ export default function KDS() {
             <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
           </Button>
         </div>
+      </div>
+
+      {/* Order Type Filter */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <Filter className="h-4 w-4 text-muted-foreground" />
+        <Button
+          variant={orderTypeFilter === 'all' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setOrderTypeFilter('all')}
+          className="gap-1.5"
+        >
+          Todos
+          <Badge variant="secondary" className="ml-1 text-xs">
+            {allActiveOrders.length}
+          </Badge>
+        </Button>
+        <Button
+          variant={orderTypeFilter === 'table' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setOrderTypeFilter('table')}
+          className="gap-1.5"
+        >
+          <UtensilsCrossed className="h-3.5 w-3.5" />
+          Mesa
+          <Badge variant="secondary" className="ml-1 text-xs">
+            {tableCount}
+          </Badge>
+        </Button>
+        <Button
+          variant={orderTypeFilter === 'takeaway' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setOrderTypeFilter('takeaway')}
+          className="gap-1.5"
+        >
+          <Store className="h-3.5 w-3.5" />
+          Balcão
+          <Badge variant="secondary" className="ml-1 text-xs">
+            {takeawayCount}
+          </Badge>
+        </Button>
+        <Button
+          variant={orderTypeFilter === 'delivery' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setOrderTypeFilter('delivery')}
+          className="gap-1.5"
+        >
+          <Truck className="h-3.5 w-3.5" />
+          Delivery
+          <Badge variant="secondary" className="ml-1 text-xs">
+            {deliveryCount}
+          </Badge>
+        </Button>
       </div>
 
       {/* Kanban Board */}

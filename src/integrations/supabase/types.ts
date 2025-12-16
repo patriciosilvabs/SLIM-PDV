@@ -350,6 +350,33 @@ export type Database = {
         }
         Relationships: []
       }
+      custom_sounds: {
+        Row: {
+          created_at: string | null
+          file_path: string
+          id: string
+          name: string
+          sound_type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          file_path: string
+          id?: string
+          name: string
+          sound_type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          file_path?: string
+          id?: string
+          name?: string
+          sound_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       customers: {
         Row: {
           address: string | null
@@ -943,6 +970,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      scheduled_announcements: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          file_path: string
+          id: string
+          is_active: boolean | null
+          last_played_at: string | null
+          name: string
+          schedule_type: string
+          scheduled_date: string | null
+          scheduled_days: number[] | null
+          scheduled_time: string
+          target_screens: string[] | null
+          volume: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          file_path: string
+          id?: string
+          is_active?: boolean | null
+          last_played_at?: string | null
+          name: string
+          schedule_type: string
+          scheduled_date?: string | null
+          scheduled_days?: number[] | null
+          scheduled_time: string
+          target_screens?: string[] | null
+          volume?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          file_path?: string
+          id?: string
+          is_active?: boolean | null
+          last_played_at?: string | null
+          name?: string
+          schedule_type?: string
+          scheduled_date?: string | null
+          scheduled_days?: number[] | null
+          scheduled_time?: string
+          target_screens?: string[] | null
+          volume?: number | null
+        }
+        Relationships: []
       }
       stock_movements: {
         Row: {

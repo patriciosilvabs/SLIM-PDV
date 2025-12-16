@@ -12,6 +12,7 @@ import { useTables, useTableMutations } from '@/hooks/useTables';
 import { RequireRole } from '@/components/auth/RequireRole';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { PushNotificationSettings } from '@/components/PushNotificationSettings';
+import { ScheduledAnnouncementsSettings } from '@/components/ScheduledAnnouncementsSettings';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { Users, Shield, Plus, X, Crown, Sparkles, AlertTriangle, UtensilsCrossed, Edit, Trash2, ShoppingCart } from 'lucide-react';
@@ -457,6 +458,9 @@ export default function Settings() {
 
           {/* Notification Settings */}
           <NotificationSettings />
+
+          {/* Scheduled Announcements */}
+          <ScheduledAnnouncementsSettings />
 
           {/* Push Notification Settings */}
           <PushNotificationSettings />
