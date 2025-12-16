@@ -17,6 +17,8 @@ import Settings from "./pages/Settings";
 import Install from "./pages/Install";
 import Counter from "./pages/Counter";
 import Customers from "./pages/Customers";
+import OrderManagement from "./pages/OrderManagement";
+import KDS from "./pages/KDS";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,7 +32,7 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
-              <Route path="/" element={<Navigate to="/auth\" replace />} />
+              <Route path="/" element={<Navigate to="/auth" replace />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/tables" element={<Tables />} />
@@ -43,6 +45,8 @@ const App = () => (
               <Route path="/install" element={<Install />} />
               <Route path="/counter" element={<Counter />} />
               <Route path="/customers" element={<Customers />} />
+              <Route path="/order-management" element={<OrderManagement />} />
+              <Route path="/kds" element={<KDS />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

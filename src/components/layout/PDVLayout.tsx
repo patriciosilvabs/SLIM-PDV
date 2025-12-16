@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
-import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Pizza, Store, Users } from 'lucide-react';
+import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Pizza, Store, Users, Kanban, ChefHat } from 'lucide-react';
 
 interface NavItem {
   name: string;
@@ -19,6 +19,8 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'cashier', 'waiter'] },
+  { name: 'Gestão de Pedidos', href: '/order-management', icon: Kanban, roles: ['admin', 'cashier'] },
+  { name: 'KDS', href: '/kds', icon: ChefHat, roles: ['admin', 'kitchen'] },
   { name: 'Mesas', href: '/tables', icon: UtensilsCrossed, roles: ['admin', 'waiter'] },
   { name: 'Balcão', href: '/counter', icon: Store, roles: ['admin', 'waiter', 'cashier'] },
   { name: 'Pedidos', href: '/orders', icon: ShoppingBag, roles: ['admin', 'waiter', 'kitchen', 'cashier'] },
@@ -100,14 +102,14 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 w-64 bg-sidebar border-r border-sidebar-border z-40 transform transition-transform duration-300 ease-in-out lg:translate-x-0",
+          "fixed inset-y-0 left-0 w-52 bg-sidebar border-r border-sidebar-border z-40 transform transition-transform duration-300 ease-in-out lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
           "lg:block"
         )}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="h-16 flex items-center justify-between px-6 border-b border-sidebar-border">
+          <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg">
                 <Pizza className="h-6 w-6 text-primary-foreground" />
@@ -195,7 +197,7 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Main content */}
-      <main className="lg:ml-64 min-h-screen pt-16 lg:pt-0">
+      <main className="lg:ml-52 min-h-screen pt-16 lg:pt-0">
         <div className="p-4 lg:p-6">
           {children}
         </div>
