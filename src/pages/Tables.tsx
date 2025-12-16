@@ -17,6 +17,7 @@ import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { useReservations, useReservationMutations, Reservation } from '@/hooks/useReservations';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTableWaitSettings } from '@/hooks/useTableWaitSettings';
+import { useIdleTableSettings } from '@/hooks/useIdleTableSettings';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
 import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell } from 'lucide-react';
@@ -61,15 +62,17 @@ export default function Tables() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { settings: tableWaitSettings } = useTableWaitSettings();
-  const { playOrderReadySound, playTableWaitAlertSound, settings: audioSettings } = useAudioNotification();
+  const { settings: idleTableSettings } = useIdleTableSettings();
+  const { playOrderReadySound, playTableWaitAlertSound, playIdleTableAlertSound, settings: audioSettings } = useAudioNotification();
   const { data: tables, isLoading } = useTables();
   const { data: orders } = useOrders(['pending', 'preparing', 'ready']);
   const { createTable, updateTable } = useTableMutations();
-  const { createOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
+  const { createOrder, updateOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
   
   // Refs for tracking order status changes
   const previousOrdersRef = useRef<Order[]>([]);
   const tableWaitAlertCooldownRef = useRef<Map<string, number>>(new Map());
+  const idleTableCooldownRef = useRef<Map<string, number>>(new Map());
   const notifiedReadyOrdersRef = useRef<Set<string>>(new Set());
   
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -205,6 +208,93 @@ export default function Tables() {
     
     return () => clearInterval(interval);
   }, [orders, tables, tableWaitSettings, audioSettings.enabled, playTableWaitAlertSound]);
+
+  // Check for idle tables (opened without items) and alert/auto-close
+  useEffect(() => {
+    if (!idleTableSettings.enabled || !orders || !tables) return;
+
+    const checkIdleTables = async () => {
+      const now = Date.now();
+      
+      // Get occupied tables
+      const occupiedTables = tables.filter(t => t.status === 'occupied');
+      
+      for (const table of occupiedTables) {
+        // Find order for this table
+        const order = orders.find(o => 
+          o.table_id === table.id && 
+          o.status !== 'delivered' && 
+          o.status !== 'cancelled'
+        );
+        
+        if (!order) continue;
+        
+        // Check if order is empty (no items)
+        const hasItems = order.order_items && order.order_items.length > 0;
+        if (hasItems) continue;
+        
+        // Calculate time since opening
+        const orderTime = new Date(order.created_at!).getTime();
+        const idleMinutes = Math.floor((now - orderTime) / 60000);
+        
+        // If exceeded threshold
+        if (idleMinutes >= idleTableSettings.thresholdMinutes) {
+          const lastAlert = idleTableCooldownRef.current.get(table.id) || 0;
+          const cooldownMs = 5 * 60000; // 5 minutes cooldown
+          
+          // Check cooldown
+          if (now - lastAlert >= cooldownMs) {
+            if (idleTableSettings.autoClose) {
+              // AUTO-CLOSE: Update table to available and cancel empty order
+              try {
+                await updateTable.mutateAsync({ id: table.id, status: 'available' });
+                await updateOrder.mutateAsync({ id: order.id, status: 'cancelled' });
+                
+                toast.info(
+                  `🔄 Mesa ${table.number} fechada automaticamente`,
+                  { description: `Ociosa por ${idleMinutes} minutos sem pedidos` }
+                );
+              } catch (error) {
+                console.error('Error auto-closing idle table:', error);
+              }
+            } else {
+              // ALERT ONLY
+              if (audioSettings.enabled) {
+                playIdleTableAlertSound();
+              }
+              
+              toast.warning(
+                `⚠️ Mesa ${table.number} ociosa - ${idleMinutes} min`,
+                { 
+                  description: 'Mesa aberta sem pedidos',
+                  duration: 10000,
+                  action: {
+                    label: 'Fechar Mesa',
+                    onClick: async () => {
+                      try {
+                        await updateTable.mutateAsync({ id: table.id, status: 'available' });
+                        await updateOrder.mutateAsync({ id: order.id, status: 'cancelled' });
+                        toast.success(`Mesa ${table.number} fechada`);
+                      } catch (error) {
+                        console.error('Error closing idle table:', error);
+                      }
+                    }
+                  }
+                }
+              );
+            }
+            
+            idleTableCooldownRef.current.set(table.id, now);
+          }
+        }
+      }
+    };
+
+    checkIdleTables();
+    const interval = setInterval(checkIdleTables, 60000);
+    
+    return () => clearInterval(interval);
+  }, [orders, tables, idleTableSettings, audioSettings.enabled, playIdleTableAlertSound, updateTable, updateOrder]);
 
   const getTableOrder = (tableId: string) => {
     return orders?.find(o => o.table_id === tableId && o.status !== 'delivered' && o.status !== 'cancelled');

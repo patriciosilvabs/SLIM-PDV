@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-export type SoundType = 'newOrder' | 'newReservation' | 'orderReady' | 'kdsNewOrder' | 'maxWaitAlert' | 'tableWaitAlert';
+export type SoundType = 'newOrder' | 'newReservation' | 'orderReady' | 'kdsNewOrder' | 'maxWaitAlert' | 'tableWaitAlert' | 'idleTableAlert';
 
 export interface CustomSound {
   id: string;

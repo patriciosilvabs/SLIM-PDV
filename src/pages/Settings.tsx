@@ -19,6 +19,7 @@ import { Users, Shield, Plus, X, Crown, Sparkles, AlertTriangle, UtensilsCrossed
 import { Switch } from '@/components/ui/switch';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { useTableWaitSettings } from '@/hooks/useTableWaitSettings';
+import { useIdleTableSettings } from '@/hooks/useIdleTableSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -63,6 +64,7 @@ export default function Settings() {
   const { createTable, updateTable, deleteTable } = useTableMutations();
   const { duplicateItems, toggleDuplicateItems } = useOrderSettings();
   const { settings: tableWaitSettings, updateSettings: updateTableWaitSettings } = useTableWaitSettings();
+  const { settings: idleTableSettings, updateSettings: updateIdleTableSettings } = useIdleTableSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
@@ -485,6 +487,47 @@ export default function Settings() {
                     <Switch 
                       checked={tableWaitSettings.enabled} 
                       onCheckedChange={(enabled) => updateTableWaitSettings({ enabled })} 
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t pt-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="font-medium">Mesa ociosa (sem itens)</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Alertar ou fechar mesas abertas sem pedidos após tempo limite
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Select
+                      value={idleTableSettings.thresholdMinutes.toString()}
+                      onValueChange={(v) => updateIdleTableSettings({ thresholdMinutes: Number(v) })}
+                      disabled={!idleTableSettings.enabled}
+                    >
+                      <SelectTrigger className="w-24">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="5">5 min</SelectItem>
+                        <SelectItem value="10">10 min</SelectItem>
+                        <SelectItem value="15">15 min</SelectItem>
+                        <SelectItem value="20">20 min</SelectItem>
+                        <SelectItem value="30">30 min</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs whitespace-nowrap">Auto-fechar</Label>
+                      <Switch 
+                        checked={idleTableSettings.autoClose} 
+                        onCheckedChange={(autoClose) => updateIdleTableSettings({ autoClose })}
+                        disabled={!idleTableSettings.enabled}
+                      />
+                    </div>
+                    <Switch 
+                      checked={idleTableSettings.enabled} 
+                      onCheckedChange={(enabled) => updateIdleTableSettings({ enabled })} 
                     />
                   </div>
                 </div>
