@@ -435,10 +435,12 @@ export default function Tables() {
     if (!order) return;
 
     // BUG FIX: If order is ready or delivered, reset to initial status for KDS
+    // Also reset updated_at so wait time calculation starts fresh
     if (order.status === 'ready' || order.status === 'delivered') {
       await updateOrder.mutateAsync({
         id: order.id,
-        status: getInitialOrderStatus()
+        status: getInitialOrderStatus(),
+        updated_at: new Date().toISOString()
       });
     }
 
