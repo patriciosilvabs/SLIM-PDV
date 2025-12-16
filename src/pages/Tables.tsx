@@ -16,7 +16,7 @@ import { useOrders, useOrderMutations } from '@/hooks/useOrders';
 import { useReservations, useReservationMutations, Reservation } from '@/hooks/useReservations';
 import { useAuth } from '@/contexts/AuthContext';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
-import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag } from 'lucide-react';
+import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, addDays, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -57,7 +57,7 @@ export default function Tables() {
   const { data: tables, isLoading } = useTables();
   const { data: orders } = useOrders(['pending', 'preparing', 'ready']);
   const { createTable, updateTable } = useTableMutations();
-  const { createOrder, addOrderItem } = useOrderMutations();
+  const { createOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
   
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const { data: reservations } = useReservations(selectedDate);
@@ -148,7 +148,7 @@ export default function Tables() {
     if (!order) return;
 
     for (const item of items) {
-      await addOrderItem.mutateAsync({
+      const orderItem = await addOrderItem.mutateAsync({
         order_id: order.id,
         product_id: item.product_id,
         variation_id: item.variation_id || null,
@@ -158,6 +158,17 @@ export default function Tables() {
         notes: item.notes || null,
         status: 'pending',
       });
+
+      // Save complements/extras if present
+      if (item.complements && item.complements.length > 0) {
+        const extras = item.complements.map(c => ({
+          order_item_id: orderItem.id,
+          extra_name: `${c.group_name}: ${c.option_name}`,
+          price: c.price * c.quantity,
+          extra_id: null,
+        }));
+        await addOrderItemExtras.mutateAsync(extras);
+      }
     }
   };
 
@@ -282,16 +293,26 @@ export default function Tables() {
                     const order = getTableOrder(table.id);
                     const reservation = getTableReservation(table.id);
                     const isSelected = selectedTable?.id === table.id;
+                    const isOrderReady = order?.status === 'ready';
                     return (
                       <Card
                         key={table.id}
                         className={cn(
                           'cursor-pointer transition-all hover:scale-105 relative',
                           statusColors[table.status],
-                          isSelected && 'ring-2 ring-primary ring-offset-2'
+                          isSelected && 'ring-2 ring-primary ring-offset-2',
+                          isOrderReady && 'ring-2 ring-green-500 ring-offset-2 animate-pulse'
                         )}
                         onClick={() => handleTableClick(table)}
                       >
+                        {isOrderReady && (
+                          <div className="absolute -top-2 -right-2 z-10">
+                            <Badge className="bg-green-500 text-white shadow-lg animate-bounce">
+                              <Bell className="h-3 w-3 mr-1" />
+                              Pronto!
+                            </Badge>
+                          </div>
+                        )}
                         <CardContent className="p-4 text-center">
                           <p className="text-3xl font-bold mb-1">{table.number}</p>
                           <div className="flex items-center justify-center gap-1 text-sm opacity-90">
@@ -347,6 +368,17 @@ export default function Tables() {
                   </CardHeader>
 
                   <CardContent className="flex-1 flex flex-col space-y-4">
+                    {/* Ready Alert Banner */}
+                    {selectedOrder?.status === 'ready' && (
+                      <div className="bg-green-500 text-white p-3 rounded-lg flex items-center gap-2 animate-pulse">
+                        <Bell className="h-5 w-5" />
+                        <div>
+                          <p className="font-bold">Pedido Pronto!</p>
+                          <p className="text-xs opacity-90">A cozinha finalizou o preparo</p>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Order Info */}
                     {selectedOrder && (
                       <div className="space-y-3">

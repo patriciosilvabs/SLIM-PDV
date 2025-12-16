@@ -82,7 +82,7 @@ export default function Counter() {
   const { data: combos } = useCombos();
   const { data: comboItems } = useComboItems();
   const { data: variations } = useProductVariations();
-  const { createOrder, addOrderItem } = useOrderMutations();
+  const { createOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
   const { toast } = useToast();
   const { duplicateItems } = useOrderSettings();
   const { findOrCreateCustomer, updateCustomerStats } = useCustomerMutations();
@@ -376,7 +376,7 @@ export default function Counter() {
       });
 
       for (const item of orderItems) {
-        await addOrderItem.mutateAsync({
+        const orderItem = await addOrderItem.mutateAsync({
           order_id: order.id,
           product_id: item.product_id,
           variation_id: item.variation_id || null,
@@ -386,6 +386,17 @@ export default function Counter() {
           notes: item.notes || null,
           status: 'pending',
         });
+
+        // Save complements/extras if present
+        if (item.complements && item.complements.length > 0) {
+          const extras = item.complements.map(c => ({
+            order_item_id: orderItem.id,
+            extra_name: `${c.group_name}: ${c.option_name}`,
+            price: c.price * c.quantity,
+            extra_id: null,
+          }));
+          await addOrderItemExtras.mutateAsync(extras);
+        }
       }
 
       // Update customer stats
