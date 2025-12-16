@@ -209,7 +209,7 @@ export default function Tables() {
     return () => clearInterval(interval);
   }, [orders, tables, tableWaitSettings, audioSettings.enabled, playTableWaitAlertSound]);
 
-  // Check for idle tables (opened without items) and alert/auto-close
+  // Check for idle tables (opened without items OR delivered orders) and alert/auto-close
   useEffect(() => {
     if (!idleTableSettings.enabled || !orders || !tables) return;
 
@@ -220,22 +220,40 @@ export default function Tables() {
       const occupiedTables = tables.filter(t => t.status === 'occupied');
       
       for (const table of occupiedTables) {
-        // Find order for this table
-        const order = orders.find(o => 
+        // Scenario 1: Order WITHOUT items (empty)
+        const emptyOrder = orders.find(o => 
           o.table_id === table.id && 
           o.status !== 'delivered' && 
-          o.status !== 'cancelled'
+          o.status !== 'cancelled' &&
+          (!o.order_items || o.order_items.length === 0)
         );
         
-        if (!order) continue;
+        // Scenario 2: DELIVERED order (if setting is enabled)
+        const deliveredOrder = idleTableSettings.includeDeliveredOrders 
+          ? orders.find(o => 
+              o.table_id === table.id && 
+              o.status === 'delivered'
+            )
+          : null;
         
-        // Check if order is empty (no items)
-        const hasItems = order.order_items && order.order_items.length > 0;
-        if (hasItems) continue;
+        // Determine which order to check and reference time
+        let orderToCheck = emptyOrder;
+        let referenceTime: number | null = null;
+        let idleReason = 'sem pedidos';
         
-        // Calculate time since opening
-        const orderTime = new Date(order.created_at!).getTime();
-        const idleMinutes = Math.floor((now - orderTime) / 60000);
+        if (emptyOrder) {
+          referenceTime = new Date(emptyOrder.created_at!).getTime();
+          idleReason = 'sem pedidos';
+        } else if (deliveredOrder) {
+          orderToCheck = deliveredOrder;
+          referenceTime = new Date(deliveredOrder.updated_at!).getTime();
+          idleReason = 'pedido entregue';
+        }
+        
+        if (!orderToCheck || !referenceTime) continue;
+        
+        // Calculate idle time
+        const idleMinutes = Math.floor((now - referenceTime) / 60000);
         
         // If exceeded threshold
         if (idleMinutes >= idleTableSettings.thresholdMinutes) {
@@ -245,14 +263,16 @@ export default function Tables() {
           // Check cooldown
           if (now - lastAlert >= cooldownMs) {
             if (idleTableSettings.autoClose) {
-              // AUTO-CLOSE: Update table to available and cancel empty order
+              // AUTO-CLOSE: Update table to available and cancel/update order
               try {
                 await updateTable.mutateAsync({ id: table.id, status: 'available' });
-                await updateOrder.mutateAsync({ id: order.id, status: 'cancelled' });
+                if (emptyOrder) {
+                  await updateOrder.mutateAsync({ id: orderToCheck.id, status: 'cancelled' });
+                }
                 
                 toast.info(
                   `🔄 Mesa ${table.number} fechada automaticamente`,
-                  { description: `Ociosa por ${idleMinutes} minutos sem pedidos` }
+                  { description: `Ociosa por ${idleMinutes} minutos (${idleReason})` }
                 );
               } catch (error) {
                 console.error('Error auto-closing idle table:', error);
@@ -266,14 +286,16 @@ export default function Tables() {
               toast.warning(
                 `⚠️ Mesa ${table.number} ociosa - ${idleMinutes} min`,
                 { 
-                  description: 'Mesa aberta sem pedidos',
+                  description: `Mesa aberta (${idleReason})`,
                   duration: 10000,
                   action: {
                     label: 'Fechar Mesa',
                     onClick: async () => {
                       try {
                         await updateTable.mutateAsync({ id: table.id, status: 'available' });
-                        await updateOrder.mutateAsync({ id: order.id, status: 'cancelled' });
+                        if (emptyOrder) {
+                          await updateOrder.mutateAsync({ id: orderToCheck.id, status: 'cancelled' });
+                        }
                         toast.success(`Mesa ${table.number} fechada`);
                       } catch (error) {
                         console.error('Error closing idle table:', error);
