@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
-import { Bell, Volume2, Play, ShoppingBag, CalendarCheck, ChefHat, Store, Clock } from 'lucide-react';
+import { Bell, Volume2, Play, ShoppingBag, CalendarCheck, ChefHat, Store, Clock, Timer } from 'lucide-react';
 import { SoundType } from '@/hooks/useCustomSounds';
 
 const SOUND_EVENTS: { 
@@ -49,6 +49,13 @@ const SOUND_EVENTS: {
     iconColor: 'text-amber-500',
     label: 'Alerta de Espera de Mesa',
     description: 'Som quando mesa ultrapassa tempo limite'
+  },
+  {
+    type: 'idleTableAlert',
+    icon: Timer,
+    iconColor: 'text-orange-500',
+    label: 'Alerta de Mesa Ociosa',
+    description: 'Som quando mesa está aberta sem pedidos'
   }
 ];
 
