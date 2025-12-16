@@ -84,18 +84,35 @@ export function AddOrderItemsModal({ open, onOpenChange, onSubmit, tableNumber }
       : product.price;
     const unitPrice = productPrice + complementsTotal;
 
-    const newItem: CartItem = {
-      id: `${product.id}-${Date.now()}`,
-      product_id: product.id,
-      product_name: product.name,
-      quantity,
-      unit_price: unitPrice,
-      total_price: unitPrice * quantity,
-      notes,
-      complements,
-    };
-
-    setCartItems(prev => [...prev, newItem]);
+    if (duplicateItems && quantity > 1) {
+      // Create separate items when duplicateItems is enabled
+      const newItems: CartItem[] = [];
+      for (let i = 0; i < quantity; i++) {
+        newItems.push({
+          id: `${product.id}-${Date.now()}-${i}`,
+          product_id: product.id,
+          product_name: product.name,
+          quantity: 1,
+          unit_price: unitPrice,
+          total_price: unitPrice,
+          notes,
+          complements,
+        });
+      }
+      setCartItems(prev => [...prev, ...newItems]);
+    } else {
+      const newItem: CartItem = {
+        id: `${product.id}-${Date.now()}`,
+        product_id: product.id,
+        product_name: product.name,
+        quantity,
+        unit_price: unitPrice,
+        total_price: unitPrice * quantity,
+        notes,
+        complements,
+      };
+      setCartItems(prev => [...prev, newItem]);
+    }
   };
 
   const addCombo = (combo: any) => {
@@ -427,6 +444,7 @@ export function AddOrderItemsModal({ open, onOpenChange, onSubmit, tableNumber }
         onOpenChange={setProductDialogOpen}
         product={selectedProduct}
         onAdd={handleAddProduct}
+        duplicateItems={duplicateItems}
       />
     </>
   );
