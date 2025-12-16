@@ -121,6 +121,91 @@ export type Database = {
         }
         Relationships: []
       }
+      combo_items: {
+        Row: {
+          combo_id: string
+          id: string
+          product_id: string
+          quantity: number | null
+          variation_id: string | null
+        }
+        Insert: {
+          combo_id: string
+          id?: string
+          product_id: string
+          quantity?: number | null
+          variation_id?: string | null
+        }
+        Update: {
+          combo_id?: string
+          id?: string
+          product_id?: string
+          quantity?: number | null
+          variation_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "combo_items_combo_id_fkey"
+            columns: ["combo_id"]
+            isOneToOne: false
+            referencedRelation: "combos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "combo_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "combo_items_variation_id_fkey"
+            columns: ["variation_id"]
+            isOneToOne: false
+            referencedRelation: "product_variations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      combos: {
+        Row: {
+          combo_price: number
+          created_at: string | null
+          description: string | null
+          id: string
+          image_url: string | null
+          is_active: boolean | null
+          name: string
+          original_price: number
+          sort_order: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          combo_price?: number
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          name: string
+          original_price?: number
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          combo_price?: number
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          name?: string
+          original_price?: number
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       ingredients: {
         Row: {
           cost_per_unit: number | null
@@ -503,6 +588,7 @@ export type Database = {
           name: string
           preparation_time: number | null
           price: number
+          sort_order: number | null
           updated_at: string | null
         }
         Insert: {
@@ -515,6 +601,7 @@ export type Database = {
           name: string
           preparation_time?: number | null
           price: number
+          sort_order?: number | null
           updated_at?: string | null
         }
         Update: {
@@ -527,6 +614,7 @@ export type Database = {
           name?: string
           preparation_time?: number | null
           price?: number
+          sort_order?: number | null
           updated_at?: string | null
         }
         Relationships: [

@@ -90,5 +90,24 @@ export function useCategoryMutations() {
     },
   });
 
-  return { createCategory, updateCategory, deleteCategory };
+  const updateSortOrder = useMutation({
+    mutationFn: async (items: Array<{ id: string; sort_order: number }>) => {
+      for (const item of items) {
+        const { error } = await supabase
+          .from('categories')
+          .update({ sort_order: item.sort_order })
+          .eq('id', item.id);
+        
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Erro ao reordenar', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  return { createCategory, updateCategory, deleteCategory, updateSortOrder };
 }
