@@ -142,6 +142,7 @@ export default function Menu() {
     } else {
       await createCategory.mutateAsync(categoryData);
     }
+    setIsCategoryDialogOpen(false);
     setEditingCategory(null);
     setCategoryForm({ name: '', description: '', icon: '', is_active: true });
   };
@@ -179,6 +180,7 @@ export default function Menu() {
     if (extraId) {
       await setLinkedProducts.mutateAsync({ extraId, productIds: linkedProductIds });
     }
+    setIsExtrasDialogOpen(false);
     setEditingExtra(null);
     setExtraForm({ name: '', description: '', price: 0, is_active: true });
     setLinkedProductIds([]);
@@ -196,6 +198,7 @@ export default function Menu() {
     } else {
       await createVariation.mutateAsync(variationForm);
     }
+    setIsVariationsDialogOpen(false);
     setEditingVariation(null);
     setVariationForm({ product_id: '', name: '', description: '', price_modifier: 0, is_active: true });
   };

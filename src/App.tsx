@@ -15,6 +15,7 @@ import CashRegister from "./pages/CashRegister";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import Install from "./pages/Install";
+import Counter from "./pages/Counter";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => (
               <Route path="/reports" element={<Reports />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/install" element={<Install />} />
+              <Route path="/counter" element={<Counter />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
