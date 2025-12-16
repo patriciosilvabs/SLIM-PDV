@@ -17,18 +17,23 @@ export interface ScheduledAnnouncement {
   created_by: string | null;
   created_at: string;
   last_played_at: string | null;
-  // New condition-based fields
+  // Condition-based fields
   trigger_type: 'scheduled' | 'condition';
-  condition_type: 'orders_in_production' | 'orders_pending' | 'orders_total_active' | null;
+  condition_type: 'orders_in_production' | 'orders_pending' | 'orders_total_active' | 'avg_wait_time' | 'max_wait_time' | 'delayed_orders_count' | null;
   condition_threshold: number;
   condition_comparison: 'greater_than' | 'less_than' | 'equals';
   cooldown_minutes: number;
+  delay_threshold_minutes: number;
 }
 
 export interface OrderCounts {
   pending: number;
   preparing: number;
   total: number;
+  // Time metrics
+  avgWaitTimeMinutes: number;
+  maxWaitTimeMinutes: number;
+  delayedOrdersCount: number;
 }
 
 const STORAGE_KEY = 'pdv-announcements-played-today';
@@ -228,6 +233,15 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
       case 'orders_total_active':
         value = counts.total;
         break;
+      case 'avg_wait_time':
+        value = counts.avgWaitTimeMinutes;
+        break;
+      case 'max_wait_time':
+        value = counts.maxWaitTimeMinutes;
+        break;
+      case 'delayed_orders_count':
+        value = counts.delayedOrdersCount;
+        break;
       default:
         return false;
     }
@@ -324,11 +338,16 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
             const conditionLabels: Record<string, string> = {
               orders_in_production: 'pedidos em produção',
               orders_pending: 'pedidos pendentes',
-              orders_total_active: 'pedidos ativos'
+              orders_total_active: 'pedidos ativos',
+              avg_wait_time: 'minutos de espera média',
+              max_wait_time: 'minutos do pedido mais antigo',
+              delayed_orders_count: 'pedidos atrasados'
             };
             const conditionLabel = conditionLabels[announcement.condition_type || ''] || '';
+            const isTimeCondition = ['avg_wait_time', 'max_wait_time'].includes(announcement.condition_type || '');
+            const unit = isTimeCondition ? 'min' : '';
             toast.warning(`🔴 ALERTA: ${announcement.name}`, { 
-              description: `Mais de ${announcement.condition_threshold} ${conditionLabel}`,
+              description: `${announcement.condition_threshold}${unit} ${conditionLabel}`,
               duration: 6000 
             });
           }
