@@ -11,6 +11,7 @@ import { useOrders, useOrderMutations, Order, OrderStatus } from '@/hooks/useOrd
 import { useProducts } from '@/hooks/useProducts';
 import { useTables, useTableMutations } from '@/hooks/useTables';
 import { useCombos } from '@/hooks/useCombos';
+import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { useComboItems } from '@/hooks/useComboItems';
 import { useProductVariations } from '@/hooks/useProductVariations';
 import { Plus, Trash2, Clock, ChefHat, CheckCircle, XCircle, Printer, Package, Tag } from 'lucide-react';
@@ -49,6 +50,7 @@ export default function Orders() {
   const { data: variations } = useProductVariations();
   const { createOrder, updateOrder, addOrderItem, deleteOrderItem } = useOrderMutations();
   const { updateTable } = useTableMutations();
+  const { getInitialOrderStatus } = useKdsSettings();
 
   const displayedOrders = activeTab === 'active' 
     ? activeOrders 
@@ -57,9 +59,10 @@ export default function Orders() {
   const activeCombos = combos?.filter(c => c.is_active);
 
   const handleCreateOrder = async () => {
+    const initialStatus = getInitialOrderStatus();
     const orderData: any = {
       order_type: newOrderType,
-      status: 'pending',
+      status: initialStatus,
     };
 
     if (newOrderType === 'dine_in' && selectedTableId) {
@@ -84,6 +87,7 @@ export default function Orders() {
 
   const handleAddItem = async (productId: string, price: number, name: string) => {
     if (!selectedOrder) return;
+    const initialStatus = getInitialOrderStatus();
     await addOrderItem.mutateAsync({
       order_id: selectedOrder.id,
       product_id: productId,
@@ -91,7 +95,7 @@ export default function Orders() {
       unit_price: price,
       total_price: price,
       notes: null,
-      status: 'pending',
+      status: initialStatus,
       variation_id: null,
     });
   };
@@ -117,6 +121,7 @@ export default function Orders() {
       const variation = variations?.find(v => v.id === item.variation_id);
       const originalPrice = product.price + (variation?.price_modifier ?? 0);
       const discountedPrice = originalPrice * (1 - discountPercent);
+      const initialStatus = getInitialOrderStatus();
       
       await addOrderItem.mutateAsync({
         order_id: selectedOrder.id,
@@ -126,7 +131,7 @@ export default function Orders() {
         unit_price: discountedPrice,
         total_price: discountedPrice * item.quantity,
         notes: `[Combo: ${combo.name}]`,
-        status: 'pending',
+        status: initialStatus,
       });
     }
   };

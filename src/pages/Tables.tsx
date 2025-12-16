@@ -19,6 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTableWaitSettings } from '@/hooks/useTableWaitSettings';
 import { useIdleTableSettings } from '@/hooks/useIdleTableSettings';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
+import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
 import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -64,6 +65,7 @@ export default function Tables() {
   const { settings: tableWaitSettings } = useTableWaitSettings();
   const { settings: idleTableSettings } = useIdleTableSettings();
   const { playOrderReadySound, playTableWaitAlertSound, playIdleTableAlertSound, settings: audioSettings } = useAudioNotification();
+  const { getInitialOrderStatus } = useKdsSettings();
   const { data: tables, isLoading } = useTables();
   const { data: orders } = useOrders(['pending', 'preparing', 'ready']);
   const { createTable, updateTable } = useTableMutations();
@@ -355,7 +357,7 @@ export default function Tables() {
     await createOrder.mutateAsync({
       table_id: tableToOpen.id,
       order_type: 'dine_in',
-      status: 'pending',
+      status: getInitialOrderStatus(),
       customer_name: openTableData.identification || null,
       notes: openTableData.people ? `${openTableData.people} pessoas` : null,
     });
@@ -392,7 +394,7 @@ export default function Tables() {
         unit_price: item.unit_price,
         total_price: item.total_price,
         notes: item.notes || null,
-        status: 'pending',
+        status: getInitialOrderStatus(),
       });
 
       // Save complements/extras if present
@@ -439,7 +441,7 @@ export default function Tables() {
     await createOrder.mutateAsync({
       table_id: reservation.table_id,
       order_type: 'dine_in',
-      status: 'pending',
+      status: getInitialOrderStatus(),
       customer_name: reservation.customer_name,
       customer_phone: reservation.customer_phone,
     });

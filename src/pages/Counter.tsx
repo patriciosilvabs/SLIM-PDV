@@ -15,6 +15,7 @@ import { useProductVariations } from '@/hooks/useProductVariations';
 import { useOrderMutations } from '@/hooks/useOrders';
 import { useToast } from '@/hooks/use-toast';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
+import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { useSearchCustomers, useCustomerMutations, Customer } from '@/hooks/useCustomers';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ProductDetailDialog, SelectedComplement } from '@/components/order/ProductDetailDialog';
@@ -85,6 +86,7 @@ export default function Counter() {
   const { createOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
   const { toast } = useToast();
   const { duplicateItems } = useOrderSettings();
+  const { getInitialOrderStatus } = useKdsSettings();
   const { findOrCreateCustomer, updateCustomerStats } = useCustomerMutations();
   const isMobile = useIsMobile();
 
@@ -372,7 +374,7 @@ export default function Counter() {
         notes: notes || null,
         subtotal: subtotal,
         total: subtotal,
-        status: 'pending',
+        status: getInitialOrderStatus(),
       });
 
       for (const item of orderItems) {
@@ -384,7 +386,7 @@ export default function Counter() {
           unit_price: item.unit_price,
           total_price: item.total_price,
           notes: item.notes || null,
-          status: 'pending',
+          status: getInitialOrderStatus(),
         });
 
         // Save complements/extras if present
