@@ -66,24 +66,30 @@ export default function KDS() {
     return Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
   };
 
+  // List for display (includes ready)
   const activeOrdersList = orders.filter(o => 
     o.status === 'pending' || o.status === 'preparing' || o.status === 'ready'
   );
   
-  const waitTimes = activeOrdersList.map(o => getWaitTimeMinutes(o.created_at));
+  // List for alerts (ONLY pending and preparing - ready orders should not trigger alerts)
+  const ordersForAlerts = orders.filter(o => 
+    o.status === 'pending' || o.status === 'preparing'
+  );
+  
+  const waitTimesForAlerts = ordersForAlerts.map(o => getWaitTimeMinutes(o.created_at));
   const defaultDelayThreshold = 20; // Default minutes to consider order as delayed
 
   const orderCounts = {
     pending: orders.filter(o => o.status === 'pending').length,
     preparing: orders.filter(o => o.status === 'preparing').length,
     total: activeOrdersList.length,
-    avgWaitTimeMinutes: waitTimes.length > 0 
-      ? Math.round(waitTimes.reduce((a, b) => a + b, 0) / waitTimes.length) 
+    avgWaitTimeMinutes: waitTimesForAlerts.length > 0 
+      ? Math.round(waitTimesForAlerts.reduce((a, b) => a + b, 0) / waitTimesForAlerts.length) 
       : 0,
-    maxWaitTimeMinutes: waitTimes.length > 0 
-      ? Math.max(...waitTimes) 
+    maxWaitTimeMinutes: waitTimesForAlerts.length > 0 
+      ? Math.max(...waitTimesForAlerts) 
       : 0,
-    delayedOrdersCount: waitTimes.filter(t => t > defaultDelayThreshold).length
+    delayedOrdersCount: waitTimesForAlerts.filter(t => t > defaultDelayThreshold).length
   };
 
   // Helper function to get color status based on metric thresholds
@@ -275,7 +281,7 @@ export default function KDS() {
       !maxWaitAlertCooldown && 
       soundEnabled && 
       settings.enabled &&
-      activeOrdersList.length > 0
+      ordersForAlerts.length > 0
     ) {
       playMaxWaitAlertSound();
       toast.warning(`⚠️ Pedido esperando há mais de ${MAX_WAIT_ALERT_THRESHOLD} minutos!`, { duration: 5000 });
@@ -360,6 +366,14 @@ export default function KDS() {
   const handleMarkReady = async (orderId: string) => {
     try {
       notifiedOrdersRef.current.add(`${orderId}-ready`);
+      
+      // Mark ALL items in this order as 'delivered' so they don't appear again
+      // if the customer adds more items later
+      await supabase
+        .from('order_items')
+        .update({ status: 'delivered' })
+        .eq('order_id', orderId);
+      
       await updateOrder.mutateAsync({ id: orderId, status: 'ready' });
       toast.success('Pedido marcado como pronto!');
     } catch (error) {
@@ -422,7 +436,10 @@ export default function KDS() {
         </CardHeader>
         <CardContent className="px-4 pb-3">
           <div className="space-y-2 mb-3 border rounded-lg p-2 bg-background/50">
-            {order.order_items?.map((item, idx) => (
+            {/* Filter to show only items that still need to be prepared (pending/preparing) */}
+            {order.order_items
+              ?.filter(item => item.status === 'pending' || item.status === 'preparing')
+              .map((item, idx) => (
               <div key={idx} className="text-sm">
                 <div className="flex items-start gap-1">
                   <span className="font-bold text-primary">{item.quantity}x</span>
