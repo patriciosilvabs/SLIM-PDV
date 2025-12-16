@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useQueryClient } from '@tanstack/react-query';
 import PDVLayout from '@/components/layout/PDVLayout';
@@ -15,13 +15,14 @@ import { Badge } from '@/components/ui/badge';
 import { useTables, useTableMutations, Table, TableStatus } from '@/hooks/useTables';
 import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { useReservations, useReservationMutations, Reservation } from '@/hooks/useReservations';
+import { useOpenCashRegister, useCashRegisterMutations, PaymentMethod } from '@/hooks/useCashRegister';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTableWaitSettings } from '@/hooks/useTableWaitSettings';
 import { useIdleTableSettings } from '@/hooks/useIdleTableSettings';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
-import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell } from 'lucide-react';
+import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, addDays, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -58,6 +59,26 @@ const timeSlots = [
   '18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00', '21:30', '22:00'
 ];
 
+const paymentMethodLabels: Record<PaymentMethod, string> = {
+  cash: 'Dinheiro',
+  credit_card: 'Crédito',
+  debit_card: 'Débito',
+  pix: 'Pix',
+};
+
+const paymentMethodIcons: Record<PaymentMethod, React.ReactNode> = {
+  cash: <Banknote className="h-5 w-5" />,
+  credit_card: <CreditCard className="h-5 w-5" />,
+  debit_card: <CreditCard className="h-5 w-5" />,
+  pix: <Smartphone className="h-5 w-5" />,
+};
+
+interface RegisteredPayment {
+  method: PaymentMethod;
+  amount: number;
+  observation?: string;
+}
+
 export default function Tables() {
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
@@ -70,6 +91,10 @@ export default function Tables() {
   const { data: orders } = useOrders(['pending', 'preparing', 'ready']);
   const { createTable, updateTable } = useTableMutations();
   const { createOrder, updateOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
+  
+  // Cash register hooks
+  const { data: openCashRegister } = useOpenCashRegister();
+  const { createPayment } = useCashRegisterMutations();
   
   // Refs for tracking order status changes
   const previousOrdersRef = useRef<Order[]>([]);
@@ -99,6 +124,15 @@ export default function Tables() {
     party_size: 2,
     notes: '',
   });
+
+  // Bill closing flow states
+  const [isClosingBill, setIsClosingBill] = useState(false);
+  const [registeredPayments, setRegisteredPayments] = useState<RegisteredPayment[]>([]);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentObservation, setPaymentObservation] = useState('');
+  const [confirmCloseModalOpen, setConfirmCloseModalOpen] = useState(false);
 
   // Realtime subscription for orders
   useEffect(() => {
@@ -458,6 +492,109 @@ export default function Tables() {
 
   const selectedOrder = selectedTable ? getTableOrder(selectedTable.id) : null;
 
+  // Payment calculations
+  const totalPaid = useMemo(() => 
+    registeredPayments.reduce((sum, p) => sum + p.amount, 0), 
+    [registeredPayments]
+  );
+  const orderTotal = selectedOrder?.total || 0;
+  const remainingAmount = Math.max(0, orderTotal - totalPaid);
+  const changeAmount = totalPaid > orderTotal ? totalPaid - orderTotal : 0;
+
+  // Reset closing state when table changes
+  useEffect(() => {
+    if (selectedTable) {
+      setIsClosingBill(selectedTable.status === 'bill_requested');
+      setRegisteredPayments([]);
+    } else {
+      setIsClosingBill(false);
+      setRegisteredPayments([]);
+    }
+  }, [selectedTable?.id]);
+
+  // Start bill closing
+  const handleStartClosing = async () => {
+    if (!selectedTable) return;
+    setIsClosingBill(true);
+    await updateTable.mutateAsync({ id: selectedTable.id, status: 'bill_requested' });
+    setSelectedTable({ ...selectedTable, status: 'bill_requested' });
+  };
+
+  // Reopen table (cancel closing)
+  const handleReopenTable = async () => {
+    if (!selectedTable) return;
+    setIsClosingBill(false);
+    setRegisteredPayments([]);
+    await updateTable.mutateAsync({ id: selectedTable.id, status: 'occupied' });
+    setSelectedTable({ ...selectedTable, status: 'occupied' });
+  };
+
+  // Select payment method and open modal
+  const handleSelectPaymentMethod = (method: PaymentMethod) => {
+    setSelectedPaymentMethod(method);
+    setPaymentAmount(remainingAmount.toFixed(2).replace('.', ','));
+    setPaymentObservation('');
+    setPaymentModalOpen(true);
+  };
+
+  // Confirm individual payment
+  const handleConfirmPayment = () => {
+    const amount = parseFloat(paymentAmount.replace(',', '.'));
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Informe um valor válido');
+      return;
+    }
+    
+    const newPayment: RegisteredPayment = {
+      method: selectedPaymentMethod!,
+      amount,
+      observation: paymentObservation || undefined,
+    };
+    
+    const updatedPayments = [...registeredPayments, newPayment];
+    setRegisteredPayments(updatedPayments);
+    setPaymentModalOpen(false);
+    
+    // Check if payment is complete
+    const newTotalPaid = updatedPayments.reduce((sum, p) => sum + p.amount, 0);
+    if (newTotalPaid >= orderTotal) {
+      setConfirmCloseModalOpen(true);
+    }
+  };
+
+  // Remove a registered payment
+  const handleRemovePayment = (index: number) => {
+    setRegisteredPayments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Finalize bill closing
+  const handleFinalizeBill = async () => {
+    if (!selectedOrder || !selectedTable) return;
+    
+    try {
+      // Register all payments in database
+      for (const payment of registeredPayments) {
+        await createPayment.mutateAsync({
+          order_id: selectedOrder.id,
+          cash_register_id: openCashRegister?.id || null,
+          payment_method: payment.method,
+          amount: payment.amount,
+        });
+      }
+      
+      // Clear state and close
+      setIsClosingBill(false);
+      setRegisteredPayments([]);
+      setConfirmCloseModalOpen(false);
+      setSelectedTable(null);
+      
+      toast.success(`Mesa ${selectedTable.number} fechada com sucesso!`);
+    } catch (error) {
+      console.error('Error finalizing bill:', error);
+      toast.error('Erro ao finalizar conta');
+    }
+  };
+
   return (
     <PDVLayout>
       <Tabs defaultValue="tables" className="h-full flex flex-col">
@@ -605,9 +742,9 @@ export default function Tables() {
                     </div>
                   </CardHeader>
 
-                  <CardContent className="flex-1 flex flex-col space-y-4">
+                  <CardContent className="flex-1 flex flex-col space-y-4 overflow-hidden">
                     {/* Ready Alert Banner */}
-                    {selectedOrder?.status === 'ready' && (
+                    {selectedOrder?.status === 'ready' && !isClosingBill && (
                       <div className="bg-green-500 text-white p-3 rounded-lg flex items-center gap-2 animate-pulse">
                         <Bell className="h-5 w-5" />
                         <div>
@@ -617,112 +754,222 @@ export default function Tables() {
                       </div>
                     )}
 
-                    {/* Order Info */}
-                    {selectedOrder && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Pedido</span>
-                          <span className="font-mono">#{selectedOrder.id.slice(0, 8)}</span>
+                    {/* REGULAR VIEW - When NOT closing */}
+                    {!isClosingBill && (
+                      <>
+                        {/* Order Info */}
+                        {selectedOrder && (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground">Pedido</span>
+                              <span className="font-mono">#{selectedOrder.id.slice(0, 8)}</span>
+                            </div>
+                            {selectedOrder.created_at && (
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-muted-foreground">Aberto há</span>
+                                <span>{formatDistanceToNow(new Date(selectedOrder.created_at), { locale: ptBR })}</span>
+                              </div>
+                            )}
+                            {selectedOrder.customer_name && (
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-muted-foreground">Cliente</span>
+                                <span>{selectedOrder.customer_name}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Order Items */}
+                        {selectedOrder && selectedOrder.order_items && selectedOrder.order_items.length > 0 ? (
+                          <div className="flex-1 flex flex-col min-h-0">
+                            <h4 className="text-sm font-medium mb-2">Itens do Pedido</h4>
+                            <ScrollArea className="flex-1">
+                              <div className="space-y-2 pr-2">
+                                {selectedOrder.order_items.map((item: any) => (
+                                  <div 
+                                    key={item.id} 
+                                    className="flex items-center justify-between p-2 bg-muted/50 rounded"
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate">
+                                        {item.quantity}x {item.product?.name || 'Produto'}
+                                      </p>
+                                      {item.notes && (
+                                        <p className="text-xs text-muted-foreground truncate">
+                                          {item.notes}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <span className="text-sm font-medium ml-2">
+                                      {formatCurrency(item.total_price)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </ScrollArea>
+
+                            <div className="border-t pt-3 mt-3">
+                              <div className="flex items-center justify-between text-lg font-bold">
+                                <span>Total</span>
+                                <span className="text-primary">{formatCurrency(selectedOrder.total || 0)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ) : selectedTable.status === 'occupied' ? (
+                          <div className="flex-1 flex items-center justify-center">
+                            <div className="text-center text-muted-foreground">
+                              <ShoppingBag className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                              <p className="text-sm">Nenhum item no pedido</p>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {/* Regular Actions */}
+                        <div className="space-y-2 pt-2">
+                          {selectedTable.status === 'occupied' && (
+                            <>
+                              <Button 
+                                className="w-full" 
+                                onClick={() => setIsAddOrderModalOpen(true)}
+                              >
+                                <Plus className="h-4 w-4 mr-2" />
+                                Adicionar Pedido
+                              </Button>
+                              <Button variant="outline" className="w-full" onClick={handleStartClosing}>
+                                <Receipt className="h-4 w-4 mr-2" />
+                                Fechar Conta
+                              </Button>
+                            </>
+                          )}
+
+                          {selectedTable.status === 'reserved' && (
+                            <Button variant="destructive" className="w-full" onClick={handleCloseTable}>
+                              Liberar Mesa
+                            </Button>
+                          )}
                         </div>
-                        {selectedOrder.created_at && (
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">Aberto há</span>
-                            <span>{formatDistanceToNow(new Date(selectedOrder.created_at), { locale: ptBR })}</span>
-                          </div>
-                        )}
-                        {selectedOrder.customer_name && (
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">Cliente</span>
-                            <span>{selectedOrder.customer_name}</span>
-                          </div>
-                        )}
-                        {selectedOrder.notes && (
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">Obs</span>
-                            <span>{selectedOrder.notes}</span>
-                          </div>
-                        )}
-                      </div>
+                      </>
                     )}
 
-                    {/* Order Items */}
-                    {selectedOrder && selectedOrder.order_items && selectedOrder.order_items.length > 0 ? (
-                      <div className="flex-1 flex flex-col min-h-0">
-                        <h4 className="text-sm font-medium mb-2">Itens do Pedido</h4>
-                        <ScrollArea className="flex-1">
-                          <div className="space-y-2 pr-2">
-                            {selectedOrder.order_items.map((item: any) => (
-                              <div 
-                                key={item.id} 
-                                className="flex items-center justify-between p-2 bg-muted/50 rounded"
-                              >
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium truncate">
+                    {/* CLOSING VIEW - Payment Flow */}
+                    {isClosingBill && selectedOrder && (
+                      <>
+                        {/* Order Items Summary */}
+                        <div className="flex-1 flex flex-col min-h-0">
+                          <h4 className="text-sm font-medium mb-2">Itens do Pedido</h4>
+                          <ScrollArea className="flex-1 max-h-[200px]">
+                            <div className="space-y-2 pr-2">
+                              {selectedOrder.order_items?.map((item: any) => (
+                                <div 
+                                  key={item.id} 
+                                  className="flex items-center justify-between p-2 bg-muted/50 rounded text-sm"
+                                >
+                                  <span className="truncate flex-1">
                                     {item.quantity}x {item.product?.name || 'Produto'}
-                                  </p>
-                                  {item.notes && (
-                                    <p className="text-xs text-muted-foreground truncate">
-                                      {item.notes}
-                                    </p>
-                                  )}
+                                  </span>
+                                  <span className="font-medium ml-2">
+                                    {formatCurrency(item.total_price)}
+                                  </span>
                                 </div>
-                                <span className="text-sm font-medium ml-2">
-                                  {formatCurrency(item.total_price)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </ScrollArea>
+                              ))}
+                            </div>
+                          </ScrollArea>
+                        </div>
 
-                        <div className="border-t pt-3 mt-3">
+                        {/* Financial Summary */}
+                        <div className="space-y-2 border-t pt-3">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Subtotal</span>
+                            <span>{formatCurrency(orderTotal)}</span>
+                          </div>
                           <div className="flex items-center justify-between text-lg font-bold">
                             <span>Total</span>
-                            <span className="text-primary">{formatCurrency(selectedOrder.total || 0)}</span>
+                            <span className="text-primary">{formatCurrency(orderTotal)}</span>
                           </div>
                         </div>
-                      </div>
-                    ) : selectedTable.status === 'occupied' ? (
-                      <div className="flex-1 flex items-center justify-center">
-                        <div className="text-center text-muted-foreground">
-                          <ShoppingBag className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                          <p className="text-sm">Nenhum item no pedido</p>
+
+                        {/* Payment Status */}
+                        <div className="grid grid-cols-2 gap-3 p-3 bg-muted/50 rounded-lg">
+                          <div className="text-center">
+                            <p className="text-xs text-muted-foreground">Total pago</p>
+                            <p className="text-lg font-bold text-green-600">{formatCurrency(totalPaid)}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-xs text-muted-foreground">Falta pagar</p>
+                            <p className="text-lg font-bold text-destructive">{formatCurrency(remainingAmount)}</p>
+                          </div>
                         </div>
-                      </div>
-                    ) : null}
 
-                    {/* Actions */}
-                    <div className="space-y-2 pt-2">
-                      {selectedTable.status === 'occupied' && (
-                        <>
+                        {/* Payment Method Buttons */}
+                        <div className="grid grid-cols-2 gap-2">
+                          {(['cash', 'credit_card', 'debit_card', 'pix'] as PaymentMethod[]).map((method) => (
+                            <Button
+                              key={method}
+                              variant="outline"
+                              className="flex items-center gap-2 h-12"
+                              onClick={() => handleSelectPaymentMethod(method)}
+                              disabled={remainingAmount <= 0}
+                            >
+                              {paymentMethodIcons[method]}
+                              <span className="text-sm">{paymentMethodLabels[method]}</span>
+                            </Button>
+                          ))}
+                        </div>
+
+                        {/* Registered Payments */}
+                        {registeredPayments.length > 0 && (
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-medium">Pagamentos registrados</h4>
+                            <div className="space-y-1">
+                              {registeredPayments.map((payment, index) => (
+                                <div 
+                                  key={index}
+                                  className="flex items-center justify-between p-2 bg-green-500/10 rounded text-sm"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {paymentMethodIcons[payment.method]}
+                                    <span>{paymentMethodLabels[payment.method]}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium text-green-600">
+                                      {formatCurrency(payment.amount)}
+                                    </span>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6"
+                                      onClick={() => handleRemovePayment(index)}
+                                    >
+                                      <Trash2 className="h-3 w-3 text-muted-foreground" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Closing Actions */}
+                        <div className="flex gap-2 pt-2">
                           <Button 
-                            className="w-full" 
-                            onClick={() => setIsAddOrderModalOpen(true)}
+                            variant="outline" 
+                            className="flex-1"
+                            onClick={handleReopenTable}
                           >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Adicionar Pedido
+                            <ArrowLeft className="h-4 w-4 mr-2" />
+                            Reabrir
                           </Button>
-                          <Button variant="outline" className="w-full" onClick={handleRequestBill}>
-                            <Receipt className="h-4 w-4 mr-2" />
-                            Pedir Conta
+                          <Button 
+                            className="flex-1"
+                            onClick={() => setConfirmCloseModalOpen(true)}
+                            disabled={registeredPayments.length === 0}
+                          >
+                            <Check className="h-4 w-4 mr-2" />
+                            Finalizar
                           </Button>
-                        </>
-                      )}
-
-                      {selectedTable.status === 'bill_requested' && (
-                        <Button className="w-full" asChild>
-                          <a href={`/cash-register?table=${selectedTable.id}`}>
-                            <CreditCard className="h-4 w-4 mr-2" />
-                            Fechar Conta
-                          </a>
-                        </Button>
-                      )}
-
-                      {(selectedTable.status === 'reserved' || selectedTable.status === 'bill_requested') && (
-                        <Button variant="destructive" className="w-full" onClick={handleCloseTable}>
-                          Liberar Mesa
-                        </Button>
-                      )}
-                    </div>
+                        </div>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -962,55 +1209,163 @@ export default function Tables() {
       {/* Mobile Table Details Dialog */}
       {isMobile && (
         <Dialog open={!!selectedTable} onOpenChange={() => setSelectedTable(null)}>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Mesa {selectedTable?.number}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              Mesa {selectedTable?.number}
+              {selectedTable && (
+                <Badge className={cn('text-xs', statusColors[selectedTable.status])}>
+                  {isClosingBill ? 'Fechando' : statusLabels[selectedTable.status]}
+                </Badge>
+              )}
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 pt-4">
-            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-              <span className="text-muted-foreground">Status</span>
-              <span className={cn(
-                'px-2 py-1 rounded text-sm font-medium',
-                selectedTable && statusColors[selectedTable.status]
-              )}>
-                {selectedTable && statusLabels[selectedTable.status]}
-              </span>
+          
+          {/* MOBILE: Regular View */}
+          {!isClosingBill && (
+            <div className="space-y-4 pt-4">
+              {selectedOrder && selectedOrder.order_items && selectedOrder.order_items.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium">Itens do Pedido</h4>
+                  <div className="max-h-[150px] overflow-y-auto space-y-1">
+                    {selectedOrder.order_items.map((item: any) => (
+                      <div 
+                        key={item.id} 
+                        className="flex items-center justify-between p-2 bg-muted/50 rounded text-sm"
+                      >
+                        <span className="truncate">{item.quantity}x {item.product?.name || 'Produto'}</span>
+                        <span className="font-medium">{formatCurrency(item.total_price)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between font-bold pt-2 border-t">
+                    <span>Total</span>
+                    <span className="text-primary">{formatCurrency(selectedOrder.total || 0)}</span>
+                  </div>
+                </div>
+              )}
+
+              {selectedTable?.status === 'occupied' && (
+                <>
+                  <Button className="w-full" onClick={() => setIsAddOrderModalOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Adicionar Pedido
+                  </Button>
+                  <Button variant="outline" className="w-full" onClick={handleStartClosing}>
+                    <Receipt className="h-4 w-4 mr-2" />
+                    Fechar Conta
+                  </Button>
+                </>
+              )}
+
+              {selectedTable?.status === 'reserved' && (
+                <Button variant="destructive" className="w-full" onClick={handleCloseTable}>
+                  Liberar Mesa
+                </Button>
+              )}
             </div>
+          )}
 
-            {selectedTable?.status === 'occupied' && (
-              <>
-                <Button className="w-full" onClick={() => setIsAddOrderModalOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Pedido
-                </Button>
-                <Button variant="outline" className="w-full" onClick={handleRequestBill}>
-                  <Receipt className="h-4 w-4 mr-2" />
-                  Pedir Conta
-                </Button>
-                <Button variant="outline" className="w-full" asChild>
-                  <a href={`/orders?table=${selectedTable.id}`}>
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    Ver Pedido
-                  </a>
-                </Button>
-              </>
-            )}
+          {/* MOBILE: Closing View */}
+          {isClosingBill && selectedOrder && (
+            <div className="space-y-4 pt-4">
+              {/* Order Items Summary */}
+              <div className="max-h-[120px] overflow-y-auto space-y-1">
+                {selectedOrder.order_items?.map((item: any) => (
+                  <div 
+                    key={item.id} 
+                    className="flex items-center justify-between p-2 bg-muted/50 rounded text-sm"
+                  >
+                    <span className="truncate">{item.quantity}x {item.product?.name || 'Produto'}</span>
+                    <span className="font-medium">{formatCurrency(item.total_price)}</span>
+                  </div>
+                ))}
+              </div>
 
-            {selectedTable?.status === 'bill_requested' && (
-              <Button className="w-full" asChild>
-                <a href={`/cash-register?table=${selectedTable.id}`}>
-                  <CreditCard className="h-4 w-4 mr-2" />
-                  Fechar Conta
-                </a>
-              </Button>
-            )}
+              {/* Financial Summary */}
+              <div className="p-3 bg-muted/50 rounded-lg space-y-2">
+                <div className="flex justify-between text-lg font-bold">
+                  <span>Total</span>
+                  <span className="text-primary">{formatCurrency(orderTotal)}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-center text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Pago</p>
+                    <p className="font-bold text-green-600">{formatCurrency(totalPaid)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Falta</p>
+                    <p className="font-bold text-destructive">{formatCurrency(remainingAmount)}</p>
+                  </div>
+                </div>
+              </div>
 
-            {(selectedTable?.status === 'reserved' || selectedTable?.status === 'bill_requested') && (
-              <Button variant="destructive" className="w-full" onClick={handleCloseTable}>
-                Liberar Mesa
-              </Button>
-            )}
-          </div>
+              {/* Payment Buttons */}
+              <div className="grid grid-cols-2 gap-2">
+                {(['cash', 'credit_card', 'debit_card', 'pix'] as PaymentMethod[]).map((method) => (
+                  <Button
+                    key={method}
+                    variant="outline"
+                    className="flex items-center gap-2 h-12"
+                    onClick={() => handleSelectPaymentMethod(method)}
+                    disabled={remainingAmount <= 0}
+                  >
+                    {paymentMethodIcons[method]}
+                    <span className="text-xs">{paymentMethodLabels[method]}</span>
+                  </Button>
+                ))}
+              </div>
+
+              {/* Registered Payments */}
+              {registeredPayments.length > 0 && (
+                <div className="space-y-1">
+                  <h4 className="text-sm font-medium">Pagamentos</h4>
+                  {registeredPayments.map((payment, index) => (
+                    <div 
+                      key={index}
+                      className="flex items-center justify-between p-2 bg-green-500/10 rounded text-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        {paymentMethodIcons[payment.method]}
+                        <span>{paymentMethodLabels[payment.method]}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-green-600">
+                          {formatCurrency(payment.amount)}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => handleRemovePayment(index)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  className="flex-1"
+                  onClick={handleReopenTable}
+                >
+                  Reabrir
+                </Button>
+                <Button 
+                  className="flex-1"
+                  onClick={() => setConfirmCloseModalOpen(true)}
+                  disabled={registeredPayments.length === 0}
+                >
+                  Finalizar
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
       )}
@@ -1075,6 +1430,94 @@ export default function Tables() {
         onSubmit={handleAddOrderItems}
         tableNumber={selectedTable?.number}
       />
+
+      {/* Payment Modal */}
+      <Dialog open={paymentModalOpen} onOpenChange={setPaymentModalOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedPaymentMethod && paymentMethodIcons[selectedPaymentMethod]}
+              Registrar pagamento
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label>Valor pago em {selectedPaymentMethod && paymentMethodLabels[selectedPaymentMethod]}</Label>
+              <Input
+                type="text"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                placeholder="0,00"
+                className="text-lg font-bold text-center"
+                autoFocus
+              />
+              {selectedPaymentMethod === 'cash' && (
+                <p className="text-xs text-muted-foreground text-center">
+                  Se o valor for superior a {formatCurrency(remainingAmount)}, o sistema calculará o troco
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Observação (opcional)</Label>
+              <Input
+                value={paymentObservation}
+                onChange={(e) => setPaymentObservation(e.target.value)}
+                placeholder="Ex: Cartão final 1234"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleConfirmPayment}>
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation Modal with Change */}
+      <Dialog open={confirmCloseModalOpen} onOpenChange={setConfirmCloseModalOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Fechar mesa {selectedTable?.number}?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2 text-center">
+              <p className="text-muted-foreground">Total do pedido</p>
+              <p className="text-2xl font-bold">{formatCurrency(orderTotal)}</p>
+            </div>
+            <div className="space-y-2 text-center">
+              <p className="text-muted-foreground">Total pago</p>
+              <p className="text-2xl font-bold text-green-600">{formatCurrency(totalPaid)}</p>
+            </div>
+            {changeAmount > 0 && (
+              <div className="p-4 bg-primary/10 rounded-lg text-center">
+                <p className="text-sm text-muted-foreground">Troco</p>
+                <p className="text-3xl font-bold text-primary">{formatCurrency(changeAmount)}</p>
+              </div>
+            )}
+            {remainingAmount > 0 && (
+              <div className="p-4 bg-destructive/10 rounded-lg text-center">
+                <p className="text-sm text-muted-foreground">Falta pagar</p>
+                <p className="text-2xl font-bold text-destructive">{formatCurrency(remainingAmount)}</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setConfirmCloseModalOpen(false)}>
+              Voltar
+            </Button>
+            <Button 
+              onClick={handleFinalizeBill} 
+              disabled={createPayment.isPending}
+            >
+              {createPayment.isPending ? 'Finalizando...' : 'Confirmar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PDVLayout>
   );
 }
