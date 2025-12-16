@@ -22,7 +22,9 @@ import { useIdleTableSettings } from '@/hooks/useIdleTableSettings';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
-import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2 } from 'lucide-react';
+import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
 import { format, addDays, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -133,6 +135,20 @@ export default function Tables() {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentObservation, setPaymentObservation] = useState('');
   const [confirmCloseModalOpen, setConfirmCloseModalOpen] = useState(false);
+  
+  // Discount states
+  const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('percentage');
+  const [discountValue, setDiscountValue] = useState(0);
+  
+  // Service charge states
+  const [serviceChargeEnabled, setServiceChargeEnabled] = useState(false);
+  const [serviceChargePercent, setServiceChargePercent] = useState(10);
+  
+  // Bill splitting states
+  const [splitBillEnabled, setSplitBillEnabled] = useState(false);
+  const [splitCount, setSplitCount] = useState(2);
+  const [splitMode, setSplitMode] = useState<'equal' | 'custom'>('equal');
+  const [customSplits, setCustomSplits] = useState<number[]>([]);
 
   // Realtime subscription for orders
   useEffect(() => {
@@ -492,25 +508,72 @@ export default function Tables() {
 
   const selectedOrder = selectedTable ? getTableOrder(selectedTable.id) : null;
 
-  // Payment calculations
+  // Payment calculations with discount and service charge
+  const subtotal = selectedOrder?.total || 0;
+  
+  const discountAmount = useMemo(() => {
+    if (discountValue <= 0) return 0;
+    return discountType === 'percentage' 
+      ? (subtotal * discountValue / 100)
+      : Math.min(discountValue, subtotal);
+  }, [subtotal, discountType, discountValue]);
+  
+  const afterDiscount = Math.max(0, subtotal - discountAmount);
+  
+  const serviceAmount = useMemo(() => {
+    if (!serviceChargeEnabled) return 0;
+    return afterDiscount * serviceChargePercent / 100;
+  }, [serviceChargeEnabled, serviceChargePercent, afterDiscount]);
+  
+  const finalTotal = afterDiscount + serviceAmount;
+  
   const totalPaid = useMemo(() => 
     registeredPayments.reduce((sum, p) => sum + p.amount, 0), 
     [registeredPayments]
   );
-  const orderTotal = selectedOrder?.total || 0;
-  const remainingAmount = Math.max(0, orderTotal - totalPaid);
-  const changeAmount = totalPaid > orderTotal ? totalPaid - orderTotal : 0;
+  
+  const remainingAmount = Math.max(0, finalTotal - totalPaid);
+  const changeAmount = totalPaid > finalTotal ? totalPaid - finalTotal : 0;
+  
+  // Bill splitting calculations
+  const splitAmounts = useMemo(() => {
+    if (!splitBillEnabled || splitCount < 2) return [];
+    if (splitMode === 'equal') {
+      const perPerson = finalTotal / splitCount;
+      return Array(splitCount).fill(perPerson);
+    }
+    return customSplits;
+  }, [splitBillEnabled, splitCount, splitMode, finalTotal, customSplits]);
+  
+  const customSplitsTotal = customSplits.reduce((sum, v) => sum + v, 0);
+  const customSplitsRemaining = finalTotal - customSplitsTotal;
 
   // Reset closing state when table changes
   useEffect(() => {
     if (selectedTable) {
       setIsClosingBill(selectedTable.status === 'bill_requested');
       setRegisteredPayments([]);
+      // Reset discount, service, and split states
+      setDiscountType('percentage');
+      setDiscountValue(0);
+      setServiceChargeEnabled(false);
+      setServiceChargePercent(10);
+      setSplitBillEnabled(false);
+      setSplitCount(2);
+      setSplitMode('equal');
+      setCustomSplits([]);
     } else {
       setIsClosingBill(false);
       setRegisteredPayments([]);
     }
   }, [selectedTable?.id]);
+  
+  // Initialize custom splits when split count changes
+  useEffect(() => {
+    if (splitBillEnabled && splitMode === 'custom') {
+      setCustomSplits(Array(splitCount).fill(0));
+    }
+  }, [splitCount, splitBillEnabled, splitMode]);
 
   // Start bill closing
   const handleStartClosing = async () => {
@@ -557,9 +620,19 @@ export default function Tables() {
     
     // Check if payment is complete
     const newTotalPaid = updatedPayments.reduce((sum, p) => sum + p.amount, 0);
-    if (newTotalPaid >= orderTotal) {
+    if (newTotalPaid >= finalTotal) {
       setConfirmCloseModalOpen(true);
     }
+  };
+  
+  // Update custom split value
+  const handleCustomSplitChange = (index: number, value: string) => {
+    const numValue = parseFloat(value.replace(',', '.')) || 0;
+    setCustomSplits(prev => {
+      const updated = [...prev];
+      updated[index] = numValue;
+      return updated;
+    });
   };
 
   // Remove a registered payment
@@ -876,16 +949,185 @@ export default function Tables() {
                           </ScrollArea>
                         </div>
 
-                        {/* Financial Summary */}
-                        <div className="space-y-2 border-t pt-3">
+                        {/* Financial Summary with Discount & Service */}
+                        <div className="space-y-3 border-t pt-3">
+                          {/* Subtotal */}
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-muted-foreground">Subtotal</span>
-                            <span>{formatCurrency(orderTotal)}</span>
+                            <span>{formatCurrency(subtotal)}</span>
                           </div>
-                          <div className="flex items-center justify-between text-lg font-bold">
+                          
+                          {/* Discount Section */}
+                          <div className="p-3 bg-muted/30 rounded-lg space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Tag className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-sm font-medium">Desconto</span>
+                              </div>
+                              <Switch 
+                                checked={discountValue > 0} 
+                                onCheckedChange={(checked) => setDiscountValue(checked ? 10 : 0)}
+                              />
+                            </div>
+                            {discountValue > 0 && (
+                              <div className="space-y-2">
+                                <RadioGroup 
+                                  value={discountType} 
+                                  onValueChange={(v: 'percentage' | 'fixed') => setDiscountType(v)}
+                                  className="flex gap-4"
+                                >
+                                  <div className="flex items-center gap-1">
+                                    <RadioGroupItem value="percentage" id="discount-pct" />
+                                    <Label htmlFor="discount-pct" className="text-xs">Percentual</Label>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <RadioGroupItem value="fixed" id="discount-fix" />
+                                    <Label htmlFor="discount-fix" className="text-xs">Valor fixo</Label>
+                                  </div>
+                                </RadioGroup>
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    type="number"
+                                    value={discountValue}
+                                    onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+                                    className="h-8 w-20"
+                                  />
+                                  <span className="text-sm text-muted-foreground">
+                                    {discountType === 'percentage' ? '%' : 'R$'}
+                                  </span>
+                                  <span className="text-sm text-red-500 ml-auto">
+                                    -{formatCurrency(discountAmount)}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Service Charge Section */}
+                          <div className="p-3 bg-muted/30 rounded-lg space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Percent className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-sm font-medium">Taxa de serviço</span>
+                              </div>
+                              <Switch 
+                                checked={serviceChargeEnabled} 
+                                onCheckedChange={setServiceChargeEnabled}
+                              />
+                            </div>
+                            {serviceChargeEnabled && (
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  type="number"
+                                  value={serviceChargePercent}
+                                  onChange={(e) => setServiceChargePercent(parseFloat(e.target.value) || 0)}
+                                  className="h-8 w-20"
+                                />
+                                <span className="text-sm text-muted-foreground">%</span>
+                                <span className="text-sm text-green-600 ml-auto">
+                                  +{formatCurrency(serviceAmount)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Final Total */}
+                          <div className="flex items-center justify-between text-lg font-bold pt-2 border-t">
                             <span>Total</span>
-                            <span className="text-primary">{formatCurrency(orderTotal)}</span>
+                            <span className="text-primary">{formatCurrency(finalTotal)}</span>
                           </div>
+                        </div>
+
+                        {/* Bill Splitting Section */}
+                        <div className="p-3 bg-muted/30 rounded-lg space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <UserPlus className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm font-medium">Dividir conta</span>
+                            </div>
+                            <Switch 
+                              checked={splitBillEnabled} 
+                              onCheckedChange={setSplitBillEnabled}
+                            />
+                          </div>
+                          {splitBillEnabled && (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm text-muted-foreground">Pessoas:</span>
+                                <div className="flex items-center gap-2">
+                                  <Button 
+                                    variant="outline" 
+                                    size="icon" 
+                                    className="h-7 w-7"
+                                    onClick={() => setSplitCount(c => Math.max(2, c - 1))}
+                                  >
+                                    <Minus className="h-3 w-3" />
+                                  </Button>
+                                  <span className="w-8 text-center font-bold">{splitCount}</span>
+                                  <Button 
+                                    variant="outline" 
+                                    size="icon" 
+                                    className="h-7 w-7"
+                                    onClick={() => setSplitCount(c => c + 1)}
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                              <RadioGroup 
+                                value={splitMode} 
+                                onValueChange={(v: 'equal' | 'custom') => setSplitMode(v)}
+                                className="flex gap-4"
+                              >
+                                <div className="flex items-center gap-1">
+                                  <RadioGroupItem value="equal" id="split-equal" />
+                                  <Label htmlFor="split-equal" className="text-xs">Divisão igual</Label>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <RadioGroupItem value="custom" id="split-custom" />
+                                  <Label htmlFor="split-custom" className="text-xs">Personalizado</Label>
+                                </div>
+                              </RadioGroup>
+                              
+                              {splitMode === 'equal' ? (
+                                <div className="space-y-1 text-sm">
+                                  {splitAmounts.map((amount, i) => (
+                                    <div key={i} className="flex justify-between py-1 border-b border-dashed">
+                                      <span className="text-muted-foreground">Pessoa {i + 1}</span>
+                                      <span className="font-medium">{formatCurrency(amount)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {customSplits.map((value, i) => (
+                                    <div key={i} className="flex items-center gap-2">
+                                      <span className="text-xs text-muted-foreground w-16">Pessoa {i + 1}</span>
+                                      <span className="text-muted-foreground">R$</span>
+                                      <Input
+                                        type="number"
+                                        value={value || ''}
+                                        onChange={(e) => handleCustomSplitChange(i, e.target.value)}
+                                        className="h-8 flex-1"
+                                        placeholder="0,00"
+                                      />
+                                    </div>
+                                  ))}
+                                  <div className={cn(
+                                    "text-xs text-right",
+                                    Math.abs(customSplitsRemaining) < 0.01 ? "text-green-600" : "text-red-500"
+                                  )}>
+                                    {Math.abs(customSplitsRemaining) < 0.01 
+                                      ? "✓ Valores corretos" 
+                                      : customSplitsRemaining > 0 
+                                        ? `Falta: ${formatCurrency(customSplitsRemaining)}`
+                                        : `Excede: ${formatCurrency(Math.abs(customSplitsRemaining))}`
+                                    }
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {/* Payment Status */}
@@ -1282,11 +1524,27 @@ export default function Tables() {
                 ))}
               </div>
 
-              {/* Financial Summary */}
+              {/* Financial Summary - Mobile */}
               <div className="p-3 bg-muted/50 rounded-lg space-y-2">
-                <div className="flex justify-between text-lg font-bold">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span>{formatCurrency(subtotal)}</span>
+                </div>
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Desconto</span>
+                    <span className="text-red-500">-{formatCurrency(discountAmount)}</span>
+                  </div>
+                )}
+                {serviceChargeEnabled && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Taxa ({serviceChargePercent}%)</span>
+                    <span className="text-green-600">+{formatCurrency(serviceAmount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-lg font-bold pt-1 border-t">
                   <span>Total</span>
-                  <span className="text-primary">{formatCurrency(orderTotal)}</span>
+                  <span className="text-primary">{formatCurrency(finalTotal)}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-center text-sm">
                   <div>
@@ -1486,7 +1744,14 @@ export default function Tables() {
           <div className="space-y-4 pt-4">
             <div className="space-y-2 text-center">
               <p className="text-muted-foreground">Total do pedido</p>
-              <p className="text-2xl font-bold">{formatCurrency(orderTotal)}</p>
+              <p className="text-2xl font-bold">{formatCurrency(finalTotal)}</p>
+              {(discountAmount > 0 || serviceChargeEnabled) && (
+                <p className="text-xs text-muted-foreground">
+                  Subtotal: {formatCurrency(subtotal)}
+                  {discountAmount > 0 && ` - Desconto: ${formatCurrency(discountAmount)}`}
+                  {serviceChargeEnabled && ` + Taxa: ${formatCurrency(serviceAmount)}`}
+                </p>
+              )}
             </div>
             <div className="space-y-2 text-center">
               <p className="text-muted-foreground">Total pago</p>
