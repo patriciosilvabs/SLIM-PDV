@@ -31,9 +31,12 @@ const TARGET_SCREENS = [
 ];
 
 const CONDITION_TYPES = [
-  { value: 'orders_in_production', label: 'Pedidos em Produção', description: 'Pedidos com status "Em Preparo"' },
-  { value: 'orders_pending', label: 'Pedidos Pendentes', description: 'Pedidos aguardando início do preparo' },
-  { value: 'orders_total_active', label: 'Total de Pedidos Ativos', description: 'Soma de pendentes + em preparo + prontos' },
+  { value: 'orders_in_production', label: 'Pedidos em Produção', description: 'Pedidos com status "Em Preparo"', category: 'quantity' },
+  { value: 'orders_pending', label: 'Pedidos Pendentes', description: 'Pedidos aguardando início do preparo', category: 'quantity' },
+  { value: 'orders_total_active', label: 'Total de Pedidos Ativos', description: 'Soma de pendentes + em preparo + prontos', category: 'quantity' },
+  { value: 'avg_wait_time', label: 'Tempo Médio de Espera', description: 'Média em minutos de todos os pedidos ativos', category: 'time', unit: 'min' },
+  { value: 'max_wait_time', label: 'Pedido Mais Antigo', description: 'Tempo do pedido esperando há mais tempo', category: 'time', unit: 'min' },
+  { value: 'delayed_orders_count', label: 'Pedidos Atrasados', description: 'Quantidade de pedidos acima do tempo limite', category: 'count', hasDelayThreshold: true },
 ];
 
 const CONDITION_COMPARISONS = [
@@ -65,10 +68,11 @@ export function ScheduledAnnouncementsSettings() {
     scheduled_time: '18:00',
     scheduled_days: [2, 3, 4, 5, 6], // Mon-Fri
     scheduled_date: '',
-    condition_type: 'orders_in_production' as 'orders_in_production' | 'orders_pending' | 'orders_total_active',
+    condition_type: 'orders_in_production' as 'orders_in_production' | 'orders_pending' | 'orders_total_active' | 'avg_wait_time' | 'max_wait_time' | 'delayed_orders_count',
     condition_threshold: 15,
     condition_comparison: 'greater_than' as 'greater_than' | 'less_than' | 'equals',
     cooldown_minutes: 30,
+    delay_threshold_minutes: 20,
     target_screens: ['kds'],
     volume: 1.0,
     is_active: true
@@ -87,6 +91,7 @@ export function ScheduledAnnouncementsSettings() {
       condition_threshold: 15,
       condition_comparison: 'greater_than',
       cooldown_minutes: 30,
+      delay_threshold_minutes: 20,
       target_screens: ['kds'],
       volume: 1.0,
       is_active: true
@@ -109,6 +114,7 @@ export function ScheduledAnnouncementsSettings() {
         condition_threshold: announcement.condition_threshold || 15,
         condition_comparison: announcement.condition_comparison || 'greater_than',
         cooldown_minutes: announcement.cooldown_minutes || 30,
+        delay_threshold_minutes: announcement.delay_threshold_minutes || 20,
         target_screens: announcement.target_screens || ['kds'],
         volume: announcement.volume || 1.0,
         is_active: announcement.is_active
@@ -202,9 +208,12 @@ export function ScheduledAnnouncementsSettings() {
 
   const getAnnouncementDescription = (announcement: ScheduledAnnouncement) => {
     if (announcement.trigger_type === 'condition') {
-      const conditionLabel = CONDITION_TYPES.find(c => c.value === announcement.condition_type)?.label || '';
+      const conditionType = CONDITION_TYPES.find(c => c.value === announcement.condition_type);
+      const conditionLabel = conditionType?.label || '';
       const comparisonLabel = CONDITION_COMPARISONS.find(c => c.value === announcement.condition_comparison)?.label || '';
-      return `${conditionLabel} ${comparisonLabel} ${announcement.condition_threshold}`;
+      const unit = (conditionType as any)?.unit || '';
+      const suffix = unit ? ` ${unit}` : '';
+      return `${conditionLabel} ${comparisonLabel} ${announcement.condition_threshold}${suffix}`;
     }
     
     if (announcement.schedule_type === 'once') {
@@ -452,7 +461,7 @@ export function ScheduledAnnouncementsSettings() {
                   {/* Condition Comparison & Threshold */}
                   <div className="space-y-2">
                     <Label>Disparar quando for</Label>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
                       <Select 
                         value={form.condition_comparison} 
                         onValueChange={(v) => setForm({ ...form, condition_comparison: v as any })}
@@ -473,9 +482,31 @@ export function ScheduledAnnouncementsSettings() {
                         onChange={(e) => setForm({ ...form, condition_threshold: parseInt(e.target.value) || 1 })}
                         className="w-24"
                       />
-                      <span className="flex items-center text-sm text-muted-foreground">pedidos</span>
+                      <span className="flex items-center text-sm text-muted-foreground">
+                        {CONDITION_TYPES.find(ct => ct.value === form.condition_type)?.unit || 'pedidos'}
+                      </span>
                     </div>
                   </div>
+
+                  {/* Delay Threshold (for delayed_orders_count) */}
+                  {form.condition_type === 'delayed_orders_count' && (
+                    <div className="space-y-3 p-3 rounded-lg bg-muted/50 border">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-orange-500" />
+                        <Label>Considerar atrasado após: {form.delay_threshold_minutes} minutos</Label>
+                      </div>
+                      <Slider
+                        value={[form.delay_threshold_minutes]}
+                        onValueChange={([value]) => setForm({ ...form, delay_threshold_minutes: value })}
+                        min={5}
+                        max={60}
+                        step={5}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Pedidos esperando há mais de {form.delay_threshold_minutes} minutos serão contados como atrasados.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Cooldown */}
                   <div className="space-y-3">

@@ -979,6 +979,7 @@ export type Database = {
           cooldown_minutes: number | null
           created_at: string | null
           created_by: string | null
+          delay_threshold_minutes: number | null
           file_path: string
           id: string
           is_active: boolean | null
@@ -999,6 +1000,7 @@ export type Database = {
           cooldown_minutes?: number | null
           created_at?: string | null
           created_by?: string | null
+          delay_threshold_minutes?: number | null
           file_path: string
           id?: string
           is_active?: boolean | null
@@ -1019,6 +1021,7 @@ export type Database = {
           cooldown_minutes?: number | null
           created_at?: string | null
           created_by?: string | null
+          delay_threshold_minutes?: number | null
           file_path?: string
           id?: string
           is_active?: boolean | null

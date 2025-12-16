@@ -36,10 +36,29 @@ export default function KDS() {
   const previousOrdersRef = useRef<Order[]>([]);
 
   // Calculate order counts for condition-based announcements
+  const getWaitTimeMinutes = (createdAt: string | null): number => {
+    if (!createdAt) return 0;
+    return Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
+  };
+
+  const activeOrdersList = orders.filter(o => 
+    o.status === 'pending' || o.status === 'preparing' || o.status === 'ready'
+  );
+  
+  const waitTimes = activeOrdersList.map(o => getWaitTimeMinutes(o.created_at));
+  const defaultDelayThreshold = 20; // Default minutes to consider order as delayed
+
   const orderCounts = {
     pending: orders.filter(o => o.status === 'pending').length,
     preparing: orders.filter(o => o.status === 'preparing').length,
-    total: orders.filter(o => o.status === 'pending' || o.status === 'preparing' || o.status === 'ready').length
+    total: activeOrdersList.length,
+    avgWaitTimeMinutes: waitTimes.length > 0 
+      ? Math.round(waitTimes.reduce((a, b) => a + b, 0) / waitTimes.length) 
+      : 0,
+    maxWaitTimeMinutes: waitTimes.length > 0 
+      ? Math.max(...waitTimes) 
+      : 0,
+    delayedOrdersCount: waitTimes.filter(t => t > defaultDelayThreshold).length
   };
 
   // Listen for scheduled announcements (now with order counts for demand-based triggers)
