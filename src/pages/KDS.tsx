@@ -1,32 +1,34 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import PDVLayout from '@/components/layout/PDVLayout';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useAudioNotification } from '@/hooks/useAudioNotification';
 
 export default function KDS() {
   const { data: orders = [], isLoading, refetch } = useOrders();
   const { updateOrder } = useOrderMutations();
   const queryClient = useQueryClient();
-  const [filter, setFilter] = useState<'all' | 'pending' | 'preparing'>('all');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const { playNewOrderSound, settings } = useAudioNotification();
+  const notifiedOrdersRef = useRef<Set<string>>(new Set());
 
-  // Filter active orders (pending and preparing)
+  // Filter active orders (pending, preparing, ready)
   const activeOrders = orders.filter(
-    order => order.status === 'pending' || order.status === 'preparing'
+    order => order.status === 'pending' || order.status === 'preparing' || order.status === 'ready'
   );
 
-  const filteredOrders = filter === 'all' 
-    ? activeOrders 
-    : activeOrders.filter(order => order.status === filter);
+  const pendingOrders = activeOrders.filter(o => o.status === 'pending');
+  const preparingOrders = activeOrders.filter(o => o.status === 'preparing');
+  const readyOrders = activeOrders.filter(o => o.status === 'ready');
 
   // Setup realtime subscription
   useEffect(() => {
@@ -52,6 +54,20 @@ export default function KDS() {
       supabase.removeChannel(channel);
     };
   }, [queryClient]);
+
+  // Sound notification for new orders
+  useEffect(() => {
+    if (!soundEnabled || !settings.enabled) return;
+
+    const newPendingOrders = orders.filter(
+      o => o.status === 'pending' && !notifiedOrdersRef.current.has(o.id)
+    );
+
+    if (newPendingOrders.length > 0) {
+      playNewOrderSound();
+      newPendingOrders.forEach(o => notifiedOrdersRef.current.add(o.id));
+    }
+  }, [orders, soundEnabled, settings.enabled, playNewOrderSound]);
 
   const handleStartPreparation = async (orderId: string) => {
     try {
@@ -94,168 +110,210 @@ export default function KDS() {
     return { text: `${minutes} min`, color: 'text-red-500', bgColor: 'bg-red-500/10 animate-pulse' };
   };
 
-  const OrderCard = ({ order }: { order: Order }) => {
+  const OrderCard = ({ order, showStartButton, showReadyButton }: { 
+    order: Order; 
+    showStartButton?: boolean;
+    showReadyButton?: boolean;
+  }) => {
     const origin = getOrderOrigin(order);
     const timeInfo = getTimeInfo(order.created_at);
-    const isPending = order.status === 'pending';
-    const isPreparing = order.status === 'preparing';
     const OriginIcon = origin.icon;
 
     return (
-      <Card className={cn(
-        "transition-all",
-        isPending && "border-yellow-500/50 bg-yellow-500/5",
-        isPreparing && "border-blue-500/50 bg-blue-500/5"
-      )}>
-        <CardContent className="p-4">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <Badge className={cn("py-1.5 px-3 text-sm font-bold", origin.color)}>
-                <OriginIcon className="h-4 w-4 mr-1.5" />
-                {origin.label}
-              </Badge>
-              <span className="text-xl font-bold">#{order.id.slice(-4).toUpperCase()}</span>
-            </div>
-            <div className={cn("flex items-center gap-2 px-3 py-1.5 rounded-full", timeInfo.bgColor)}>
-              <Clock className={cn("h-4 w-4", timeInfo.color)} />
+      <Card className="mb-3 shadow-md">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <div className="flex items-center justify-between">
+            <Badge className={cn("py-1 px-2 text-xs font-bold", origin.color)}>
+              <OriginIcon className="h-3.5 w-3.5 mr-1" />
+              {origin.label}
+            </Badge>
+            <div className={cn("flex items-center gap-1.5 px-2 py-1 rounded-full text-sm", timeInfo.bgColor)}>
+              <Clock className={cn("h-3.5 w-3.5", timeInfo.color)} />
               <span className={cn("font-bold", timeInfo.color)}>{timeInfo.text}</span>
             </div>
           </div>
-
-          {/* Customer info */}
-          {order.customer_name && (
-            <p className="text-sm text-muted-foreground mb-2">
-              Cliente: <span className="font-medium text-foreground">{order.customer_name}</span>
-            </p>
-          )}
-
-          {/* Items */}
-          <div className="border rounded-lg p-3 bg-background/50 mb-4">
-            <div className="space-y-2">
-              {order.order_items?.map((item, idx) => (
-                <div key={idx} className="flex items-start gap-3">
-                  <span className="font-bold text-lg text-primary min-w-[2rem]">{item.quantity}x</span>
-                  <div className="flex-1">
-                    <p className="font-medium">{item.product?.name || 'Produto'}</p>
-                    {item.notes && (
-                      <p className="text-xs text-yellow-600 mt-1">📝 {item.notes}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+            <span className="font-mono">#{order.id.slice(-4).toUpperCase()}</span>
+            {order.customer_name && <span>• {order.customer_name}</span>}
           </div>
-
-          {/* Order notes */}
+        </CardHeader>
+        <CardContent className="px-4 pb-3">
+          <div className="space-y-1.5 mb-3 border rounded-lg p-2 bg-background/50">
+            {order.order_items?.map((item, idx) => (
+              <div key={idx} className="text-sm">
+                <span className="font-bold text-primary">{item.quantity}x</span>{' '}
+                <span className="font-medium">{item.product?.name || 'Produto'}</span>
+                {item.notes && (
+                  <div className="text-xs text-orange-500 ml-5">📝 {item.notes}</div>
+                )}
+              </div>
+            ))}
+          </div>
           {order.notes && (
-            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2 mb-4">
-              <p className="text-sm text-yellow-700 dark:text-yellow-400">
-                <strong>Obs:</strong> {order.notes}
-              </p>
+            <div className="text-xs text-orange-600 dark:text-orange-400 bg-orange-500/10 rounded p-2 mb-3">
+              <strong>Obs:</strong> {order.notes}
             </div>
           )}
-
-          {/* Status badge and actions */}
-          <div className="flex items-center justify-between">
-            <Badge 
-              variant="outline" 
-              className={cn(
-                "text-sm py-1 px-3",
-                isPending && "border-yellow-500 text-yellow-500",
-                isPreparing && "border-blue-500 text-blue-500"
-              )}
-            >
-              {isPending ? '⏳ PENDENTE' : '🔵 PREPARANDO'}
-            </Badge>
-
-            <div className="flex gap-2">
-              {isPending && (
-                <Button 
-                  onClick={() => handleStartPreparation(order.id)}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <Play className="h-4 w-4 mr-2" />
-                  Iniciar Preparo
-                </Button>
-              )}
-              {isPreparing && (
-                <Button 
-                  onClick={() => handleMarkReady(order.id)}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Pedido Pronto
-                </Button>
-              )}
-            </div>
+          <div className="flex gap-2">
+            {showStartButton && (
+              <Button 
+                size="sm" 
+                className="flex-1 bg-blue-600 hover:bg-blue-700"
+                onClick={() => handleStartPreparation(order.id)}
+              >
+                <Play className="h-4 w-4 mr-1" />
+                Iniciar
+              </Button>
+            )}
+            {showReadyButton && (
+              <Button 
+                size="sm" 
+                className="flex-1 bg-green-600 hover:bg-green-700"
+                onClick={() => handleMarkReady(order.id)}
+              >
+                <CheckCircle className="h-4 w-4 mr-1" />
+                Pronto
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
     );
   };
 
-  const pendingCount = activeOrders.filter(o => o.status === 'pending').length;
-  const preparingCount = activeOrders.filter(o => o.status === 'preparing').length;
+  const KanbanColumn = ({ 
+    title, 
+    orders, 
+    icon: Icon, 
+    headerColor,
+    showStartButton,
+    showReadyButton
+  }: { 
+    title: string; 
+    orders: Order[]; 
+    icon: React.ElementType;
+    headerColor: string;
+    showStartButton?: boolean;
+    showReadyButton?: boolean;
+  }) => (
+    <div className="flex-1 min-w-[280px] lg:min-w-[320px]">
+      <div className={cn("rounded-t-lg p-3 flex items-center justify-between", headerColor)}>
+        <div className="flex items-center gap-2">
+          <Icon className="h-5 w-5" />
+          <span className="font-bold">{title}</span>
+        </div>
+        <Badge variant="secondary" className="text-base px-2.5 py-0.5">
+          {orders.length}
+        </Badge>
+      </div>
+      <ScrollArea className={cn(
+        "bg-muted/30 rounded-b-lg p-2",
+        isFullscreen ? "h-[calc(100vh-140px)]" : "h-[calc(100vh-220px)]"
+      )}>
+        {orders.length === 0 ? (
+          <div className="text-center text-muted-foreground py-8">
+            <p className="text-sm">Nenhum pedido</p>
+          </div>
+        ) : (
+          orders.map(order => (
+            <OrderCard 
+              key={order.id} 
+              order={order} 
+              showStartButton={showStartButton}
+              showReadyButton={showReadyButton}
+            />
+          ))
+        )}
+      </ScrollArea>
+    </div>
+  );
 
-  return (
-    <PDVLayout>
-      <div className="space-y-4">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+  const KDSContent = () => (
+    <div className={cn("p-4 h-full", isFullscreen && "p-6")}>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3">
+          <ChefHat className={cn("text-primary", isFullscreen ? "h-10 w-10" : "h-7 w-7")} />
           <div>
-            <h1 className="text-2xl font-bold">KDS - Cozinha</h1>
-            <p className="text-muted-foreground">
+            <h1 className={cn("font-bold", isFullscreen ? "text-3xl" : "text-2xl")}>KDS - Cozinha</h1>
+            <p className="text-muted-foreground text-sm">
               {activeOrders.length} pedido{activeOrders.length !== 1 ? 's' : ''} ativo{activeOrders.length !== 1 ? 's' : ''}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button 
-              variant={filter === 'all' ? 'default' : 'outline'} 
-              size="sm"
-              onClick={() => setFilter('all')}
-            >
-              Todos ({activeOrders.length})
-            </Button>
-            <Button 
-              variant={filter === 'pending' ? 'default' : 'outline'} 
-              size="sm"
-              onClick={() => setFilter('pending')}
-              className={filter === 'pending' ? 'bg-yellow-600 hover:bg-yellow-700' : ''}
-            >
-              Pendentes ({pendingCount})
-            </Button>
-            <Button 
-              variant={filter === 'preparing' ? 'default' : 'outline'} 
-              size="sm"
-              onClick={() => setFilter('preparing')}
-              className={filter === 'preparing' ? 'bg-blue-600 hover:bg-blue-700' : ''}
-            >
-              Preparando ({preparingCount})
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
-              <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
-            </Button>
-          </div>
         </div>
-
-        {/* Orders Grid */}
-        <ScrollArea className="h-[calc(100vh-200px)]">
-          {filteredOrders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-              <UtensilsCrossed className="h-16 w-16 mb-4 opacity-30" />
-              <p className="text-lg">Nenhum pedido ativo</p>
-              <p className="text-sm">Novos pedidos aparecerão aqui automaticamente</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pr-4">
-              {filteredOrders.map((order) => (
-                <OrderCard key={order.id} order={order} />
-              ))}
-            </div>
-          )}
-        </ScrollArea>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            className={cn(
+              "gap-1.5",
+              soundEnabled ? "text-green-600 border-green-600/50" : "text-muted-foreground"
+            )}
+          >
+            {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+            <span className="hidden sm:inline">{soundEnabled ? 'Som ON' : 'Som OFF'}</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className="gap-1.5"
+          >
+            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            <span className="hidden sm:inline">{isFullscreen ? 'Sair' : 'Tela Cheia'}</span>
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
+            <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+          </Button>
+        </div>
       </div>
+
+      {/* Kanban Board */}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-64">
+          <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          <KanbanColumn 
+            title="PENDENTE" 
+            orders={pendingOrders} 
+            icon={Clock}
+            headerColor="bg-yellow-500/20 text-yellow-700 dark:text-yellow-400"
+            showStartButton
+          />
+          <KanbanColumn 
+            title="EM PREPARO" 
+            orders={preparingOrders} 
+            icon={ChefHat}
+            headerColor="bg-blue-500/20 text-blue-700 dark:text-blue-400"
+            showReadyButton
+          />
+          <KanbanColumn 
+            title="PRONTO" 
+            orders={readyOrders} 
+            icon={CheckCircle}
+            headerColor="bg-green-500/20 text-green-700 dark:text-green-400"
+          />
+        </div>
+      )}
+    </div>
+  );
+
+  // Fullscreen mode - render without PDVLayout
+  if (isFullscreen) {
+    return (
+      <div className="min-h-screen bg-background">
+        <KDSContent />
+      </div>
+    );
+  }
+
+  // Normal mode - render with PDVLayout
+  return (
+    <PDVLayout>
+      <KDSContent />
     </PDVLayout>
   );
 }
