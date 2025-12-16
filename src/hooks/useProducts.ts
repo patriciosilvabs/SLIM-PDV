@@ -15,6 +15,14 @@ export interface Product {
   created_at: string;
   updated_at: string;
   category?: { name: string };
+  // New fields
+  cost_price: number | null;
+  internal_code: string | null;
+  pdv_code: string | null;
+  is_featured: boolean | null;
+  is_promotion: boolean | null;
+  promotion_price: number | null;
+  label: string | null;
 }
 
 export function useProducts() {

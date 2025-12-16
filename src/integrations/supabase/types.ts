@@ -580,40 +580,61 @@ export type Database = {
       products: {
         Row: {
           category_id: string | null
+          cost_price: number | null
           created_at: string | null
           description: string | null
           id: string
           image_url: string | null
+          internal_code: string | null
           is_available: boolean | null
+          is_featured: boolean | null
+          is_promotion: boolean | null
+          label: string | null
           name: string
+          pdv_code: string | null
           preparation_time: number | null
           price: number
+          promotion_price: number | null
           sort_order: number | null
           updated_at: string | null
         }
         Insert: {
           category_id?: string | null
+          cost_price?: number | null
           created_at?: string | null
           description?: string | null
           id?: string
           image_url?: string | null
+          internal_code?: string | null
           is_available?: boolean | null
+          is_featured?: boolean | null
+          is_promotion?: boolean | null
+          label?: string | null
           name: string
+          pdv_code?: string | null
           preparation_time?: number | null
           price: number
+          promotion_price?: number | null
           sort_order?: number | null
           updated_at?: string | null
         }
         Update: {
           category_id?: string | null
+          cost_price?: number | null
           created_at?: string | null
           description?: string | null
           id?: string
           image_url?: string | null
+          internal_code?: string | null
           is_available?: boolean | null
+          is_featured?: boolean | null
+          is_promotion?: boolean | null
+          label?: string | null
           name?: string
+          pdv_code?: string | null
           preparation_time?: number | null
           price?: number
+          promotion_price?: number | null
           sort_order?: number | null
           updated_at?: string | null
         }

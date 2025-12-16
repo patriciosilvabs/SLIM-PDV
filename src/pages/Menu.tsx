@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import PDVLayout from '@/components/layout/PDVLayout';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useProducts, useProductMutations } from '@/hooks/useProducts';
 import { useCategories, useCategoryMutations } from '@/hooks/useCategories';
 import { useProductExtras, useProductExtrasMutations } from '@/hooks/useProductExtras';
@@ -16,12 +17,15 @@ import { useProductVariations, useProductVariationsMutations } from '@/hooks/use
 import { useProductExtraLinks, useProductExtraLinksMutations } from '@/hooks/useProductExtraLinks';
 import { useCombos, useComboMutations } from '@/hooks/useCombos';
 import { useComboItems, useComboItemsMutations } from '@/hooks/useComboItems';
-import { Plus, Edit, Trash2, Search, Link2, Package, GripVertical } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Link2, Package, GripVertical, MoreVertical, Star, Percent, Eye, EyeOff } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ImageUpload } from '@/components/ImageUpload';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { SortableItem } from '@/components/SortableItem';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -32,6 +36,30 @@ interface ComboItemForm {
   variation_id: string | null;
   quantity: number;
 }
+
+interface ProductForm {
+  name: string;
+  description: string;
+  price: number;
+  cost_price: number;
+  category_id: string;
+  is_available: boolean;
+  is_featured: boolean;
+  is_promotion: boolean;
+  promotion_price: number;
+  label: string;
+  internal_code: string;
+  pdv_code: string;
+  image_url: string | null;
+}
+
+const LABEL_OPTIONS = [
+  { value: '', label: 'Nenhuma' },
+  { value: 'novidade', label: 'Novidade' },
+  { value: 'mais_vendido', label: 'Mais Vendido' },
+  { value: 'vegetariano', label: 'Vegetariano' },
+  { value: 'picante', label: 'Picante' },
+];
 
 export default function Menu() {
   const { data: products } = useProducts();
@@ -49,19 +77,26 @@ export default function Menu() {
   const { createCombo, updateCombo, deleteCombo } = useComboMutations();
   const { setComboItems } = useComboItemsMutations();
   
+  const [mainTab, setMainTab] = useState('products');
   const [search, setSearch] = useState('');
-  const [isSortMode, setIsSortMode] = useState(false);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [isCategorySortMode, setIsCategorySortMode] = useState(false);
   
   // Product dialog state
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
+  const [productDialogTab, setProductDialogTab] = useState('info');
   const [editingProduct, setEditingProduct] = useState<any>(null);
-  const [productForm, setProductForm] = useState({ name: '', description: '', price: 0, category_id: '', is_available: true, image_url: null as string | null });
+  const [productForm, setProductForm] = useState<ProductForm>({
+    name: '', description: '', price: 0, cost_price: 0, category_id: '', 
+    is_available: true, is_featured: false, is_promotion: false, promotion_price: 0,
+    label: '', internal_code: '', pdv_code: '', image_url: null
+  });
+  const [productLinkedExtras, setProductLinkedExtras] = useState<string[]>([]);
 
   // Category dialog state
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<any>(null);
   const [categoryForm, setCategoryForm] = useState({ name: '', description: '', icon: '', is_active: true });
-  const [isCategorySortMode, setIsCategorySortMode] = useState(false);
 
   // Extras dialog state
   const [isExtrasDialogOpen, setIsExtrasDialogOpen] = useState(false);
@@ -86,16 +121,20 @@ export default function Menu() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  const filteredProducts = products?.filter(p => 
-    p.name.toLowerCase().includes(search.toLowerCase())
-  );
+  // Filter products by category and search
+  const filteredProducts = products?.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
+    const matchesCategory = !selectedCategoryId || p.category_id === selectedCategoryId;
+    return matchesSearch && matchesCategory;
+  });
+
+  const selectedCategory = categories?.find(c => c.id === selectedCategoryId);
 
   // Calculate original price for combo
   const calculateOriginalPrice = () => {
     return comboItemsForm.reduce((total, item) => {
       const product = products?.find(p => p.id === item.product_id);
       if (!product) return total;
-      
       const variation = variations?.find(v => v.id === item.variation_id);
       const price = product.price + (variation?.price_modifier ?? 0);
       return total + (price * item.quantity);
@@ -106,16 +145,24 @@ export default function Menu() {
   const savings = originalPrice - comboForm.combo_price;
   const savingsPercent = originalPrice > 0 ? (savings / originalPrice) * 100 : 0;
 
+  // Handlers
   const handleSaveProduct = async () => {
     const productData = {
       name: productForm.name,
-      description: productForm.description,
+      description: productForm.description || null,
       price: productForm.price,
+      cost_price: productForm.cost_price || 0,
       category_id: productForm.category_id || null,
       is_available: productForm.is_available,
+      is_featured: productForm.is_featured,
+      is_promotion: productForm.is_promotion,
+      promotion_price: productForm.is_promotion ? productForm.promotion_price : null,
+      label: productForm.label || null,
+      internal_code: productForm.internal_code || null,
+      pdv_code: productForm.pdv_code || null,
       image_url: productForm.image_url,
       preparation_time: 15,
-      sort_order: 0
+      sort_order: editingProduct?.sort_order ?? (products?.length ?? 0)
     };
 
     if (editingProduct) {
@@ -123,9 +170,7 @@ export default function Menu() {
     } else {
       await createProduct.mutateAsync(productData);
     }
-    setIsProductDialogOpen(false);
-    setEditingProduct(null);
-    setProductForm({ name: '', description: '', price: 0, category_id: '', is_available: true, image_url: null });
+    closeProductDialog();
   };
 
   const handleSaveCategory = async () => {
@@ -145,28 +190,6 @@ export default function Menu() {
     setIsCategoryDialogOpen(false);
     setEditingCategory(null);
     setCategoryForm({ name: '', description: '', icon: '', is_active: true });
-  };
-
-  const openEditCategory = (category: any) => {
-    setEditingCategory(category);
-    setCategoryForm({
-      name: category.name,
-      description: category.description || '',
-      icon: category.icon || '',
-      is_active: category.is_active ?? true
-    });
-  };
-
-  const handleCategoryDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id || !categories) return;
-
-    const oldIndex = categories.findIndex(c => c.id === active.id);
-    const newIndex = categories.findIndex(c => c.id === over.id);
-    
-    const reordered = arrayMove(categories, oldIndex, newIndex);
-    const updates = reordered.map((category, index) => ({ id: category.id, sort_order: index }));
-    updateCategorySortOrder.mutate(updates);
   };
 
   const handleSaveExtra = async () => {
@@ -238,17 +261,48 @@ export default function Menu() {
     setComboItemsForm([]);
   };
 
+  const closeProductDialog = () => {
+    setIsProductDialogOpen(false);
+    setEditingProduct(null);
+    setProductDialogTab('info');
+    setProductForm({
+      name: '', description: '', price: 0, cost_price: 0, category_id: '', 
+      is_available: true, is_featured: false, is_promotion: false, promotion_price: 0,
+      label: '', internal_code: '', pdv_code: '', image_url: null
+    });
+    setProductLinkedExtras([]);
+  };
+
   const openEditProduct = (product: any) => {
     setEditingProduct(product);
     setProductForm({
       name: product.name,
       description: product.description || '',
       price: product.price,
+      cost_price: product.cost_price || 0,
       category_id: product.category_id || '',
-      is_available: product.is_available,
+      is_available: product.is_available ?? true,
+      is_featured: product.is_featured ?? false,
+      is_promotion: product.is_promotion ?? false,
+      promotion_price: product.promotion_price || 0,
+      label: product.label || '',
+      internal_code: product.internal_code || '',
+      pdv_code: product.pdv_code || '',
       image_url: product.image_url
     });
+    setProductDialogTab('info');
     setIsProductDialogOpen(true);
+  };
+
+  const openEditCategory = (category: any) => {
+    setEditingCategory(category);
+    setCategoryForm({
+      name: category.name,
+      description: category.description || '',
+      icon: category.icon || '',
+      is_active: category.is_active ?? true
+    });
+    setIsCategoryDialogOpen(true);
   };
 
   const openEditExtra = (extra: any) => {
@@ -256,6 +310,7 @@ export default function Menu() {
     setExtraForm({ name: extra.name, description: extra.description || '', price: extra.price, is_active: extra.is_active ?? true });
     const linkedIds = extraLinks?.filter(link => link.extra_id === extra.id).map(link => link.product_id) || [];
     setLinkedProductIds(linkedIds);
+    setIsExtrasDialogOpen(true);
   };
 
   const openEditVariation = (variation: any) => {
@@ -267,6 +322,7 @@ export default function Menu() {
       price_modifier: variation.price_modifier ?? 0,
       is_active: variation.is_active ?? true
     });
+    setIsVariationsDialogOpen(true);
   };
 
   const openEditCombo = (combo: any) => {
@@ -284,6 +340,7 @@ export default function Menu() {
       quantity: item.quantity
     })) || [];
     setComboItemsForm(items);
+    setIsComboDialogOpen(true);
   };
 
   const getLinkedProductCount = (extraId: string) => {
@@ -322,92 +379,94 @@ export default function Menu() {
     return comboItems?.filter(item => item.combo_id === comboId).length || 0;
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleCategoryDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    if (!over || active.id === over.id || !filteredProducts) return;
+    if (!over || active.id === over.id || !categories) return;
 
-    const oldIndex = filteredProducts.findIndex(p => p.id === active.id);
-    const newIndex = filteredProducts.findIndex(p => p.id === over.id);
+    const oldIndex = categories.findIndex(c => c.id === active.id);
+    const newIndex = categories.findIndex(c => c.id === over.id);
     
-    const reordered = arrayMove(filteredProducts, oldIndex, newIndex);
-    const updates = reordered.map((product, index) => ({ id: product.id, sort_order: index }));
-    updateProductSortOrder.mutate(updates);
+    const reordered = arrayMove(categories, oldIndex, newIndex);
+    const updates = reordered.map((category, index) => ({ id: category.id, sort_order: index }));
+    updateCategorySortOrder.mutate(updates);
   };
 
   return (
     <PDVLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="h-full flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-2xl font-bold">Cardápio</h1>
-            <p className="text-muted-foreground">Gerencie produtos, categorias, complementos, opções e combos</p>
+            <p className="text-muted-foreground text-sm">Gerencie produtos, complementos e opções</p>
           </div>
-          <div className="flex gap-2 flex-wrap">
-            {/* Category Dialog */}
-            <Dialog open={isCategoryDialogOpen} onOpenChange={(open) => { setIsCategoryDialogOpen(open); if (!open) { setEditingCategory(null); setCategoryForm({ name: '', description: '', icon: '', is_active: true }); setIsCategorySortMode(false); } }}>
-              <DialogTrigger asChild>
-                <Button variant="outline"><Plus className="h-4 w-4 mr-2" />Categoria</Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader><DialogTitle>Gerenciar Categorias</DialogTitle></DialogHeader>
-                <div className="space-y-4 pt-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label>Nome</Label>
-                      <Input placeholder="Ex: Pizzas" value={categoryForm.name} onChange={(e) => setCategoryForm({...categoryForm, name: e.target.value})} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Ícone (emoji)</Label>
-                      <Input placeholder="Ex: 🍕" value={categoryForm.icon} onChange={(e) => setCategoryForm({...categoryForm, icon: e.target.value})} className="w-full" />
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Descrição</Label>
-                    <Textarea 
-                      placeholder="Ex: Pizzas artesanais assadas em forno a lenha" 
-                      value={categoryForm.description} 
-                      onChange={(e) => setCategoryForm({...categoryForm, description: e.target.value})}
-                      className="resize-none"
-                      rows={2}
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Switch checked={categoryForm.is_active} onCheckedChange={(checked) => setCategoryForm({...categoryForm, is_active: checked})} />
-                    <Label>Ativa</Label>
-                  </div>
-                  <Button onClick={handleSaveCategory} className="w-full" disabled={!categoryForm.name}>
-                    {editingCategory ? 'Atualizar' : 'Adicionar'} Categoria
-                  </Button>
-                  
+          <div className="flex gap-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input 
+                placeholder="Buscar..." 
+                className="pl-10 w-64" 
+                value={search} 
+                onChange={(e) => setSearch(e.target.value)} 
+              />
+            </div>
+            <Button variant="outline" onClick={() => setIsComboDialogOpen(true)}>
+              <Package className="h-4 w-4 mr-2" />Combo
+            </Button>
+            <Button onClick={() => setIsProductDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />Produto
+            </Button>
+          </div>
+        </div>
+
+        {/* Main Tabs */}
+        <Tabs value={mainTab} onValueChange={setMainTab} className="flex-1 flex flex-col">
+          <TabsList className="w-fit">
+            <TabsTrigger value="products">PRODUTOS</TabsTrigger>
+            <TabsTrigger value="extras">COMPLEMENTOS</TabsTrigger>
+            <TabsTrigger value="variations">OPÇÕES</TabsTrigger>
+          </TabsList>
+
+          {/* Products Tab */}
+          <TabsContent value="products" className="flex-1 mt-4">
+            <div className="flex gap-4 h-full">
+              {/* Category Sidebar */}
+              <Card className="w-64 shrink-0">
+                <CardHeader className="p-3 border-b">
                   <div className="flex items-center justify-between">
-                    <Label className="text-sm text-muted-foreground">Categorias existentes</Label>
-                    <Button 
-                      variant={isCategorySortMode ? "default" : "outline"} 
-                      size="sm"
-                      onClick={() => setIsCategorySortMode(!isCategorySortMode)}
-                    >
-                      <GripVertical className="h-4 w-4 mr-1" />
-                      {isCategorySortMode ? 'Concluir' : 'Ordenar'}
-                    </Button>
+                    <CardTitle className="text-sm font-medium">CATEGORIAS</CardTitle>
+                    <div className="flex gap-1">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-7 w-7"
+                        onClick={() => setIsCategorySortMode(!isCategorySortMode)}
+                      >
+                        <GripVertical className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-7 w-7"
+                        onClick={() => { setEditingCategory(null); setCategoryForm({ name: '', description: '', icon: '', is_active: true }); setIsCategoryDialogOpen(true); }}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                  
-                  <div className="border rounded-lg overflow-hidden">
+                </CardHeader>
+                <CardContent className="p-0">
+                  <ScrollArea className="h-[calc(100vh-320px)]">
                     {isCategorySortMode && categories?.length ? (
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleCategoryDragEnd}>
                         <SortableContext items={categories.map(c => c.id)} strategy={verticalListSortingStrategy}>
-                          <div className="divide-y">
+                          <div className="p-2 space-y-1">
                             {categories.map((category) => (
                               <SortableItem key={category.id} id={category.id}>
-                                <div className="flex items-center gap-3 p-3 bg-background">
-                                  <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
-                                  <span className="text-lg">{category.icon || '📁'}</span>
-                                  <div className="flex-1">
-                                    <p className="font-medium">{category.name}</p>
-                                    {category.description && <p className="text-xs text-muted-foreground truncate">{category.description}</p>}
-                                  </div>
-                                  <span className={`px-2 py-1 rounded text-xs ${category.is_active ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
-                                    {category.is_active ? 'Ativa' : 'Inativa'}
-                                  </span>
+                                <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50 cursor-grab">
+                                  <GripVertical className="h-4 w-4 text-muted-foreground" />
+                                  <span>{category.icon || '📁'}</span>
+                                  <span className="text-sm truncate flex-1">{category.name}</span>
                                 </div>
                               </SortableItem>
                             ))}
@@ -415,507 +474,665 @@ export default function Menu() {
                         </SortableContext>
                       </DndContext>
                     ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Categoria</TableHead>
-                            <TableHead>Descrição</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="w-20">Ações</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {categories?.map((category) => (
-                            <TableRow key={category.id}>
-                              <TableCell className="font-medium">
-                                <span className="mr-2">{category.icon || '📁'}</span>
-                                {category.name}
-                              </TableCell>
-                              <TableCell className="text-muted-foreground max-w-[150px] truncate">{category.description || '-'}</TableCell>
-                              <TableCell>
-                                <span className={`px-2 py-1 rounded text-xs ${category.is_active ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
-                                  {category.is_active ? 'Ativa' : 'Inativa'}
-                                </span>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex gap-1">
-                                  <Button variant="ghost" size="icon" onClick={() => openEditCategory(category)}><Edit className="h-4 w-4" /></Button>
-                                  <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteCategory.mutate(category.id)}><Trash2 className="h-4 w-4" /></Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                          {!categories?.length && (
-                            <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">Nenhuma categoria cadastrada</TableCell></TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
+                      <div className="p-2 space-y-1">
+                        <button
+                          onClick={() => setSelectedCategoryId(null)}
+                          className={`w-full text-left p-2 rounded-md text-sm transition-colors flex items-center gap-2 ${
+                            selectedCategoryId === null ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                          }`}
+                        >
+                          <span>📋</span>
+                          <span className="flex-1 truncate">Todos</span>
+                          <span className="text-xs opacity-70">{products?.length || 0}</span>
+                        </button>
+                        {categories?.map((category) => (
+                          <div key={category.id} className="group flex items-center">
+                            <button
+                              onClick={() => setSelectedCategoryId(category.id)}
+                              className={`flex-1 text-left p-2 rounded-md text-sm transition-colors flex items-center gap-2 ${
+                                selectedCategoryId === category.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                              }`}
+                            >
+                              <span>{category.icon || '📁'}</span>
+                              <span className="flex-1 truncate">{category.name}</span>
+                              <span className="text-xs opacity-70">
+                                {products?.filter(p => p.category_id === category.id).length || 0}
+                              </span>
+                            </button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => openEditCategory(category)}>
+                                  <Edit className="h-4 w-4 mr-2" />Editar
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  className="text-destructive"
+                                  onClick={() => deleteCategory.mutate(category.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />Excluir
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        ))}
+                      </div>
                     )}
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
 
-            {/* Extras Dialog */}
-            <Dialog open={isExtrasDialogOpen} onOpenChange={(open) => { setIsExtrasDialogOpen(open); if (!open) { setEditingExtra(null); setExtraForm({ name: '', description: '', price: 0, is_active: true }); setLinkedProductIds([]); } }}>
-              <DialogTrigger asChild>
-                <Button variant="outline"><Plus className="h-4 w-4 mr-2" />Complemento</Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader><DialogTitle>Gerenciar Complementos</DialogTitle></DialogHeader>
-                <div className="space-y-4 pt-4">
-                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-end">
-                    <div className="space-y-1">
-                      <Label>Nome</Label>
-                      <Input placeholder="Ex: Bacon extra" value={extraForm.name} onChange={(e) => setExtraForm({...extraForm, name: e.target.value})} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Preço</Label>
-                      <Input type="number" step="0.01" className="w-24" value={extraForm.price} onChange={(e) => setExtraForm({...extraForm, price: parseFloat(e.target.value) || 0})} />
-                    </div>
-                    <div className="flex items-center gap-2 pb-1">
-                      <Switch checked={extraForm.is_active} onCheckedChange={(checked) => setExtraForm({...extraForm, is_active: checked})} />
-                      <Label className="text-xs">Ativo</Label>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-1">
-                    <Label>Descrição</Label>
-                    <Textarea 
-                      placeholder="Ex: Fatias crocantes de bacon defumado" 
-                      value={extraForm.description} 
-                      onChange={(e) => setExtraForm({...extraForm, description: e.target.value})}
-                      className="resize-none"
-                      rows={2}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Link2 className="h-4 w-4" />
-                      Produtos vinculados
-                      <span className="text-xs text-muted-foreground font-normal">(deixe vazio = disponível para todos)</span>
-                    </Label>
-                    <div className="border rounded-lg p-3 max-h-32 overflow-y-auto grid grid-cols-2 md:grid-cols-3 gap-2">
-                      {products?.map(product => (
-                        <div key={product.id} className="flex items-center gap-2">
-                          <Checkbox 
-                            id={`link-${product.id}`}
-                            checked={linkedProductIds.includes(product.id)}
-                            onCheckedChange={() => toggleLinkedProduct(product.id)}
-                          />
-                          <Label htmlFor={`link-${product.id}`} className="text-sm cursor-pointer">{product.name}</Label>
-                        </div>
-                      ))}
-                      {!products?.length && <p className="text-muted-foreground text-sm col-span-3">Nenhum produto cadastrado</p>}
-                    </div>
-                  </div>
-
-                  <Button onClick={handleSaveExtra} className="w-full">{editingExtra ? 'Atualizar' : 'Adicionar'}</Button>
-                  
-                  <div className="border rounded-lg max-h-64 overflow-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Nome</TableHead>
-                          <TableHead>Descrição</TableHead>
-                          <TableHead>Preço</TableHead>
-                          <TableHead>Vínculos</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="w-20">Ações</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {extras?.map((extra) => (
-                          <TableRow key={extra.id}>
-                            <TableCell className="font-medium">{extra.name}</TableCell>
-                            <TableCell className="text-muted-foreground max-w-[150px] truncate">{extra.description || '-'}</TableCell>
-                            <TableCell>{formatCurrency(extra.price)}</TableCell>
-                            <TableCell>
-                              {getLinkedProductCount(extra.id) > 0 ? (
-                                <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">{getLinkedProductCount(extra.id)} produto(s)</span>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">Todos</span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <span className={`px-2 py-1 rounded text-xs ${extra.is_active ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
-                                {extra.is_active ? 'Ativo' : 'Inativo'}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-1">
-                                <Button variant="ghost" size="icon" onClick={() => openEditExtra(extra)}><Edit className="h-4 w-4" /></Button>
-                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteExtra.mutate(extra.id)}><Trash2 className="h-4 w-4" /></Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        {!extras?.length && (
-                          <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum complemento cadastrado</TableCell></TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-
-            {/* Variations Dialog */}
-            <Dialog open={isVariationsDialogOpen} onOpenChange={(open) => { setIsVariationsDialogOpen(open); if (!open) { setEditingVariation(null); setVariationForm({ product_id: '', name: '', description: '', price_modifier: 0, is_active: true }); } }}>
-              <DialogTrigger asChild>
-                <Button variant="outline"><Plus className="h-4 w-4 mr-2" />Opções</Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader><DialogTitle>Gerenciar Opções (Variações)</DialogTitle></DialogHeader>
-                <div className="space-y-4 pt-4">
-                  <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
-                    <div className="space-y-1">
-                      <Label>Produto</Label>
-                      <Select value={variationForm.product_id} onValueChange={(v) => setVariationForm({...variationForm, product_id: v})}>
-                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>
-                          {products?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Nome da opção</Label>
-                      <Input placeholder="Ex: Grande, Média" value={variationForm.name} onChange={(e) => setVariationForm({...variationForm, name: e.target.value})} />
-                    </div>
-                    <div className="flex items-center gap-3 pb-1">
-                      <div className="space-y-1">
-                        <Label>+/- Preço</Label>
-                        <Input type="number" step="0.01" className="w-24" value={variationForm.price_modifier} onChange={(e) => setVariationForm({...variationForm, price_modifier: parseFloat(e.target.value) || 0})} />
-                      </div>
-                      <div className="flex items-center gap-2 mt-5">
-                        <Switch checked={variationForm.is_active} onCheckedChange={(checked) => setVariationForm({...variationForm, is_active: checked})} />
-                        <Label className="text-xs">Ativo</Label>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-1">
-                    <Label>Descrição</Label>
-                    <Textarea 
-                      placeholder="Ex: Tamanho grande, ideal para 3-4 pessoas" 
-                      value={variationForm.description} 
-                      onChange={(e) => setVariationForm({...variationForm, description: e.target.value})}
-                      className="resize-none"
-                      rows={2}
-                    />
-                  </div>
-
-                  <Button onClick={handleSaveVariation} disabled={!variationForm.product_id} className="w-full">{editingVariation ? 'Atualizar' : 'Adicionar'}</Button>
-                  
-                  <div className="border rounded-lg max-h-64 overflow-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Produto</TableHead>
-                          <TableHead>Opção</TableHead>
-                          <TableHead>Descrição</TableHead>
-                          <TableHead>Modificador</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="w-20">Ações</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {variations?.map((variation) => (
-                          <TableRow key={variation.id}>
-                            <TableCell>{products?.find(p => p.id === variation.product_id)?.name || '-'}</TableCell>
-                            <TableCell className="font-medium">{variation.name}</TableCell>
-                            <TableCell className="text-muted-foreground max-w-[150px] truncate">{variation.description || '-'}</TableCell>
-                            <TableCell>{formatCurrency(variation.price_modifier ?? 0)}</TableCell>
-                            <TableCell>
-                              <span className={`px-2 py-1 rounded text-xs ${variation.is_active ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
-                                {variation.is_active ? 'Ativo' : 'Inativo'}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-1">
-                                <Button variant="ghost" size="icon" onClick={() => openEditVariation(variation)}><Edit className="h-4 w-4" /></Button>
-                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteVariation.mutate(variation.id)}><Trash2 className="h-4 w-4" /></Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        {!variations?.length && (
-                          <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhuma opção cadastrada</TableCell></TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-
-            {/* Combo Dialog */}
-            <Dialog open={isComboDialogOpen} onOpenChange={(open) => { setIsComboDialogOpen(open); if (!open) { setEditingCombo(null); setComboForm({ name: '', description: '', image_url: null, combo_price: 0, is_active: true }); setComboItemsForm([]); } }}>
-              <DialogTrigger asChild>
-                <Button variant="outline"><Package className="h-4 w-4 mr-2" />Combo</Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader><DialogTitle>{editingCombo ? 'Editar' : 'Novo'} Combo</DialogTitle></DialogHeader>
-                <div className="space-y-4 pt-4">
-                  <div className="flex gap-4">
-                    <ImageUpload 
-                      value={comboForm.image_url} 
-                      onChange={(url) => setComboForm({...comboForm, image_url: url})}
-                      folder="combos"
-                    />
-                    <div className="flex-1 space-y-3">
-                      <div className="space-y-1">
-                        <Label>Nome do Combo</Label>
-                        <Input placeholder="Ex: Combo Família" value={comboForm.name} onChange={(e) => setComboForm({...comboForm, name: e.target.value})} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label>Descrição</Label>
-                        <Textarea 
-                          placeholder="Ex: 1 Pizza G + 1 Refri 2L + Sobremesa" 
-                          value={comboForm.description || ''} 
-                          onChange={(e) => setComboForm({...comboForm, description: e.target.value})}
-                          className="resize-none"
-                          rows={2}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Itens do Combo</Label>
-                    <div className="border rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
-                      {comboItemsForm.map((item, index) => (
-                        <div key={index} className="flex gap-2 items-center">
-                          <Select value={item.product_id} onValueChange={(v) => { updateComboItemForm(index, 'product_id', v); updateComboItemForm(index, 'variation_id', null); }}>
-                            <SelectTrigger className="flex-1"><SelectValue placeholder="Produto" /></SelectTrigger>
-                            <SelectContent>
-                              {products?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                          <Select value={item.variation_id || 'none'} onValueChange={(v) => updateComboItemForm(index, 'variation_id', v === 'none' ? null : v)}>
-                            <SelectTrigger className="w-32"><SelectValue placeholder="Variação" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">Padrão</SelectItem>
-                              {getProductVariations(item.product_id).map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                          <Input type="number" min={1} className="w-16" value={item.quantity} onChange={(e) => updateComboItemForm(index, 'quantity', parseInt(e.target.value) || 1)} />
-                          <Button variant="ghost" size="icon" className="text-destructive" onClick={() => removeComboItemForm(index)}><Trash2 className="h-4 w-4" /></Button>
-                        </div>
-                      ))}
-                      <Button variant="outline" size="sm" onClick={addComboItem} className="w-full"><Plus className="h-4 w-4 mr-1" />Adicionar item</Button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 p-3 bg-muted/50 rounded-lg">
+              {/* Products Grid */}
+              <div className="flex-1">
+                {/* Category Header */}
+                {selectedCategory && (
+                  <div className="mb-4 flex items-center justify-between">
                     <div>
-                      <Label className="text-xs text-muted-foreground">Preço Original (soma)</Label>
-                      <p className="text-lg font-semibold">{formatCurrency(originalPrice)}</p>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Preço do Combo</Label>
-                      <Input type="number" step="0.01" value={comboForm.combo_price} onChange={(e) => setComboForm({...comboForm, combo_price: parseFloat(e.target.value) || 0})} />
-                      {savings > 0 && (
-                        <p className="text-xs text-green-600 mt-1">Economia: {formatCurrency(savings)} ({savingsPercent.toFixed(0)}%)</p>
+                      <h2 className="text-lg font-semibold flex items-center gap-2">
+                        <span>{selectedCategory.icon || '📁'}</span>
+                        {selectedCategory.name}
+                      </h2>
+                      {selectedCategory.description && (
+                        <p className="text-sm text-muted-foreground">{selectedCategory.description}</p>
                       )}
                     </div>
+                    <Button variant="outline" size="sm" onClick={() => openEditCategory(selectedCategory)}>
+                      Editar Categoria
+                    </Button>
                   </div>
+                )}
 
-                  <div className="flex items-center gap-2">
-                    <Switch checked={comboForm.is_active} onCheckedChange={(checked) => setComboForm({...comboForm, is_active: checked})} />
-                    <Label>Ativo</Label>
-                  </div>
-
-                  <Button onClick={handleSaveCombo} className="w-full" disabled={!comboForm.name || comboItemsForm.length === 0}>Salvar Combo</Button>
-
-                  {/* Combos List */}
-                  <div className="border rounded-lg max-h-64 overflow-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Combo</TableHead>
-                          <TableHead>Itens</TableHead>
-                          <TableHead>De</TableHead>
-                          <TableHead>Por</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="w-20">Ações</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {combos?.map((combo) => (
-                          <TableRow key={combo.id}>
-                            <TableCell className="font-medium">{combo.name}</TableCell>
-                            <TableCell><span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">{getComboItemCount(combo.id)} item(s)</span></TableCell>
-                            <TableCell className="text-muted-foreground line-through">{formatCurrency(combo.original_price)}</TableCell>
-                            <TableCell className="font-semibold text-green-600">{formatCurrency(combo.combo_price)}</TableCell>
-                            <TableCell>
-                              <span className={`px-2 py-1 rounded text-xs ${combo.is_active ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
-                                {combo.is_active ? 'Ativo' : 'Inativo'}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-1">
-                                <Button variant="ghost" size="icon" onClick={() => openEditCombo(combo)}><Edit className="h-4 w-4" /></Button>
-                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteCombo.mutate(combo.id)}><Trash2 className="h-4 w-4" /></Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        {!combos?.length && (
-                          <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum combo cadastrado</TableCell></TableRow>
+                {/* Products Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {filteredProducts?.map((product) => (
+                    <Card key={product.id} className="group overflow-hidden">
+                      <div className="relative aspect-square bg-muted">
+                        {product.image_url ? (
+                          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Package className="h-12 w-12 text-muted-foreground/50" />
+                          </div>
                         )}
-                      </TableBody>
-                    </Table>
-                  </div>
+                        {/* Status Badge */}
+                        <Badge 
+                          variant={product.is_available ? "default" : "secondary"}
+                          className="absolute top-2 left-2 text-xs"
+                        >
+                          {product.is_available ? 'ATIVO' : 'OCULTO'}
+                        </Badge>
+                        {/* Featured Badge */}
+                        {product.is_featured && (
+                          <Badge variant="outline" className="absolute top-2 right-2 bg-background">
+                            <Star className="h-3 w-3 mr-1 fill-yellow-500 text-yellow-500" />
+                            Destaque
+                          </Badge>
+                        )}
+                        {/* Promotion Badge */}
+                        {product.is_promotion && (
+                          <Badge variant="destructive" className="absolute bottom-2 left-2">
+                            <Percent className="h-3 w-3 mr-1" />
+                            Promoção
+                          </Badge>
+                        )}
+                        {/* Actions Menu */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              variant="secondary" 
+                              size="icon" 
+                              className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openEditProduct(product)}>
+                              <Edit className="h-4 w-4 mr-2" />Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => updateProduct.mutate({ id: product.id, is_available: !product.is_available })}
+                            >
+                              {product.is_available ? (
+                                <><EyeOff className="h-4 w-4 mr-2" />Ocultar</>
+                              ) : (
+                                <><Eye className="h-4 w-4 mr-2" />Mostrar</>
+                              )}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              className="text-destructive"
+                              onClick={() => deleteProduct.mutate(product.id)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                      <CardContent className="p-3">
+                        <h3 className="font-medium truncate">{product.name}</h3>
+                        <div className="flex items-center gap-2 mt-1">
+                          {product.is_promotion && product.promotion_price ? (
+                            <>
+                              <span className="text-sm text-muted-foreground line-through">{formatCurrency(product.price)}</span>
+                              <span className="font-semibold text-destructive">{formatCurrency(product.promotion_price)}</span>
+                            </>
+                          ) : (
+                            <span className="font-semibold">{formatCurrency(product.price)}</span>
+                          )}
+                        </div>
+                        {product.label && (
+                          <Badge variant="outline" className="mt-2 text-xs">
+                            {LABEL_OPTIONS.find(l => l.value === product.label)?.label || product.label}
+                          </Badge>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                  {!filteredProducts?.length && (
+                    <div className="col-span-full text-center py-12 text-muted-foreground">
+                      Nenhum produto encontrado
+                    </div>
+                  )}
                 </div>
-              </DialogContent>
-            </Dialog>
+              </div>
+            </div>
+          </TabsContent>
 
-            {/* Product Dialog */}
-            <Dialog open={isProductDialogOpen} onOpenChange={(open) => { setIsProductDialogOpen(open); if (!open) { setEditingProduct(null); setProductForm({ name: '', description: '', price: 0, category_id: '', is_available: true, image_url: null }); } }}>
-              <DialogTrigger asChild>
-                <Button><Plus className="h-4 w-4 mr-2" />Produto</Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle>{editingProduct ? 'Editar' : 'Novo'} Produto</DialogTitle></DialogHeader>
-                <div className="space-y-4 pt-4">
+          {/* Extras Tab */}
+          <TabsContent value="extras" className="flex-1 mt-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Complementos</CardTitle>
+                <Button onClick={() => { setEditingExtra(null); setExtraForm({ name: '', description: '', price: 0, is_active: true }); setLinkedProductIds([]); setIsExtrasDialogOpen(true); }}>
+                  <Plus className="h-4 w-4 mr-2" />Novo Complemento
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Preço</TableHead>
+                      <TableHead>Vínculos</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-20">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {extras?.map((extra) => (
+                      <TableRow key={extra.id}>
+                        <TableCell className="font-medium">{extra.name}</TableCell>
+                        <TableCell className="text-muted-foreground max-w-[200px] truncate">{extra.description || '-'}</TableCell>
+                        <TableCell>{formatCurrency(extra.price)}</TableCell>
+                        <TableCell>
+                          {getLinkedProductCount(extra.id) > 0 ? (
+                            <Badge variant="secondary">{getLinkedProductCount(extra.id)} produto(s)</Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Todos</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={extra.is_active ? "default" : "secondary"}>
+                            {extra.is_active ? 'Ativo' : 'Inativo'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => openEditExtra(extra)}><Edit className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteExtra.mutate(extra.id)}><Trash2 className="h-4 w-4" /></Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {!extras?.length && (
+                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum complemento cadastrado</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Variations Tab */}
+          <TabsContent value="variations" className="flex-1 mt-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Opções (Variações)</CardTitle>
+                <Button onClick={() => { setEditingVariation(null); setVariationForm({ product_id: '', name: '', description: '', price_modifier: 0, is_active: true }); setIsVariationsDialogOpen(true); }}>
+                  <Plus className="h-4 w-4 mr-2" />Nova Opção
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Produto</TableHead>
+                      <TableHead>Opção</TableHead>
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Modificador</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-20">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {variations?.map((variation) => (
+                      <TableRow key={variation.id}>
+                        <TableCell>{products?.find(p => p.id === variation.product_id)?.name || '-'}</TableCell>
+                        <TableCell className="font-medium">{variation.name}</TableCell>
+                        <TableCell className="text-muted-foreground max-w-[200px] truncate">{variation.description || '-'}</TableCell>
+                        <TableCell>{formatCurrency(variation.price_modifier ?? 0)}</TableCell>
+                        <TableCell>
+                          <Badge variant={variation.is_active ? "default" : "secondary"}>
+                            {variation.is_active ? 'Ativo' : 'Inativo'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => openEditVariation(variation)}><Edit className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteVariation.mutate(variation.id)}><Trash2 className="h-4 w-4" /></Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {!variations?.length && (
+                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhuma opção cadastrada</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+        {/* Product Dialog with 3 Tabs */}
+        <Dialog open={isProductDialogOpen} onOpenChange={(open) => { if (!open) closeProductDialog(); else setIsProductDialogOpen(true); }}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{editingProduct ? 'Editar' : 'Novo'} Produto</DialogTitle>
+            </DialogHeader>
+            <Tabs value={productDialogTab} onValueChange={setProductDialogTab}>
+              <TabsList className="w-full grid grid-cols-3">
+                <TabsTrigger value="info">INFORMAÇÕES</TabsTrigger>
+                <TabsTrigger value="complements">COMPLEMENTOS</TabsTrigger>
+                <TabsTrigger value="availability">DISPONIBILIDADE</TabsTrigger>
+              </TabsList>
+
+              {/* Info Tab */}
+              <TabsContent value="info" className="space-y-4 pt-4">
+                <div className="flex gap-4">
                   <ImageUpload 
                     value={productForm.image_url} 
                     onChange={(url) => setProductForm({...productForm, image_url: url})}
                     folder="products"
                   />
-                  <div className="space-y-2">
-                    <Label>Nome</Label>
-                    <Input value={productForm.name} onChange={(e) => setProductForm({...productForm, name: e.target.value})} />
+                  <div className="flex-1 space-y-3">
+                    <div className="space-y-1">
+                      <Label>Nome do Produto *</Label>
+                      <Input 
+                        placeholder="Ex: Pizza Marguerita" 
+                        value={productForm.name} 
+                        onChange={(e) => setProductForm({...productForm, name: e.target.value})} 
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label>Categoria</Label>
+                        <Select value={productForm.category_id} onValueChange={(v) => setProductForm({...productForm, category_id: v})}>
+                          <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                          <SelectContent>
+                            {categories?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Etiqueta</Label>
+                        <Select value={productForm.label} onValueChange={(v) => setProductForm({...productForm, label: v})}>
+                          <SelectTrigger><SelectValue placeholder="Nenhuma" /></SelectTrigger>
+                          <SelectContent>
+                            {LABEL_OPTIONS.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Preço</Label>
-                    <Input type="number" step="0.01" value={productForm.price} onChange={(e) => setProductForm({...productForm, price: parseFloat(e.target.value) || 0})} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Categoria</Label>
-                    <Select value={productForm.category_id} onValueChange={(v) => setProductForm({...productForm, category_id: v})}>
-                      <SelectTrigger><SelectValue placeholder="Selecione (opcional)" /></SelectTrigger>
-                      <SelectContent>
-                        {categories?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <Switch 
+                      checked={productForm.is_featured} 
+                      onCheckedChange={(checked) => setProductForm({...productForm, is_featured: checked})} 
+                    />
+                    <Label>Em destaque</Label>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Switch checked={productForm.is_available} onCheckedChange={(checked) => setProductForm({...productForm, is_available: checked})} />
+                    <Switch 
+                      checked={productForm.is_available} 
+                      onCheckedChange={(checked) => setProductForm({...productForm, is_available: checked})} 
+                    />
                     <Label>Disponível</Label>
                   </div>
-                  <Button className="w-full" onClick={handleSaveProduct}>Salvar</Button>
                 </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-4">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar produto..." className="pl-10" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
-          <Button 
-            variant={isSortMode ? "default" : "outline"} 
-            onClick={() => setIsSortMode(!isSortMode)}
-          >
-            <GripVertical className="h-4 w-4 mr-2" />
-            {isSortMode ? 'Concluir ordenação' : 'Ordenar'}
-          </Button>
-        </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label>Preço de Venda *</Label>
+                    <Input 
+                      type="number" 
+                      step="0.01" 
+                      placeholder="0,00"
+                      value={productForm.price} 
+                      onChange={(e) => setProductForm({...productForm, price: parseFloat(e.target.value) || 0})} 
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Preço de Custo</Label>
+                    <Input 
+                      type="number" 
+                      step="0.01" 
+                      placeholder="0,00"
+                      value={productForm.cost_price} 
+                      onChange={(e) => setProductForm({...productForm, cost_price: parseFloat(e.target.value) || 0})} 
+                    />
+                  </div>
+                </div>
 
-        <Card>
-          <CardContent className="p-0">
-            {isSortMode ? (
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={filteredProducts?.map(p => p.id) || []} strategy={verticalListSortingStrategy}>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-10"></TableHead>
-                        <TableHead>Produto</TableHead>
-                        <TableHead>Categoria</TableHead>
-                        <TableHead>Preço</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredProducts?.map((product) => (
-                        <TableRow key={product.id}>
-                          <TableCell>
-                            <SortableItem id={product.id}>
-                              <span></span>
-                            </SortableItem>
-                          </TableCell>
-                          <TableCell className="font-medium">{product.name}</TableCell>
-                          <TableCell>{product.category?.name || '-'}</TableCell>
-                          <TableCell>{formatCurrency(product.price)}</TableCell>
-                          <TableCell>
-                            <span className={`px-2 py-1 rounded text-xs ${product.is_available ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
-                              {product.is_available ? 'Disponível' : 'Indisponível'}
-                            </span>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </SortableContext>
-              </DndContext>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Imagem</TableHead>
-                    <TableHead>Produto</TableHead>
-                    <TableHead>Categoria</TableHead>
-                    <TableHead>Preço</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[100px]">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredProducts?.map((product) => (
-                    <TableRow key={product.id}>
-                      <TableCell>
-                        {product.image_url ? (
-                          <img src={product.image_url} alt={product.name} className="h-10 w-10 object-cover rounded" />
-                        ) : (
-                          <div className="h-10 w-10 bg-muted rounded flex items-center justify-center">
-                            <Package className="h-4 w-4 text-muted-foreground" />
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="font-medium">{product.name}</TableCell>
-                      <TableCell>{product.category?.name || '-'}</TableCell>
-                      <TableCell>{formatCurrency(product.price)}</TableCell>
-                      <TableCell>
-                        <span className={`px-2 py-1 rounded text-xs ${product.is_available ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
-                          {product.is_available ? 'Disponível' : 'Indisponível'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => openEditProduct(product)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteProduct.mutate(product.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {!filteredProducts?.length && (
-                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum produto encontrado</TableCell></TableRow>
+                <div className="p-3 border rounded-lg space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Switch 
+                      checked={productForm.is_promotion} 
+                      onCheckedChange={(checked) => setProductForm({...productForm, is_promotion: checked})} 
+                    />
+                    <Label>Ativar promoção</Label>
+                  </div>
+                  {productForm.is_promotion && (
+                    <div className="space-y-1">
+                      <Label>Preço Promocional</Label>
+                      <Input 
+                        type="number" 
+                        step="0.01" 
+                        placeholder="0,00"
+                        value={productForm.promotion_price} 
+                        onChange={(e) => setProductForm({...productForm, promotion_price: parseFloat(e.target.value) || 0})} 
+                      />
+                      {productForm.price > 0 && productForm.promotion_price > 0 && (
+                        <p className="text-xs text-green-600">
+                          Desconto de {((1 - productForm.promotion_price / productForm.price) * 100).toFixed(0)}%
+                        </p>
+                      )}
+                    </div>
                   )}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                </div>
+
+                <div className="space-y-1">
+                  <Label>Descrição</Label>
+                  <Textarea 
+                    placeholder="Descreva o produto..." 
+                    value={productForm.description} 
+                    onChange={(e) => setProductForm({...productForm, description: e.target.value})}
+                    rows={3}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label>Código Interno</Label>
+                    <Input 
+                      placeholder="Ex: PIZ001" 
+                      value={productForm.internal_code} 
+                      onChange={(e) => setProductForm({...productForm, internal_code: e.target.value})} 
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Código PDV</Label>
+                    <Input 
+                      placeholder="Ex: 12345" 
+                      value={productForm.pdv_code} 
+                      onChange={(e) => setProductForm({...productForm, pdv_code: e.target.value})} 
+                    />
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* Complements Tab */}
+              <TabsContent value="complements" className="space-y-4 pt-4">
+                <div className="text-center py-8 text-muted-foreground">
+                  <Link2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Os complementos são gerenciados na aba "COMPLEMENTOS".</p>
+                  <p className="text-sm">Você pode vincular complementos específicos a este produto por lá.</p>
+                </div>
+              </TabsContent>
+
+              {/* Availability Tab */}
+              <TabsContent value="availability" className="space-y-4 pt-4">
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>Configuração de disponibilidade por horário em breve.</p>
+                  <p className="text-sm mt-2">Por enquanto, use o toggle "Disponível" na aba Informações.</p>
+                </div>
+              </TabsContent>
+            </Tabs>
+
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <Button variant="outline" onClick={closeProductDialog}>Cancelar</Button>
+              <Button onClick={handleSaveProduct} disabled={!productForm.name}>Salvar Produto</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Category Dialog */}
+        <Dialog open={isCategoryDialogOpen} onOpenChange={(open) => { setIsCategoryDialogOpen(open); if (!open) { setEditingCategory(null); setCategoryForm({ name: '', description: '', icon: '', is_active: true }); } }}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>{editingCategory ? 'Editar' : 'Nova'} Categoria</DialogTitle></DialogHeader>
+            <div className="space-y-4 pt-4">
+              <div className="grid grid-cols-[1fr_80px] gap-3">
+                <div className="space-y-1">
+                  <Label>Nome</Label>
+                  <Input placeholder="Ex: Pizzas" value={categoryForm.name} onChange={(e) => setCategoryForm({...categoryForm, name: e.target.value})} />
+                </div>
+                <div className="space-y-1">
+                  <Label>Ícone</Label>
+                  <Input placeholder="🍕" value={categoryForm.icon} onChange={(e) => setCategoryForm({...categoryForm, icon: e.target.value})} className="text-center text-lg" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Descrição</Label>
+                <Textarea 
+                  placeholder="Ex: Pizzas artesanais assadas em forno a lenha" 
+                  value={categoryForm.description} 
+                  onChange={(e) => setCategoryForm({...categoryForm, description: e.target.value})}
+                  rows={2}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch checked={categoryForm.is_active} onCheckedChange={(checked) => setCategoryForm({...categoryForm, is_active: checked})} />
+                <Label>Categoria ativa</Label>
+              </div>
+              <Button onClick={handleSaveCategory} className="w-full" disabled={!categoryForm.name}>
+                {editingCategory ? 'Atualizar' : 'Criar'} Categoria
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Extras Dialog */}
+        <Dialog open={isExtrasDialogOpen} onOpenChange={(open) => { setIsExtrasDialogOpen(open); if (!open) { setEditingExtra(null); setExtraForm({ name: '', description: '', price: 0, is_active: true }); setLinkedProductIds([]); } }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader><DialogTitle>{editingExtra ? 'Editar' : 'Novo'} Complemento</DialogTitle></DialogHeader>
+            <div className="space-y-4 pt-4">
+              <div className="grid grid-cols-[1fr_100px] gap-3">
+                <div className="space-y-1">
+                  <Label>Nome</Label>
+                  <Input placeholder="Ex: Bacon extra" value={extraForm.name} onChange={(e) => setExtraForm({...extraForm, name: e.target.value})} />
+                </div>
+                <div className="space-y-1">
+                  <Label>Preço</Label>
+                  <Input type="number" step="0.01" value={extraForm.price} onChange={(e) => setExtraForm({...extraForm, price: parseFloat(e.target.value) || 0})} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Descrição</Label>
+                <Textarea 
+                  placeholder="Ex: Fatias crocantes de bacon defumado" 
+                  value={extraForm.description} 
+                  onChange={(e) => setExtraForm({...extraForm, description: e.target.value})}
+                  rows={2}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Link2 className="h-4 w-4" />
+                  Vincular a produtos específicos
+                  <span className="text-xs text-muted-foreground font-normal">(vazio = todos)</span>
+                </Label>
+                <div className="border rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                  {products?.map(product => (
+                    <div key={product.id} className="flex items-center gap-2">
+                      <Checkbox 
+                        id={`link-${product.id}`}
+                        checked={linkedProductIds.includes(product.id)}
+                        onCheckedChange={() => toggleLinkedProduct(product.id)}
+                      />
+                      <Label htmlFor={`link-${product.id}`} className="text-sm cursor-pointer flex-1">{product.name}</Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch checked={extraForm.is_active} onCheckedChange={(checked) => setExtraForm({...extraForm, is_active: checked})} />
+                <Label>Ativo</Label>
+              </div>
+              <Button onClick={handleSaveExtra} className="w-full" disabled={!extraForm.name}>
+                {editingExtra ? 'Atualizar' : 'Criar'} Complemento
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Variations Dialog */}
+        <Dialog open={isVariationsDialogOpen} onOpenChange={(open) => { setIsVariationsDialogOpen(open); if (!open) { setEditingVariation(null); setVariationForm({ product_id: '', name: '', description: '', price_modifier: 0, is_active: true }); } }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader><DialogTitle>{editingVariation ? 'Editar' : 'Nova'} Opção</DialogTitle></DialogHeader>
+            <div className="space-y-4 pt-4">
+              <div className="space-y-1">
+                <Label>Produto *</Label>
+                <Select value={variationForm.product_id} onValueChange={(v) => setVariationForm({...variationForm, product_id: v})}>
+                  <SelectTrigger><SelectValue placeholder="Selecione um produto" /></SelectTrigger>
+                  <SelectContent>
+                    {products?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-[1fr_100px] gap-3">
+                <div className="space-y-1">
+                  <Label>Nome da Opção</Label>
+                  <Input placeholder="Ex: Grande, Média" value={variationForm.name} onChange={(e) => setVariationForm({...variationForm, name: e.target.value})} />
+                </div>
+                <div className="space-y-1">
+                  <Label>+/- Preço</Label>
+                  <Input type="number" step="0.01" value={variationForm.price_modifier} onChange={(e) => setVariationForm({...variationForm, price_modifier: parseFloat(e.target.value) || 0})} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Descrição</Label>
+                <Textarea 
+                  placeholder="Ex: Tamanho grande, ideal para 3-4 pessoas" 
+                  value={variationForm.description} 
+                  onChange={(e) => setVariationForm({...variationForm, description: e.target.value})}
+                  rows={2}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch checked={variationForm.is_active} onCheckedChange={(checked) => setVariationForm({...variationForm, is_active: checked})} />
+                <Label>Ativo</Label>
+              </div>
+              <Button onClick={handleSaveVariation} className="w-full" disabled={!variationForm.product_id || !variationForm.name}>
+                {editingVariation ? 'Atualizar' : 'Criar'} Opção
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Combo Dialog */}
+        <Dialog open={isComboDialogOpen} onOpenChange={(open) => { setIsComboDialogOpen(open); if (!open) { setEditingCombo(null); setComboForm({ name: '', description: '', image_url: null, combo_price: 0, is_active: true }); setComboItemsForm([]); } }}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>{editingCombo ? 'Editar' : 'Novo'} Combo</DialogTitle></DialogHeader>
+            <div className="space-y-4 pt-4">
+              <div className="flex gap-4">
+                <ImageUpload 
+                  value={comboForm.image_url} 
+                  onChange={(url) => setComboForm({...comboForm, image_url: url})}
+                  folder="combos"
+                />
+                <div className="flex-1 space-y-3">
+                  <div className="space-y-1">
+                    <Label>Nome do Combo</Label>
+                    <Input placeholder="Ex: Combo Família" value={comboForm.name} onChange={(e) => setComboForm({...comboForm, name: e.target.value})} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Descrição</Label>
+                    <Textarea 
+                      placeholder="Ex: 1 Pizza G + 1 Refri 2L + Sobremesa" 
+                      value={comboForm.description || ''} 
+                      onChange={(e) => setComboForm({...comboForm, description: e.target.value})}
+                      rows={2}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Itens do Combo</Label>
+                <div className="border rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
+                  {comboItemsForm.map((item, index) => (
+                    <div key={index} className="flex gap-2 items-center">
+                      <Select value={item.product_id} onValueChange={(v) => { updateComboItemForm(index, 'product_id', v); updateComboItemForm(index, 'variation_id', null); }}>
+                        <SelectTrigger className="flex-1"><SelectValue placeholder="Produto" /></SelectTrigger>
+                        <SelectContent>
+                          {products?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Select value={item.variation_id || 'none'} onValueChange={(v) => updateComboItemForm(index, 'variation_id', v === 'none' ? null : v)}>
+                        <SelectTrigger className="w-32"><SelectValue placeholder="Variação" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Padrão</SelectItem>
+                          {getProductVariations(item.product_id).map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Input type="number" min={1} className="w-16" value={item.quantity} onChange={(e) => updateComboItemForm(index, 'quantity', parseInt(e.target.value) || 1)} />
+                      <Button variant="ghost" size="icon" className="text-destructive" onClick={() => removeComboItemForm(index)}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
+                  ))}
+                  <Button variant="outline" size="sm" onClick={addComboItem} className="w-full"><Plus className="h-4 w-4 mr-1" />Adicionar item</Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 p-3 bg-muted/50 rounded-lg">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Preço Original (soma)</Label>
+                  <p className="text-lg font-semibold">{formatCurrency(originalPrice)}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Preço do Combo</Label>
+                  <Input type="number" step="0.01" value={comboForm.combo_price} onChange={(e) => setComboForm({...comboForm, combo_price: parseFloat(e.target.value) || 0})} />
+                  {savings > 0 && (
+                    <p className="text-xs text-green-600 mt-1">Economia: {formatCurrency(savings)} ({savingsPercent.toFixed(0)}%)</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Switch checked={comboForm.is_active} onCheckedChange={(checked) => setComboForm({...comboForm, is_active: checked})} />
+                <Label>Ativo</Label>
+              </div>
+
+              <Button onClick={handleSaveCombo} className="w-full" disabled={!comboForm.name || comboItemsForm.length === 0}>Salvar Combo</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </PDVLayout>
   );
