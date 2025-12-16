@@ -429,7 +429,11 @@ export default function KDS() {
                 {/* Extras/Complementos */}
                 {item.extras && item.extras.length > 0 && (
                   <div className="text-xs text-blue-600 dark:text-blue-400 ml-5 mt-0.5">
-                    + {item.extras.map(e => e.extra_name).join(', ')}
+                    + {item.extras.map(e => 
+                        e.extra_name.includes(': ') 
+                          ? e.extra_name.split(': ').slice(1).join(': ')
+                          : e.extra_name
+                      ).join(', ')}
                   </div>
                 )}
                 {/* Observações do item */}
