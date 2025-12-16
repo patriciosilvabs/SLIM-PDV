@@ -384,10 +384,11 @@ export default function KDS() {
   const getTimeInfo = (createdAt: string | null) => {
     if (!createdAt) return { text: '--', color: 'text-muted-foreground', bgColor: '' };
     const minutes = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
+    const timeText = formatTimeDisplay(minutes);
     
-    if (minutes < 10) return { text: `${minutes} min`, color: 'text-green-500', bgColor: 'bg-green-500/10' };
-    if (minutes < 20) return { text: `${minutes} min`, color: 'text-yellow-500', bgColor: 'bg-yellow-500/10' };
-    return { text: `${minutes} min`, color: 'text-red-500', bgColor: 'bg-red-500/10 animate-pulse' };
+    if (minutes < 10) return { text: timeText, color: 'text-green-500', bgColor: 'bg-green-500/10' };
+    if (minutes < 20) return { text: timeText, color: 'text-yellow-500', bgColor: 'bg-yellow-500/10' };
+    return { text: timeText, color: 'text-red-500', bgColor: 'bg-red-500/10 animate-pulse' };
   };
 
   const OrderCard = ({ order, showStartButton, showReadyButton }: { 

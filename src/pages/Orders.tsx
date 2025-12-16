@@ -2,19 +2,14 @@ import { useState } from 'react';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOrders, useOrderMutations, Order, OrderStatus } from '@/hooks/useOrders';
 import { useProducts } from '@/hooks/useProducts';
-import { useTables, useTableMutations } from '@/hooks/useTables';
 import { useCombos } from '@/hooks/useCombos';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { useComboItems } from '@/hooks/useComboItems';
 import { useProductVariations } from '@/hooks/useProductVariations';
-import { Plus, Trash2, Clock, ChefHat, CheckCircle, XCircle, Printer, Package, Tag } from 'lucide-react';
+import { Trash2, Clock, ChefHat, CheckCircle, XCircle, Printer, Package, Tag } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { printKitchenReceipt } from '@/components/kitchen/KitchenReceipt';
 import { Badge } from '@/components/ui/badge';
@@ -34,22 +29,16 @@ function formatCurrency(value: number) {
 export default function Orders() {
   const [activeTab, setActiveTab] = useState('active');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [isNewOrderOpen, setIsNewOrderOpen] = useState(false);
-  const [newOrderType, setNewOrderType] = useState<'dine_in' | 'takeaway' | 'delivery'>('dine_in');
-  const [selectedTableId, setSelectedTableId] = useState<string>('');
-  const [customerName, setCustomerName] = useState('');
   const [addItemsTab, setAddItemsTab] = useState<'products' | 'combos'>('products');
 
   const activeStatuses: OrderStatus[] = ['pending', 'preparing', 'ready'];
   const { data: activeOrders } = useOrders(activeStatuses);
   const { data: allOrders } = useOrders();
   const { data: products } = useProducts();
-  const { data: tables } = useTables();
   const { data: combos } = useCombos();
   const { data: comboItems } = useComboItems();
   const { data: variations } = useProductVariations();
-  const { createOrder, updateOrder, addOrderItem, deleteOrderItem } = useOrderMutations();
-  const { updateTable } = useTableMutations();
+  const { updateOrder, addOrderItem, deleteOrderItem } = useOrderMutations();
   const { getInitialOrderStatus } = useKdsSettings();
 
   const displayedOrders = activeTab === 'active' 
@@ -58,25 +47,6 @@ export default function Orders() {
 
   const activeCombos = combos?.filter(c => c.is_active);
 
-  const handleCreateOrder = async () => {
-    const initialStatus = getInitialOrderStatus();
-    const orderData: any = {
-      order_type: newOrderType,
-      status: initialStatus,
-    };
-
-    if (newOrderType === 'dine_in' && selectedTableId) {
-      orderData.table_id = selectedTableId;
-      await updateTable.mutateAsync({ id: selectedTableId, status: 'occupied' });
-    } else if (newOrderType !== 'dine_in') {
-      orderData.customer_name = customerName;
-    }
-
-    await createOrder.mutateAsync(orderData);
-    setIsNewOrderOpen(false);
-    setSelectedTableId('');
-    setCustomerName('');
-  };
 
   const handleStatusChange = async (order: Order, newStatus: OrderStatus) => {
     await updateOrder.mutateAsync({ id: order.id, status: newStatus });
@@ -146,7 +116,7 @@ export default function Orders() {
     return Math.round(((combo.original_price - combo.combo_price) / combo.original_price) * 100);
   };
 
-  const availableTables = tables?.filter(t => t.status === 'available');
+  
 
   return (
     <PDVLayout>
@@ -156,71 +126,6 @@ export default function Orders() {
             <h1 className="text-2xl font-bold">Pedidos</h1>
             <p className="text-muted-foreground">Gerencie os pedidos do estabelecimento</p>
           </div>
-          <Dialog open={isNewOrderOpen} onOpenChange={setIsNewOrderOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Novo Pedido
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Novo Pedido</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <Label>Tipo de Pedido</Label>
-                  <Select value={newOrderType} onValueChange={(v: any) => setNewOrderType(v)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="dine_in">Mesa</SelectItem>
-                      <SelectItem value="takeaway">Retirada</SelectItem>
-                      <SelectItem value="delivery">Delivery</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {newOrderType === 'dine_in' && (
-                  <div className="space-y-2">
-                    <Label>Mesa</Label>
-                    <Select value={selectedTableId} onValueChange={setSelectedTableId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione uma mesa" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableTables?.map((table) => (
-                          <SelectItem key={table.id} value={table.id}>
-                            Mesa {table.number}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {newOrderType !== 'dine_in' && (
-                  <div className="space-y-2">
-                    <Label>Nome do Cliente</Label>
-                    <Input
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder="Nome do cliente"
-                    />
-                  </div>
-                )}
-
-                <Button 
-                  className="w-full" 
-                  onClick={handleCreateOrder}
-                  disabled={createOrder.isPending || (newOrderType === 'dine_in' && !selectedTableId)}
-                >
-                  Criar Pedido
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">

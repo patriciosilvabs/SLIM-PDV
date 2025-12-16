@@ -108,14 +108,12 @@ export default function Tables() {
   const { data: reservations } = useReservations(selectedDate);
   const { createReservation, cancelReservation, updateReservation } = useReservationMutations();
   
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isReservationDialogOpen, setIsReservationDialogOpen] = useState(false);
   const [isOpenTableDialogOpen, setIsOpenTableDialogOpen] = useState(false);
   const [isAddOrderModalOpen, setIsAddOrderModalOpen] = useState(false);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [tableToOpen, setTableToOpen] = useState<Table | null>(null);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
-  const [newTable, setNewTable] = useState({ number: 1, capacity: 4 });
   const [openTableData, setOpenTableData] = useState({ people: 2, identification: '' });
   const [newReservation, setNewReservation] = useState({
     table_id: '',
@@ -378,17 +376,6 @@ export default function Tables() {
     return reservations?.find(r => r.table_id === tableId && r.status === 'confirmed');
   };
 
-  const handleAddTable = () => {
-    createTable.mutate({
-      number: newTable.number,
-      capacity: newTable.capacity,
-      status: 'available',
-      position_x: 0,
-      position_y: 0,
-    });
-    setIsAddDialogOpen(false);
-    setNewTable({ number: (tables?.length || 0) + 2, capacity: 4 });
-  };
 
   const handleTableClick = (table: Table) => {
     if (table.status === 'available') {
@@ -695,42 +682,6 @@ export default function Tables() {
                     </div>
                   ))}
                 </div>
-                <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Nova Mesa
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Adicionar Mesa</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 pt-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="number">Número da Mesa</Label>
-                        <Input
-                          id="number"
-                          type="number"
-                          value={newTable.number}
-                          onChange={(e) => setNewTable({ ...newTable, number: parseInt(e.target.value) })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="capacity">Capacidade</Label>
-                        <Input
-                          id="capacity"
-                          type="number"
-                          value={newTable.capacity}
-                          onChange={(e) => setNewTable({ ...newTable, capacity: parseInt(e.target.value) })}
-                        />
-                      </div>
-                      <Button className="w-full" onClick={handleAddTable} disabled={createTable.isPending}>
-                        Adicionar
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
               </div>
 
               {isLoading ? (
