@@ -206,6 +206,147 @@ export type Database = {
         }
         Relationships: []
       }
+      complement_group_options: {
+        Row: {
+          created_at: string | null
+          group_id: string
+          id: string
+          option_id: string
+          price_override: number | null
+          sort_order: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          group_id: string
+          id?: string
+          option_id: string
+          price_override?: number | null
+          sort_order?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          group_id?: string
+          id?: string
+          option_id?: string
+          price_override?: number | null
+          sort_order?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "complement_group_options_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "complement_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "complement_group_options_option_id_fkey"
+            columns: ["option_id"]
+            isOneToOne: false
+            referencedRelation: "complement_options"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      complement_groups: {
+        Row: {
+          channels: string[] | null
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          is_required: boolean | null
+          max_selections: number | null
+          min_selections: number | null
+          name: string
+          selection_type: string
+          sort_order: number | null
+          updated_at: string | null
+          visibility: string | null
+        }
+        Insert: {
+          channels?: string[] | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_required?: boolean | null
+          max_selections?: number | null
+          min_selections?: number | null
+          name: string
+          selection_type?: string
+          sort_order?: number | null
+          updated_at?: string | null
+          visibility?: string | null
+        }
+        Update: {
+          channels?: string[] | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_required?: boolean | null
+          max_selections?: number | null
+          min_selections?: number | null
+          name?: string
+          selection_type?: string
+          sort_order?: number | null
+          updated_at?: string | null
+          visibility?: string | null
+        }
+        Relationships: []
+      }
+      complement_options: {
+        Row: {
+          auto_calculate_cost: boolean | null
+          cost_price: number | null
+          created_at: string | null
+          description: string | null
+          enable_stock_control: boolean | null
+          id: string
+          image_url: string | null
+          internal_code: string | null
+          is_active: boolean | null
+          name: string
+          pdv_code: string | null
+          price: number
+          sort_order: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          auto_calculate_cost?: boolean | null
+          cost_price?: number | null
+          created_at?: string | null
+          description?: string | null
+          enable_stock_control?: boolean | null
+          id?: string
+          image_url?: string | null
+          internal_code?: string | null
+          is_active?: boolean | null
+          name: string
+          pdv_code?: string | null
+          price?: number
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          auto_calculate_cost?: boolean | null
+          cost_price?: number | null
+          created_at?: string | null
+          description?: string | null
+          enable_stock_control?: boolean | null
+          id?: string
+          image_url?: string | null
+          internal_code?: string | null
+          is_active?: boolean | null
+          name?: string
+          pdv_code?: string | null
+          price?: number
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       ingredients: {
         Row: {
           cost_per_unit: number | null
@@ -439,6 +580,45 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_complement_groups: {
+        Row: {
+          created_at: string | null
+          group_id: string
+          id: string
+          product_id: string
+          sort_order: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          group_id: string
+          id?: string
+          product_id: string
+          sort_order?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          group_id?: string
+          id?: string
+          product_id?: string
+          sort_order?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_complement_groups_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "complement_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_complement_groups_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
         ]

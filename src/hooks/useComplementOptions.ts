@@ -1,0 +1,101 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
+
+export interface ComplementOption {
+  id: string;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  price: number;
+  cost_price: number | null;
+  internal_code: string | null;
+  pdv_code: string | null;
+  auto_calculate_cost: boolean | null;
+  enable_stock_control: boolean | null;
+  is_active: boolean | null;
+  sort_order: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export function useComplementOptions() {
+  return useQuery({
+    queryKey: ['complement-options'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('complement_options')
+        .select('*')
+        .order('sort_order')
+        .order('name');
+      
+      if (error) throw error;
+      return data as ComplementOption[];
+    }
+  });
+}
+
+export function useComplementOptionsMutations() {
+  const queryClient = useQueryClient();
+
+  const createOption = useMutation({
+    mutationFn: async (option: Omit<ComplementOption, 'id' | 'created_at' | 'updated_at'>) => {
+      const { data, error } = await supabase
+        .from('complement_options')
+        .insert(option)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['complement-options'] });
+      toast({ title: 'Opção criada com sucesso' });
+    },
+    onError: (error) => {
+      toast({ title: 'Erro ao criar opção', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  const updateOption = useMutation({
+    mutationFn: async ({ id, ...option }: Partial<ComplementOption> & { id: string }) => {
+      const { data, error } = await supabase
+        .from('complement_options')
+        .update(option)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['complement-options'] });
+      toast({ title: 'Opção atualizada' });
+    },
+    onError: (error) => {
+      toast({ title: 'Erro ao atualizar', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  const deleteOption = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('complement_options')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['complement-options'] });
+      toast({ title: 'Opção removida' });
+    },
+    onError: (error) => {
+      toast({ title: 'Erro ao remover', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  return { createOption, updateOption, deleteOption };
+}

@@ -12,11 +12,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useProducts, useProductMutations } from '@/hooks/useProducts';
 import { useCategories, useCategoryMutations } from '@/hooks/useCategories';
-import { useProductExtras, useProductExtrasMutations } from '@/hooks/useProductExtras';
-import { useProductVariations, useProductVariationsMutations } from '@/hooks/useProductVariations';
-import { useProductExtraLinks, useProductExtraLinksMutations } from '@/hooks/useProductExtraLinks';
 import { useCombos, useComboMutations } from '@/hooks/useCombos';
 import { useComboItems, useComboItemsMutations } from '@/hooks/useComboItems';
+import { useProductVariations } from '@/hooks/useProductVariations';
+import { useComplementGroups, useComplementGroupsMutations, ComplementGroup } from '@/hooks/useComplementGroups';
+import { useComplementOptions, useComplementOptionsMutations, ComplementOption } from '@/hooks/useComplementOptions';
+import { useComplementGroupOptions, useComplementGroupOptionsMutations } from '@/hooks/useComplementGroupOptions';
+import { useProductComplementGroups, useProductComplementGroupsMutations } from '@/hooks/useProductComplementGroups';
 import { Plus, Edit, Trash2, Search, Link2, Package, GripVertical, MoreVertical, Star, Percent, Eye, EyeOff } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ImageUpload } from '@/components/ImageUpload';
@@ -26,6 +28,8 @@ import { SortableItem } from '@/components/SortableItem';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { ComplementGroupDialog } from '@/components/menu/ComplementGroupDialog';
+import { ComplementOptionDialog } from '@/components/menu/ComplementOptionDialog';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -64,18 +68,19 @@ const LABEL_OPTIONS = [
 export default function Menu() {
   const { data: products } = useProducts();
   const { data: categories } = useCategories();
-  const { data: extras } = useProductExtras();
   const { data: variations } = useProductVariations();
   const { data: combos } = useCombos();
   const { data: comboItems } = useComboItems();
+  const { data: complementGroups } = useComplementGroups();
+  const { data: complementOptions } = useComplementOptions();
   const { createProduct, updateProduct, deleteProduct, updateSortOrder: updateProductSortOrder } = useProductMutations();
   const { createCategory, updateCategory, deleteCategory, updateSortOrder: updateCategorySortOrder } = useCategoryMutations();
-  const { createExtra, updateExtra, deleteExtra } = useProductExtrasMutations();
-  const { createVariation, updateVariation, deleteVariation } = useProductVariationsMutations();
-  const { data: extraLinks } = useProductExtraLinks();
-  const { setLinkedProducts } = useProductExtraLinksMutations();
   const { createCombo, updateCombo, deleteCombo } = useComboMutations();
   const { setComboItems } = useComboItemsMutations();
+  const { createGroup, updateGroup, deleteGroup } = useComplementGroupsMutations();
+  const { createOption, updateOption, deleteOption } = useComplementOptionsMutations();
+  const { setGroupOptions } = useComplementGroupOptionsMutations();
+  const { setProductGroups } = useProductComplementGroupsMutations();
   
   const [mainTab, setMainTab] = useState('products');
   const [search, setSearch] = useState('');
@@ -98,16 +103,15 @@ export default function Menu() {
   const [editingCategory, setEditingCategory] = useState<any>(null);
   const [categoryForm, setCategoryForm] = useState({ name: '', description: '', icon: '', is_active: true });
 
-  // Extras dialog state
-  const [isExtrasDialogOpen, setIsExtrasDialogOpen] = useState(false);
-  const [editingExtra, setEditingExtra] = useState<any>(null);
-  const [extraForm, setExtraForm] = useState({ name: '', description: '', price: 0, is_active: true });
-  const [linkedProductIds, setLinkedProductIds] = useState<string[]>([]);
+  // Complement Group dialog state
+  const [isGroupDialogOpen, setIsGroupDialogOpen] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<ComplementGroup | null>(null);
+  const [groupLinkedOptionIds, setGroupLinkedOptionIds] = useState<string[]>([]);
+  const [groupLinkedProductIds, setGroupLinkedProductIds] = useState<string[]>([]);
 
-  // Variations dialog state
-  const [isVariationsDialogOpen, setIsVariationsDialogOpen] = useState(false);
-  const [editingVariation, setEditingVariation] = useState<any>(null);
-  const [variationForm, setVariationForm] = useState({ product_id: '', name: '', description: '', price_modifier: 0, is_active: true });
+  // Complement Option dialog state
+  const [isOptionDialogOpen, setIsOptionDialogOpen] = useState(false);
+  const [editingOption, setEditingOption] = useState<ComplementOption | null>(null);
 
   // Combo dialog state
   const [isComboDialogOpen, setIsComboDialogOpen] = useState(false);
@@ -192,38 +196,36 @@ export default function Menu() {
     setCategoryForm({ name: '', description: '', icon: '', is_active: true });
   };
 
-  const handleSaveExtra = async () => {
-    let extraId = editingExtra?.id;
-    if (editingExtra) {
-      await updateExtra.mutateAsync({ id: editingExtra.id, ...extraForm });
+  const handleSaveComplementGroup = async (
+    groupData: Partial<ComplementGroup>, 
+    optionIds: string[], 
+    productIds: string[]
+  ) => {
+    let groupId = editingGroup?.id;
+    if (editingGroup) {
+      await updateGroup.mutateAsync({ id: editingGroup.id, ...groupData } as any);
     } else {
-      const result = await createExtra.mutateAsync(extraForm);
-      extraId = result.id;
+      const result = await createGroup.mutateAsync(groupData as any);
+      groupId = result.id;
     }
-    if (extraId) {
-      await setLinkedProducts.mutateAsync({ extraId, productIds: linkedProductIds });
+    if (groupId) {
+      await setGroupOptions.mutateAsync({ groupId, optionIds });
+      await setProductGroups.mutateAsync({ groupId, productIds });
     }
-    setIsExtrasDialogOpen(false);
-    setEditingExtra(null);
-    setExtraForm({ name: '', description: '', price: 0, is_active: true });
-    setLinkedProductIds([]);
+    setIsGroupDialogOpen(false);
+    setEditingGroup(null);
+    setGroupLinkedOptionIds([]);
+    setGroupLinkedProductIds([]);
   };
 
-  const handleSaveVariation = async () => {
-    if (editingVariation) {
-      await updateVariation.mutateAsync({ 
-        id: editingVariation.id, 
-        name: variationForm.name, 
-        description: variationForm.description,
-        price_modifier: variationForm.price_modifier, 
-        is_active: variationForm.is_active 
-      });
+  const handleSaveComplementOption = async (optionData: Partial<ComplementOption>) => {
+    if (editingOption) {
+      await updateOption.mutateAsync({ id: editingOption.id, ...optionData } as any);
     } else {
-      await createVariation.mutateAsync(variationForm);
+      await createOption.mutateAsync(optionData as any);
     }
-    setIsVariationsDialogOpen(false);
-    setEditingVariation(null);
-    setVariationForm({ product_id: '', name: '', description: '', price_modifier: 0, is_active: true });
+    setIsOptionDialogOpen(false);
+    setEditingOption(null);
   };
 
   const handleSaveCombo = async () => {
@@ -305,26 +307,6 @@ export default function Menu() {
     setIsCategoryDialogOpen(true);
   };
 
-  const openEditExtra = (extra: any) => {
-    setEditingExtra(extra);
-    setExtraForm({ name: extra.name, description: extra.description || '', price: extra.price, is_active: extra.is_active ?? true });
-    const linkedIds = extraLinks?.filter(link => link.extra_id === extra.id).map(link => link.product_id) || [];
-    setLinkedProductIds(linkedIds);
-    setIsExtrasDialogOpen(true);
-  };
-
-  const openEditVariation = (variation: any) => {
-    setEditingVariation(variation);
-    setVariationForm({
-      product_id: variation.product_id,
-      name: variation.name,
-      description: variation.description || '',
-      price_modifier: variation.price_modifier ?? 0,
-      is_active: variation.is_active ?? true
-    });
-    setIsVariationsDialogOpen(true);
-  };
-
   const openEditCombo = (combo: any) => {
     setEditingCombo(combo);
     setComboForm({
@@ -343,16 +325,20 @@ export default function Menu() {
     setIsComboDialogOpen(true);
   };
 
-  const getLinkedProductCount = (extraId: string) => {
-    return extraLinks?.filter(link => link.extra_id === extraId).length || 0;
+  const getGroupOptionCount = (groupId: string) => {
+    // This would require fetching from complement_group_options
+    return 0; // Placeholder - will be updated with actual data
   };
 
-  const toggleLinkedProduct = (productId: string) => {
-    setLinkedProductIds(prev => 
-      prev.includes(productId) 
-        ? prev.filter(id => id !== productId)
-        : [...prev, productId]
-    );
+  const getGroupProductCount = (groupId: string) => {
+    // This would require fetching from product_complement_groups
+    return 0; // Placeholder - will be updated with actual data
+  };
+
+  const getOptionGroupCount = (optionId: string) => {
+    // This would require fetching from complement_group_options
+    return 0; // Placeholder - will be updated with actual data
+  };
   };
 
   const addComboItem = () => {
@@ -641,13 +627,13 @@ export default function Menu() {
             </div>
           </TabsContent>
 
-          {/* Extras Tab */}
+          {/* Complement Groups Tab */}
           <TabsContent value="extras" className="flex-1 mt-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Complementos</CardTitle>
-                <Button onClick={() => { setEditingExtra(null); setExtraForm({ name: '', description: '', price: 0, is_active: true }); setLinkedProductIds([]); setIsExtrasDialogOpen(true); }}>
-                  <Plus className="h-4 w-4 mr-2" />Novo Complemento
+                <CardTitle>Grupos de Complementos</CardTitle>
+                <Button onClick={() => { setEditingGroup(null); setGroupLinkedOptionIds([]); setGroupLinkedProductIds([]); setIsGroupDialogOpen(true); }}>
+                  <Plus className="h-4 w-4 mr-2" />Novo Grupo
                 </Button>
               </CardHeader>
               <CardContent>
@@ -655,41 +641,74 @@ export default function Menu() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Nome</TableHead>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Preço</TableHead>
-                      <TableHead>Vínculos</TableHead>
+                      <TableHead>Tipo de Seleção</TableHead>
+                      <TableHead>Obrigatório</TableHead>
+                      <TableHead>Opções</TableHead>
+                      <TableHead>Produtos</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="w-20">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {extras?.map((extra) => (
-                      <TableRow key={extra.id}>
-                        <TableCell className="font-medium">{extra.name}</TableCell>
-                        <TableCell className="text-muted-foreground max-w-[200px] truncate">{extra.description || '-'}</TableCell>
-                        <TableCell>{formatCurrency(extra.price)}</TableCell>
+                    {complementGroups?.map((group) => (
+                      <TableRow key={group.id}>
+                        <TableCell className="font-medium">{group.name}</TableCell>
                         <TableCell>
-                          {getLinkedProductCount(extra.id) > 0 ? (
-                            <Badge variant="secondary">{getLinkedProductCount(extra.id)} produto(s)</Badge>
+                          <Badge variant="outline">
+                            {group.selection_type === 'single' ? 'Apenas uma' : 
+                             group.selection_type === 'multiple' ? 'Múltiplas' : 'Com repetição'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {group.is_required ? (
+                            <Badge variant="destructive">Obrigatório</Badge>
                           ) : (
-                            <span className="text-xs text-muted-foreground">Todos</span>
+                            <span className="text-muted-foreground">Opcional</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={extra.is_active ? "default" : "secondary"}>
-                            {extra.is_active ? 'Ativo' : 'Inativo'}
+                          <Badge variant="secondary">{getGroupOptionCount(group.id)} opção(ões)</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{getGroupProductCount(group.id)} produto(s)</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={group.is_active ? "default" : "secondary"}>
+                            {group.is_active ? 'Ativo' : 'Inativo'}
                           </Badge>
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => openEditExtra(extra)}><Edit className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteExtra.mutate(extra.id)}><Trash2 className="h-4 w-4" /></Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => { 
+                                setEditingGroup(group); 
+                                setGroupLinkedOptionIds([]); 
+                                setGroupLinkedProductIds([]); 
+                                setIsGroupDialogOpen(true); 
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="text-destructive" 
+                              onClick={() => deleteGroup.mutate(group.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
                     ))}
-                    {!extras?.length && (
-                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum complemento cadastrado</TableCell></TableRow>
+                    {!complementGroups?.length && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                          Nenhum grupo de complemento cadastrado
+                        </TableCell>
+                      </TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -697,52 +716,78 @@ export default function Menu() {
             </Card>
           </TabsContent>
 
-          {/* Variations Tab */}
+          {/* Complement Options Tab */}
           <TabsContent value="variations" className="flex-1 mt-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Opções (Variações)</CardTitle>
-                <Button onClick={() => { setEditingVariation(null); setVariationForm({ product_id: '', name: '', description: '', price_modifier: 0, is_active: true }); setIsVariationsDialogOpen(true); }}>
+                <CardTitle>Opções de Complementos</CardTitle>
+                <Button onClick={() => { setEditingOption(null); setIsOptionDialogOpen(true); }}>
                   <Plus className="h-4 w-4 mr-2" />Nova Opção
                 </Button>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Produto</TableHead>
-                      <TableHead>Opção</TableHead>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Modificador</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="w-20">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {variations?.map((variation) => (
-                      <TableRow key={variation.id}>
-                        <TableCell>{products?.find(p => p.id === variation.product_id)?.name || '-'}</TableCell>
-                        <TableCell className="font-medium">{variation.name}</TableCell>
-                        <TableCell className="text-muted-foreground max-w-[200px] truncate">{variation.description || '-'}</TableCell>
-                        <TableCell>{formatCurrency(variation.price_modifier ?? 0)}</TableCell>
-                        <TableCell>
-                          <Badge variant={variation.is_active ? "default" : "secondary"}>
-                            {variation.is_active ? 'Ativo' : 'Inativo'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => openEditVariation(variation)}><Edit className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteVariation.mutate(variation.id)}><Trash2 className="h-4 w-4" /></Button>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {complementOptions?.map((option) => (
+                    <Card key={option.id} className="group overflow-hidden">
+                      <div className="relative aspect-square bg-muted">
+                        {option.image_url ? (
+                          <img src={option.image_url} alt={option.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Package className="h-12 w-12 text-muted-foreground/50" />
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {!variations?.length && (
-                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhuma opção cadastrada</TableCell></TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                        )}
+                        <Badge 
+                          variant={option.is_active ? "default" : "secondary"}
+                          className="absolute top-2 left-2 text-xs"
+                        >
+                          {option.is_active ? 'ATIVO' : 'INATIVO'}
+                        </Badge>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              variant="secondary" 
+                              size="icon" 
+                              className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => { setEditingOption(option); setIsOptionDialogOpen(true); }}>
+                              <Edit className="h-4 w-4 mr-2" />Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              className="text-destructive"
+                              onClick={() => deleteOption.mutate(option.id)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                      <CardContent className="p-3">
+                        <h3 className="font-medium truncate">{option.name}</h3>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="font-semibold">{formatCurrency(option.price)}</span>
+                          {option.cost_price && option.cost_price > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              Custo: {formatCurrency(option.cost_price)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {getOptionGroupCount(option.id)} grupo(s)
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                  {!complementOptions?.length && (
+                    <div className="col-span-full text-center py-12 text-muted-foreground">
+                      Nenhuma opção cadastrada
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -958,103 +1003,28 @@ export default function Menu() {
           </DialogContent>
         </Dialog>
 
-        {/* Extras Dialog */}
-        <Dialog open={isExtrasDialogOpen} onOpenChange={(open) => { setIsExtrasDialogOpen(open); if (!open) { setEditingExtra(null); setExtraForm({ name: '', description: '', price: 0, is_active: true }); setLinkedProductIds([]); } }}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader><DialogTitle>{editingExtra ? 'Editar' : 'Novo'} Complemento</DialogTitle></DialogHeader>
-            <div className="space-y-4 pt-4">
-              <div className="grid grid-cols-[1fr_100px] gap-3">
-                <div className="space-y-1">
-                  <Label>Nome</Label>
-                  <Input placeholder="Ex: Bacon extra" value={extraForm.name} onChange={(e) => setExtraForm({...extraForm, name: e.target.value})} />
-                </div>
-                <div className="space-y-1">
-                  <Label>Preço</Label>
-                  <Input type="number" step="0.01" value={extraForm.price} onChange={(e) => setExtraForm({...extraForm, price: parseFloat(e.target.value) || 0})} />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label>Descrição</Label>
-                <Textarea 
-                  placeholder="Ex: Fatias crocantes de bacon defumado" 
-                  value={extraForm.description} 
-                  onChange={(e) => setExtraForm({...extraForm, description: e.target.value})}
-                  rows={2}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Link2 className="h-4 w-4" />
-                  Vincular a produtos específicos
-                  <span className="text-xs text-muted-foreground font-normal">(vazio = todos)</span>
-                </Label>
-                <div className="border rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
-                  {products?.map(product => (
-                    <div key={product.id} className="flex items-center gap-2">
-                      <Checkbox 
-                        id={`link-${product.id}`}
-                        checked={linkedProductIds.includes(product.id)}
-                        onCheckedChange={() => toggleLinkedProduct(product.id)}
-                      />
-                      <Label htmlFor={`link-${product.id}`} className="text-sm cursor-pointer flex-1">{product.name}</Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch checked={extraForm.is_active} onCheckedChange={(checked) => setExtraForm({...extraForm, is_active: checked})} />
-                <Label>Ativo</Label>
-              </div>
-              <Button onClick={handleSaveExtra} className="w-full" disabled={!extraForm.name}>
-                {editingExtra ? 'Atualizar' : 'Criar'} Complemento
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        {/* Complement Group Dialog */}
+        <ComplementGroupDialog
+          open={isGroupDialogOpen}
+          onOpenChange={setIsGroupDialogOpen}
+          group={editingGroup}
+          options={complementOptions || []}
+          products={products || []}
+          linkedOptionIds={groupLinkedOptionIds}
+          linkedProductIds={groupLinkedProductIds}
+          onSave={handleSaveComplementGroup}
+          isEditing={!!editingGroup}
+        />
 
-        {/* Variations Dialog */}
-        <Dialog open={isVariationsDialogOpen} onOpenChange={(open) => { setIsVariationsDialogOpen(open); if (!open) { setEditingVariation(null); setVariationForm({ product_id: '', name: '', description: '', price_modifier: 0, is_active: true }); } }}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader><DialogTitle>{editingVariation ? 'Editar' : 'Nova'} Opção</DialogTitle></DialogHeader>
-            <div className="space-y-4 pt-4">
-              <div className="space-y-1">
-                <Label>Produto *</Label>
-                <Select value={variationForm.product_id} onValueChange={(v) => setVariationForm({...variationForm, product_id: v})}>
-                  <SelectTrigger><SelectValue placeholder="Selecione um produto" /></SelectTrigger>
-                  <SelectContent>
-                    {products?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-[1fr_100px] gap-3">
-                <div className="space-y-1">
-                  <Label>Nome da Opção</Label>
-                  <Input placeholder="Ex: Grande, Média" value={variationForm.name} onChange={(e) => setVariationForm({...variationForm, name: e.target.value})} />
-                </div>
-                <div className="space-y-1">
-                  <Label>+/- Preço</Label>
-                  <Input type="number" step="0.01" value={variationForm.price_modifier} onChange={(e) => setVariationForm({...variationForm, price_modifier: parseFloat(e.target.value) || 0})} />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label>Descrição</Label>
-                <Textarea 
-                  placeholder="Ex: Tamanho grande, ideal para 3-4 pessoas" 
-                  value={variationForm.description} 
-                  onChange={(e) => setVariationForm({...variationForm, description: e.target.value})}
-                  rows={2}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch checked={variationForm.is_active} onCheckedChange={(checked) => setVariationForm({...variationForm, is_active: checked})} />
-                <Label>Ativo</Label>
-              </div>
-              <Button onClick={handleSaveVariation} className="w-full" disabled={!variationForm.product_id || !variationForm.name}>
-                {editingVariation ? 'Atualizar' : 'Criar'} Opção
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        {/* Complement Option Dialog */}
+        <ComplementOptionDialog
+          open={isOptionDialogOpen}
+          onOpenChange={setIsOptionDialogOpen}
+          option={editingOption}
+          linkedGroups={complementGroups?.filter(g => groupLinkedOptionIds.includes(g.id)) || []}
+          onSave={handleSaveComplementOption}
+          isEditing={!!editingOption}
+        />
 
         {/* Combo Dialog */}
         <Dialog open={isComboDialogOpen} onOpenChange={(open) => { setIsComboDialogOpen(open); if (!open) { setEditingCombo(null); setComboForm({ name: '', description: '', image_url: null, combo_price: 0, is_active: true }); setComboItemsForm([]); } }}>

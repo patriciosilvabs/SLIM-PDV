@@ -1,0 +1,100 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
+
+export interface ComplementGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  selection_type: 'single' | 'multiple' | 'multiple_repeat';
+  is_required: boolean | null;
+  min_selections: number | null;
+  max_selections: number | null;
+  visibility: string | null;
+  channels: string[] | null;
+  sort_order: number | null;
+  is_active: boolean | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export function useComplementGroups() {
+  return useQuery({
+    queryKey: ['complement-groups'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('complement_groups')
+        .select('*')
+        .order('sort_order')
+        .order('name');
+      
+      if (error) throw error;
+      return data as ComplementGroup[];
+    }
+  });
+}
+
+export function useComplementGroupsMutations() {
+  const queryClient = useQueryClient();
+
+  const createGroup = useMutation({
+    mutationFn: async (group: Omit<ComplementGroup, 'id' | 'created_at' | 'updated_at'>) => {
+      const { data, error } = await supabase
+        .from('complement_groups')
+        .insert(group)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['complement-groups'] });
+      toast({ title: 'Grupo de complemento criado' });
+    },
+    onError: (error) => {
+      toast({ title: 'Erro ao criar grupo', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  const updateGroup = useMutation({
+    mutationFn: async ({ id, ...group }: Partial<ComplementGroup> & { id: string }) => {
+      const { data, error } = await supabase
+        .from('complement_groups')
+        .update(group)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['complement-groups'] });
+      toast({ title: 'Grupo atualizado' });
+    },
+    onError: (error) => {
+      toast({ title: 'Erro ao atualizar', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  const deleteGroup = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('complement_groups')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['complement-groups'] });
+      toast({ title: 'Grupo removido' });
+    },
+    onError: (error) => {
+      toast({ title: 'Erro ao remover', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  return { createGroup, updateGroup, deleteGroup };
+}
