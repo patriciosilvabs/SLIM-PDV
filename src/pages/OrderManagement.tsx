@@ -8,10 +8,18 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { supabase } from '@/integrations/supabase/client';
 import { RefreshCw, Store, Truck, Clock, Package, CheckCircle2 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+
+// Format time display in hours after 60 minutes
+const formatTimeDisplay = (minutes: number): string => {
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`;
+  }
+  return `${minutes} min`;
+};
 
 type KanbanColumn = 'pending' | 'preparing' | 'ready';
 
@@ -113,16 +121,19 @@ export default function OrderManagement() {
     }
   };
 
-  const getTimeColor = (createdAt: string | null) => {
-    if (!createdAt) return 'text-muted-foreground';
+  const getTimeInfo = (createdAt: string | null) => {
+    if (!createdAt) return { text: '--', color: 'text-muted-foreground' };
     const minutes = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
-    if (minutes < 10) return 'text-green-500';
-    if (minutes < 20) return 'text-yellow-500';
-    return 'text-red-500';
+    const timeText = formatTimeDisplay(minutes);
+    
+    if (minutes < 10) return { text: timeText, color: 'text-green-500' };
+    if (minutes < 20) return { text: timeText, color: 'text-yellow-500' };
+    return { text: timeText, color: 'text-red-500' };
   };
 
   const OrderCard = ({ order }: { order: Order }) => {
     const isDelivery = order.order_type === 'delivery';
+    const timeInfo = getTimeInfo(order.created_at);
     
     return (
       <Card className="mb-3 hover:shadow-md transition-shadow cursor-pointer">
@@ -142,9 +153,9 @@ export default function OrderManagement() {
                 </Badge>
               )}
             </div>
-            <span className={cn("text-sm font-medium flex items-center gap-1", getTimeColor(order.created_at))}>
+            <span className={cn("text-sm font-medium flex items-center gap-1", timeInfo.color)}>
               <Clock className="h-3 w-3" />
-              {order.created_at && formatDistanceToNow(new Date(order.created_at), { locale: ptBR, addSuffix: false })}
+              {timeInfo.text}
             </span>
           </div>
           
