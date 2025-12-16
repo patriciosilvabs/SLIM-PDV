@@ -339,7 +339,6 @@ export default function Menu() {
     // This would require fetching from complement_group_options
     return 0; // Placeholder - will be updated with actual data
   };
-  };
 
   const addComboItem = () => {
     setComboItemsForm(prev => [...prev, { product_id: '', variation_id: null, quantity: 1 }]);
