@@ -13,6 +13,7 @@ import { RequireRole } from '@/components/auth/RequireRole';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { PushNotificationSettings } from '@/components/PushNotificationSettings';
 import { ScheduledAnnouncementsSettings } from '@/components/ScheduledAnnouncementsSettings';
+import { PrinterSettings } from '@/components/PrinterSettings';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { Users, Shield, Plus, X, Crown, Sparkles, AlertTriangle, UtensilsCrossed, Edit, Trash2, ShoppingCart, ChefHat, UserPlus, Eye, EyeOff } from 'lucide-react';
@@ -681,6 +682,9 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Printer Settings */}
+          <PrinterSettings />
 
           {/* Notification Settings */}
           <NotificationSettings />

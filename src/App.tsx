@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { OfflineSyncProvider } from "@/contexts/OfflineSyncContext";
+import { PrinterProvider } from "@/contexts/PrinterContext";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Tables from "./pages/Tables";
@@ -29,32 +30,34 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <OfflineSyncProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Navigate to="/auth" replace />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/tables" element={<Tables />} />
-              <Route path="/orders" element={<Orders />} />
-              <Route path="/menu" element={<Menu />} />
-              <Route path="/stock" element={<Stock />} />
-              <Route path="/cash-register" element={<CashRegister />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/install" element={<Install />} />
-              <Route path="/counter" element={<Counter />} />
-              <Route path="/customers" element={<Customers />} />
-              <Route path="/order-management" element={<OrderManagement />} />
-              <Route path="/kds" element={<KDS />} />
-              <Route path="/closing-history" element={<ClosingHistory />} />
-              <Route path="/performance" element={<Performance />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
+        <PrinterProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Navigate to="/auth" replace />} />
+                <Route path="/auth" element={<Auth />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/tables" element={<Tables />} />
+                <Route path="/orders" element={<Orders />} />
+                <Route path="/menu" element={<Menu />} />
+                <Route path="/stock" element={<Stock />} />
+                <Route path="/cash-register" element={<CashRegister />} />
+                <Route path="/reports" element={<Reports />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/install" element={<Install />} />
+                <Route path="/counter" element={<Counter />} />
+                <Route path="/customers" element={<Customers />} />
+                <Route path="/order-management" element={<OrderManagement />} />
+                <Route path="/kds" element={<KDS />} />
+                <Route path="/closing-history" element={<ClosingHistory />} />
+                <Route path="/performance" element={<Performance />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </TooltipProvider>
+        </PrinterProvider>
       </OfflineSyncProvider>
     </AuthProvider>
   </QueryClientProvider>
