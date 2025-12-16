@@ -167,44 +167,10 @@ export default function OrderManagement() {
             </div>
           </div>
           
-          <div className="border-t border-border pt-2 mt-2 flex items-center justify-between">
+          <div className="border-t border-border pt-2 mt-2">
             <span className="font-bold text-primary">
               R$ {(order.total || 0).toFixed(2)}
             </span>
-            <div className="flex gap-1">
-              {order.status === 'pending' && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={() => handleStatusChange(order.id, 'preparing')}
-                >
-                  Iniciar
-                </Button>
-              )}
-              {order.status === 'preparing' && (
-                <Button
-                  size="sm"
-                  className="h-7 text-xs bg-green-600 hover:bg-green-700"
-                  onClick={() => handleStatusChange(order.id, 'ready')}
-                >
-                  Pronto
-                </Button>
-              )}
-              {order.status === 'ready' && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={async () => {
-                    await updateOrder.mutateAsync({ id: order.id, status: 'delivered' });
-                    toast.success('Pedido entregue!');
-                  }}
-                >
-                  Entregar
-                </Button>
-              )}
-            </div>
           </div>
         </CardContent>
       </Card>

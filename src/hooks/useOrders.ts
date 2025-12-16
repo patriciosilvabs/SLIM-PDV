@@ -219,5 +219,25 @@ export function useOrderMutations() {
     },
   });
 
-  return { createOrder, updateOrder, addOrderItem, updateOrderItem, deleteOrderItem };
+  const addOrderItemExtras = useMutation({
+    mutationFn: async (extras: { order_item_id: string; extra_name: string; price: number; extra_id?: string | null }[]) => {
+      if (extras.length === 0) return [];
+      
+      const { data, error } = await supabase
+        .from('order_item_extras')
+        .insert(extras)
+        .select();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Erro ao adicionar complementos', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  return { createOrder, updateOrder, addOrderItem, addOrderItemExtras, updateOrderItem, deleteOrderItem };
 }
