@@ -777,15 +777,15 @@ export default function Menu() {
                 </Button>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                   {complementOptions?.map((option) => (
                     <Card key={option.id} className="group overflow-hidden">
-                      <div className="relative aspect-square bg-muted">
+                      <div className="relative h-24 bg-muted">
                         {option.image_url ? (
                           <img src={option.image_url} alt={option.name} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
-                            <Package className="h-12 w-12 text-muted-foreground/50" />
+                            <Package className="h-8 w-8 text-muted-foreground/50" />
                           </div>
                         )}
                         <Badge 
@@ -999,23 +999,79 @@ export default function Menu() {
                 <div className="space-y-3">
                   <Label className="text-base font-semibold">Grupos de Complementos</Label>
                   <p className="text-sm text-muted-foreground">
-                    Selecione os grupos de complementos disponíveis para este produto
+                    Selecione e ordene os grupos de complementos disponíveis para este produto
                   </p>
-                  <ScrollArea className="h-64 border rounded-lg p-3">
+                  
+                  {/* Selected groups with drag-and-drop */}
+                  {productLinkedGroupIds.length > 0 && (
+                    <div className="space-y-2 mb-4">
+                      <Label className="text-sm">Grupos selecionados (arraste para reordenar)</Label>
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={(event) => {
+                          const { active, over } = event;
+                          if (over && active.id !== over.id) {
+                            setProductLinkedGroupIds(prev => {
+                              const oldIndex = prev.indexOf(active.id as string);
+                              const newIndex = prev.indexOf(over.id as string);
+                              return arrayMove(prev, oldIndex, newIndex);
+                            });
+                          }
+                        }}
+                      >
+                        <SortableContext items={productLinkedGroupIds} strategy={verticalListSortingStrategy}>
+                          <div className="space-y-2">
+                            {productLinkedGroupIds.map((groupId) => {
+                              const group = complementGroups?.find(g => g.id === groupId);
+                              if (!group) return null;
+                              return (
+                                <SortableItem key={group.id} id={group.id}>
+                                  <div className="flex items-center gap-3 p-3 rounded-lg border bg-card">
+                                    <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
+                                    <div className="flex-1">
+                                      <p className="font-medium">{group.name}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {group.selection_type === 'single' ? 'Apenas uma' : 
+                                         group.selection_type === 'multiple' ? 'Múltiplas' : 'Com repetição'}
+                                        {group.is_required && ' • Obrigatório'}
+                                        {' • '}{getGroupOptionCount(group.id)} opção(ões)
+                                      </p>
+                                    </div>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-destructive"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setProductLinkedGroupIds(prev => prev.filter(id => id !== group.id));
+                                      }}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </SortableItem>
+                              );
+                            })}
+                          </div>
+                        </SortableContext>
+                      </DndContext>
+                    </div>
+                  )}
+                  
+                  {/* Available groups to add */}
+                  <Label className="text-sm">Adicionar grupos</Label>
+                  <ScrollArea className="h-48 border rounded-lg p-3">
                     <div className="space-y-2">
-                      {complementGroups?.map((group) => (
+                      {complementGroups?.filter(g => !productLinkedGroupIds.includes(g.id)).map((group) => (
                         <div
                           key={group.id}
                           className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent/50 cursor-pointer"
                           onClick={() => {
-                            setProductLinkedGroupIds(prev => 
-                              prev.includes(group.id) 
-                                ? prev.filter(id => id !== group.id)
-                                : [...prev, group.id]
-                            );
+                            setProductLinkedGroupIds(prev => [...prev, group.id]);
                           }}
                         >
-                          <Checkbox checked={productLinkedGroupIds.includes(group.id)} />
+                          <Plus className="h-4 w-4 text-muted-foreground" />
                           <div className="flex-1">
                             <p className="font-medium">{group.name}</p>
                             <p className="text-xs text-muted-foreground">
@@ -1030,9 +1086,11 @@ export default function Menu() {
                           </Badge>
                         </div>
                       ))}
-                      {!complementGroups?.length && (
+                      {complementGroups?.filter(g => !productLinkedGroupIds.includes(g.id)).length === 0 && (
                         <p className="text-sm text-muted-foreground text-center py-4">
-                          Nenhum grupo de complemento cadastrado. Crie grupos na aba "COMPLEMENTOS".
+                          {complementGroups?.length 
+                            ? 'Todos os grupos já foram adicionados'
+                            : 'Nenhum grupo de complemento cadastrado. Crie grupos na aba "COMPLEMENTOS".'}
                         </p>
                       )}
                     </div>
