@@ -5,7 +5,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Switch } from '@/components/ui/switch';
 import { usePrinter } from '@/contexts/PrinterContext';
+import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { 
   Printer, 
   RefreshCw, 
@@ -18,13 +20,15 @@ import {
   WifiOff,
   TestTube,
   ChefHat,
-  CreditCard
+  CreditCard,
+  Zap
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export function PrinterSettings() {
   const printer = usePrinter();
   const { toast } = useToast();
+  const { autoPrintKitchenTicket, toggleAutoPrintKitchenTicket } = useOrderSettings();
   const [testingPrinter, setTestingPrinter] = useState<string | null>(null);
 
   const handleConnect = async () => {
@@ -303,6 +307,34 @@ export function PrinterSettings() {
                 )}
                 Caixa
               </Badge>
+            </div>
+
+            {/* Auto Print Settings */}
+            <div className="space-y-4 pt-4 border-t">
+              <Label className="text-base font-medium flex items-center gap-2">
+                <Zap className="w-4 h-4" />
+                Impressão Automática
+              </Label>
+              
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                <div className="space-y-0.5">
+                  <p className="font-medium text-sm">Imprimir comanda automaticamente</p>
+                  <p className="text-xs text-muted-foreground">
+                    Imprime na cozinha quando itens são adicionados ao pedido
+                  </p>
+                </div>
+                <Switch 
+                  checked={autoPrintKitchenTicket}
+                  onCheckedChange={toggleAutoPrintKitchenTicket}
+                  disabled={!printer.canPrintToKitchen}
+                />
+              </div>
+              
+              {!printer.canPrintToKitchen && autoPrintKitchenTicket && (
+                <p className="text-xs text-amber-600">
+                  ⚠️ Configure a impressora da cozinha para ativar a impressão automática
+                </p>
+              )}
             </div>
           </div>
         )}

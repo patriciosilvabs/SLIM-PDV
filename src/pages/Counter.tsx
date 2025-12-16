@@ -25,6 +25,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useOpenCashRegister, useCashRegisterMutations, PaymentMethod } from '@/hooks/useCashRegister';
 import { ProductDetailDialog, SelectedComplement } from '@/components/order/ProductDetailDialog';
 import { printCustomerReceipt } from '@/components/receipt/CustomerReceipt';
+import { usePrinterOptional } from '@/contexts/PrinterContext';
+import { KitchenTicketData } from '@/utils/escpos';
 import { 
   Package, 
   ShoppingCart, 
@@ -98,8 +100,9 @@ export default function Counter() {
   const { data: variations } = useProductVariations();
   const { createOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
   const { toast } = useToast();
-  const { duplicateItems } = useOrderSettings();
+  const { duplicateItems, autoPrintKitchenTicket } = useOrderSettings();
   const { getInitialOrderStatus } = useKdsSettings();
+  const printer = usePrinterOptional();
   const { findOrCreateCustomer, updateCustomerStats } = useCustomerMutations();
   const { data: openCashRegister } = useOpenCashRegister();
   const { createPayment } = useCashRegisterMutations();
@@ -481,6 +484,31 @@ export default function Counter() {
           await updateCustomerStats.mutateAsync({ customerId, orderTotal: finalTotal });
         } catch (e) {
           console.error('Failed to update customer stats:', e);
+        }
+      }
+
+      // Auto-print kitchen ticket if enabled
+      if (autoPrintKitchenTicket && printer?.canPrintToKitchen) {
+        try {
+          const ticketData: KitchenTicketData = {
+            orderNumber: order.id.slice(0, 8).toUpperCase(),
+            orderType: orderType,
+            customerName: customerName || undefined,
+            items: orderItems.map(item => ({
+              quantity: item.quantity,
+              productName: item.product_name,
+              variation: item.variation_name,
+              extras: item.complements?.map(c => c.option_name),
+              notes: item.notes,
+            })),
+            notes: notes || undefined,
+            createdAt: new Date().toISOString(),
+          };
+          
+          await printer.printKitchenTicket(ticketData);
+          toast({ title: '🖨️ Comanda impressa automaticamente' });
+        } catch (err) {
+          console.error('Auto print failed:', err);
         }
       }
 

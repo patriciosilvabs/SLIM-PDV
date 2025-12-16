@@ -32,6 +32,9 @@ import { format, addDays, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useOrderSettings } from '@/hooks/useOrderSettings';
+import { usePrinterOptional } from '@/contexts/PrinterContext';
+import { KitchenTicketData } from '@/utils/escpos';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -93,6 +96,8 @@ export default function Tables() {
   const { settings: idleTableSettings } = useIdleTableSettings();
   const { playOrderReadySound, playTableWaitAlertSound, playIdleTableAlertSound, settings: audioSettings } = useAudioNotification();
   const { getInitialOrderStatus } = useKdsSettings();
+  const { autoPrintKitchenTicket } = useOrderSettings();
+  const printer = usePrinterOptional();
   const { data: tables, isLoading } = useTables();
   const { data: orders } = useOrders(['pending', 'preparing', 'ready']);
   const { createTable, updateTable } = useTableMutations();
@@ -465,6 +470,32 @@ export default function Tables() {
           extra_id: null,
         }));
         await addOrderItemExtras.mutateAsync(extras);
+      }
+    }
+
+    // Auto-print kitchen ticket if enabled
+    if (autoPrintKitchenTicket && printer?.canPrintToKitchen && selectedTable) {
+      try {
+        const ticketData: KitchenTicketData = {
+          orderNumber: order.id.slice(0, 8).toUpperCase(),
+          orderType: 'dine_in',
+          tableNumber: selectedTable.number,
+          customerName: order.customer_name || undefined,
+          items: items.map(item => ({
+            quantity: item.quantity,
+            productName: item.product_name,
+            variation: item.variation_name,
+            extras: item.complements?.map(c => c.option_name),
+            notes: item.notes,
+          })),
+          notes: order.notes || undefined,
+          createdAt: new Date().toISOString(),
+        };
+        
+        await printer.printKitchenTicket(ticketData);
+        toast.success('🖨️ Comanda impressa automaticamente');
+      } catch (err) {
+        console.error('Auto print failed:', err);
       }
     }
   };
