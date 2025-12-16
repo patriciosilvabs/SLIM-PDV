@@ -34,6 +34,7 @@ interface ComplementGroup {
   min_selections: number;
   max_selections: number;
   sort_order: number;
+  price_calculation_type: 'sum' | 'average' | 'highest' | 'lowest';
 }
 
 interface ComplementOption {
@@ -137,6 +138,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd }: Prod
             min_selections: group.min_selections ?? 0,
             max_selections: group.max_selections ?? 1,
             sort_order: productGroups.find(pg => pg.group_id === group.id)?.sort_order ?? 0,
+            price_calculation_type: (group.price_calculation_type as 'sum' | 'average' | 'highest' | 'lowest') ?? 'sum',
             options,
           };
         }).sort((a, b) => a.sort_order - b.sort_order);
@@ -255,9 +257,32 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd }: Prod
     return (selections[groupId] || []).find(s => s.option_id === optionId)?.quantity || 0;
   };
 
+  const calculateGroupPrice = (groupId: string, priceType: 'sum' | 'average' | 'highest' | 'lowest'): number => {
+    const groupSelections = selections[groupId] || [];
+    if (groupSelections.length === 0) return 0;
+
+    switch (priceType) {
+      case 'sum':
+        return groupSelections.reduce((total, s) => total + (s.price * s.quantity), 0);
+      case 'average': {
+        const totalQty = groupSelections.reduce((sum, s) => sum + s.quantity, 0);
+        const totalPrice = groupSelections.reduce((sum, s) => sum + (s.price * s.quantity), 0);
+        return totalQty > 0 ? totalPrice / totalQty : 0;
+      }
+      case 'highest':
+        return Math.max(...groupSelections.map(s => s.price));
+      case 'lowest':
+        return Math.min(...groupSelections.map(s => s.price));
+      default:
+        return groupSelections.reduce((total, s) => total + (s.price * s.quantity), 0);
+    }
+  };
+
   const complementsTotal = useMemo(() => {
-    return Object.values(selections).flat().reduce((sum, s) => sum + (s.price * s.quantity), 0);
-  }, [selections]);
+    return groups.reduce((total, group) => {
+      return total + calculateGroupPrice(group.id, group.price_calculation_type);
+    }, 0);
+  }, [selections, groups]);
 
   const productPrice = product?.is_promotion && product?.promotion_price 
     ? product.promotion_price 
