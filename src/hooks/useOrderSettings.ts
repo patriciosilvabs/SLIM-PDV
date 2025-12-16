@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 
 const DUPLICATE_ITEMS_KEY = 'pdv_duplicate_items';
+const AUTO_PRINT_KITCHEN_KEY = 'pdv_auto_print_kitchen';
 
 export function useOrderSettings() {
   const [duplicateItems, setDuplicateItems] = useState(() => {
@@ -8,9 +9,19 @@ export function useOrderSettings() {
     return localStorage.getItem(DUPLICATE_ITEMS_KEY) === 'true';
   });
 
+  const [autoPrintKitchenTicket, setAutoPrintKitchenTicket] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(AUTO_PRINT_KITCHEN_KEY) === 'true';
+  });
+
   const toggleDuplicateItems = (value: boolean) => {
     localStorage.setItem(DUPLICATE_ITEMS_KEY, String(value));
     setDuplicateItems(value);
+  };
+
+  const toggleAutoPrintKitchenTicket = (value: boolean) => {
+    localStorage.setItem(AUTO_PRINT_KITCHEN_KEY, String(value));
+    setAutoPrintKitchenTicket(value);
   };
 
   // Sync across tabs
@@ -19,10 +30,18 @@ export function useOrderSettings() {
       if (e.key === DUPLICATE_ITEMS_KEY) {
         setDuplicateItems(e.newValue === 'true');
       }
+      if (e.key === AUTO_PRINT_KITCHEN_KEY) {
+        setAutoPrintKitchenTicket(e.newValue === 'true');
+      }
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
-  return { duplicateItems, toggleDuplicateItems };
+  return { 
+    duplicateItems, 
+    toggleDuplicateItems,
+    autoPrintKitchenTicket,
+    toggleAutoPrintKitchenTicket
+  };
 }
