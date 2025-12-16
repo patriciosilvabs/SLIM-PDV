@@ -521,6 +521,56 @@ export type Database = {
         }
         Relationships: []
       }
+      reservations: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          customer_name: string
+          customer_phone: string | null
+          id: string
+          notes: string | null
+          party_size: number | null
+          reservation_date: string
+          reservation_time: string
+          status: string | null
+          table_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          customer_name: string
+          customer_phone?: string | null
+          id?: string
+          notes?: string | null
+          party_size?: number | null
+          reservation_date: string
+          reservation_time: string
+          status?: string | null
+          table_id: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          customer_name?: string
+          customer_phone?: string | null
+          id?: string
+          notes?: string | null
+          party_size?: number | null
+          reservation_date?: string
+          reservation_time?: string
+          status?: string | null
+          table_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservations_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stock_movements: {
         Row: {
           created_at: string | null

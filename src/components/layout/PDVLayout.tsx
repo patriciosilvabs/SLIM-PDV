@@ -1,28 +1,52 @@
 import { useState } from 'react';
 import { Link, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUserRole, AppRole } from '@/hooks/useUserRole';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
 import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Pizza } from 'lucide-react';
 
-const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Mesas', href: '/tables', icon: UtensilsCrossed },
-  { name: 'Pedidos', href: '/orders', icon: ShoppingBag },
-  { name: 'Cardápio', href: '/menu', icon: Pizza },
-  { name: 'Estoque', href: '/stock', icon: Package },
-  { name: 'Caixa', href: '/cash-register', icon: CreditCard },
-  { name: 'Relatórios', href: '/reports', icon: BarChart3 },
-  { name: 'Configurações', href: '/settings', icon: Settings },
+interface NavItem {
+  name: string;
+  href: string;
+  icon: any;
+  roles: AppRole[];
+}
+
+const navigation: NavItem[] = [
+  { name: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ['admin', 'cashier', 'waiter'] },
+  { name: 'Mesas', href: '/tables', icon: UtensilsCrossed, roles: ['admin', 'waiter'] },
+  { name: 'Pedidos', href: '/orders', icon: ShoppingBag, roles: ['admin', 'waiter', 'kitchen', 'cashier'] },
+  { name: 'Cardápio', href: '/menu', icon: Pizza, roles: ['admin', 'waiter', 'kitchen'] },
+  { name: 'Estoque', href: '/stock', icon: Package, roles: ['admin', 'kitchen'] },
+  { name: 'Caixa', href: '/cash-register', icon: CreditCard, roles: ['admin', 'cashier'] },
+  { name: 'Relatórios', href: '/reports', icon: BarChart3, roles: ['admin', 'cashier'] },
+  { name: 'Configurações', href: '/settings', icon: Settings, roles: ['admin'] },
 ];
+
+const roleLabels: Record<AppRole, string> = {
+  admin: 'Admin',
+  cashier: 'Caixa',
+  waiter: 'Garçom',
+  kitchen: 'Cozinha',
+};
+
+const roleColors: Record<AppRole, string> = {
+  admin: 'bg-destructive/20 text-destructive',
+  cashier: 'bg-primary/20 text-primary',
+  waiter: 'bg-info/20 text-info',
+  kitchen: 'bg-warning/20 text-warning',
+};
 
 export default function PDVLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, signOut } = useAuth();
+  const { roles, isLoading: rolesLoading } = useUserRole();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  if (loading) {
+  if (loading || rolesLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -33,6 +57,15 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
   if (!user) {
     return <Navigate to="/auth" replace />;
   }
+
+  // Filter navigation based on user roles
+  // If user has no roles, show all items (first user setup scenario)
+  const filteredNavigation = roles.length === 0 
+    ? navigation 
+    : navigation.filter(item => item.roles.some(role => roles.includes(role)));
+
+  // Get primary role to display
+  const primaryRole = roles[0] as AppRole | undefined;
 
   return (
     <div className="min-h-screen bg-background">
@@ -79,7 +112,7 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
           {/* Navigation */}
           <ScrollArea className="flex-1 py-4">
             <nav className="space-y-1 px-3">
-              {navigation.map((item) => {
+              {filteredNavigation.map((item) => {
                 const isActive = location.pathname === item.href;
                 return (
                   <Link
@@ -113,9 +146,17 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
                 <p className="text-sidebar-foreground text-sm font-medium truncate">
                   {user.user_metadata?.name || 'Usuário'}
                 </p>
-                <p className="text-sidebar-foreground/60 text-xs truncate">
-                  {user.email}
-                </p>
+                <div className="flex items-center gap-1">
+                  {primaryRole ? (
+                    <Badge variant="secondary" className={cn('text-[10px] px-1.5 py-0', roleColors[primaryRole])}>
+                      {roleLabels[primaryRole]}
+                    </Badge>
+                  ) : (
+                    <span className="text-sidebar-foreground/60 text-xs truncate">
+                      {user.email}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
             <Button
