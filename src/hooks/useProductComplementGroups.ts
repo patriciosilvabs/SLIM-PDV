@@ -130,5 +130,39 @@ export function useProductComplementGroupsMutations() {
     }
   });
 
-  return { linkGroupToProduct, unlinkGroupFromProduct, setProductGroups };
+  const setGroupsForProduct = useMutation({
+    mutationFn: async ({ productId, groupIds }: { productId: string; groupIds: string[] }) => {
+      // Delete existing links for this product
+      const { error: deleteError } = await supabase
+        .from('product_complement_groups')
+        .delete()
+        .eq('product_id', productId);
+      
+      if (deleteError) throw deleteError;
+      
+      // Insert new links
+      if (groupIds.length > 0) {
+        const links = groupIds.map((group_id, index) => ({
+          product_id: productId,
+          group_id,
+          sort_order: index
+        }));
+        
+        const { error: insertError } = await supabase
+          .from('product_complement_groups')
+          .insert(links);
+        
+        if (insertError) throw insertError;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['product-complement-groups'] });
+      queryClient.invalidateQueries({ queryKey: ['groups-for-product'] });
+    },
+    onError: (error) => {
+      toast({ title: 'Erro ao salvar grupos', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  return { linkGroupToProduct, unlinkGroupFromProduct, setProductGroups, setGroupsForProduct };
 }
