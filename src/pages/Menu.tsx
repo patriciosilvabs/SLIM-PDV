@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -681,10 +682,21 @@ export default function Menu() {
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                              onClick={() => { 
-                                setEditingGroup(group); 
-                                setGroupLinkedOptionIds([]); 
-                                setGroupLinkedProductIds([]); 
+                              onClick={async () => { 
+                                setEditingGroup(group);
+                                // Carregar opções vinculadas ao grupo
+                                const { data: groupOptions } = await supabase
+                                  .from('complement_group_options')
+                                  .select('option_id')
+                                  .eq('group_id', group.id)
+                                  .order('sort_order');
+                                // Carregar produtos vinculados ao grupo
+                                const { data: groupProducts } = await supabase
+                                  .from('product_complement_groups')
+                                  .select('product_id')
+                                  .eq('group_id', group.id);
+                                setGroupLinkedOptionIds(groupOptions?.map(o => o.option_id) || []);
+                                setGroupLinkedProductIds(groupProducts?.map(p => p.product_id) || []);
                                 setIsGroupDialogOpen(true); 
                               }}
                             >
