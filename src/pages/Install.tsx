@@ -33,7 +33,7 @@ export default function Install() {
       <header className="border-b bg-card/50 backdrop-blur sticky top-0 z-10">
         <div className="container flex items-center gap-4 h-14 px-4">
           <Button variant="ghost" size="icon" asChild>
-            <Link to="/">
+            <Link to="/dashboard">
               <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>
@@ -66,7 +66,7 @@ export default function Install() {
                   </p>
                 </div>
                 <Button asChild className="mt-2">
-                  <Link to="/">Ir para o Dashboard</Link>
+                  <Link to="/dashboard">Ir para o Dashboard</Link>
                 </Button>
               </div>
             </CardContent>

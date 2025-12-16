@@ -18,7 +18,7 @@ interface NavItem {
 }
 
 const navigation: NavItem[] = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ['admin', 'cashier', 'waiter'] },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'cashier', 'waiter'] },
   { name: 'Mesas', href: '/tables', icon: UtensilsCrossed, roles: ['admin', 'waiter'] },
   { name: 'Balcão', href: '/counter', icon: Store, roles: ['admin', 'waiter', 'cashier'] },
   { name: 'Pedidos', href: '/orders', icon: ShoppingBag, roles: ['admin', 'waiter', 'kitchen', 'cashier'] },
