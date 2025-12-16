@@ -15,11 +15,12 @@ import { PushNotificationSettings } from '@/components/PushNotificationSettings'
 import { ScheduledAnnouncementsSettings } from '@/components/ScheduledAnnouncementsSettings';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Users, Shield, Plus, X, Crown, Sparkles, AlertTriangle, UtensilsCrossed, Edit, Trash2, ShoppingCart } from 'lucide-react';
+import { Users, Shield, Plus, X, Crown, Sparkles, AlertTriangle, UtensilsCrossed, Edit, Trash2, ShoppingCart, ChefHat } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { useTableWaitSettings } from '@/hooks/useTableWaitSettings';
 import { useIdleTableSettings } from '@/hooks/useIdleTableSettings';
+import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -65,6 +66,7 @@ export default function Settings() {
   const { duplicateItems, toggleDuplicateItems } = useOrderSettings();
   const { settings: tableWaitSettings, updateSettings: updateTableWaitSettings } = useTableWaitSettings();
   const { settings: idleTableSettings, updateSettings: updateIdleTableSettings } = useIdleTableSettings();
+  const { settings: kdsSettings, updateSettings: updateKdsSettings } = useKdsSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
@@ -431,6 +433,34 @@ export default function Settings() {
               </div>
             </DialogContent>
           </Dialog>
+
+          {/* KDS Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ChefHat className="h-5 w-5" />
+                Configurações do KDS
+              </CardTitle>
+              <CardDescription>
+                Ajuste o comportamento do Kitchen Display System
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="font-medium">Exibir coluna "Pendente"</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Quando desativado, pedidos entram direto em preparo. Útil para restaurantes
+                    de alta demanda onde a produção inicia automaticamente.
+                  </p>
+                </div>
+                <Switch 
+                  checked={kdsSettings.showPendingColumn} 
+                  onCheckedChange={(showPendingColumn) => updateKdsSettings({ showPendingColumn })} 
+                />
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Order Settings */}
           <Card>

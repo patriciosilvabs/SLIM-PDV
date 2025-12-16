@@ -12,6 +12,7 @@ import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, Che
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
+import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { useScheduledAnnouncements } from '@/hooks/useScheduledAnnouncements';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 
@@ -54,6 +55,7 @@ export default function KDS() {
     }
   });
   const { playKdsNewOrderSound, playMaxWaitAlertSound, settings } = useAudioNotification();
+  const { settings: kdsSettings } = useKdsSettings();
   const notifiedOrdersRef = useRef<Set<string>>(new Set());
   const previousOrdersRef = useRef<Order[]>([]);
   const lastMetricUpdateRef = useRef<string>('');
@@ -222,7 +224,10 @@ export default function KDS() {
   const deliveryCount = allActiveOrders.filter(o => o.order_type === 'delivery').length;
 
   const pendingOrders = activeOrders.filter(o => o.status === 'pending');
-  const preparingOrders = activeOrders.filter(o => o.status === 'preparing');
+  // When showPendingColumn is false, merge pending into preparing
+  const preparingOrders = kdsSettings.showPendingColumn 
+    ? activeOrders.filter(o => o.status === 'preparing')
+    : activeOrders.filter(o => o.status === 'pending' || o.status === 'preparing');
   const readyOrders = activeOrders.filter(o => o.status === 'ready');
 
   // Real-time clock and metrics update
@@ -325,21 +330,22 @@ export default function KDS() {
       });
     }
 
-    // Sound + visual for new pending orders
-    const newPendingOrders = orders.filter(
-      o => o.status === 'pending' && !notifiedOrdersRef.current.has(o.id)
+    // Sound + visual for new orders (pending or preparing depending on settings)
+    const targetStatus = kdsSettings.showPendingColumn ? 'pending' : 'preparing';
+    const newOrders = orders.filter(
+      o => o.status === targetStatus && !notifiedOrdersRef.current.has(o.id)
     );
 
-    if (newPendingOrders.length > 0) {
+    if (newOrders.length > 0) {
       if (soundEnabled && settings.enabled) {
         playKdsNewOrderSound();
       }
-      toast.success(`🔔 ${newPendingOrders.length} novo(s) pedido(s)!`, { duration: 4000 });
-      newPendingOrders.forEach(o => notifiedOrdersRef.current.add(o.id));
+      toast.success(`🔔 ${newOrders.length} novo(s) pedido(s)!`, { duration: 4000 });
+      newOrders.forEach(o => notifiedOrdersRef.current.add(o.id));
     }
 
     previousOrdersRef.current = [...orders];
-  }, [orders, soundEnabled, settings.enabled, playKdsNewOrderSound]);
+  }, [orders, soundEnabled, settings.enabled, playKdsNewOrderSound, kdsSettings.showPendingColumn]);
 
   const handleStartPreparation = async (orderId: string) => {
     try {
@@ -664,19 +670,22 @@ export default function KDS() {
         </div>
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-4">
-          <KanbanColumn 
-            title="PENDENTE" 
-            orders={pendingOrders} 
-            icon={Clock}
-            headerColor="bg-yellow-500/20 text-yellow-700 dark:text-yellow-400"
-            showStartButton
-          />
+          {kdsSettings.showPendingColumn && (
+            <KanbanColumn 
+              title="PENDENTE" 
+              orders={pendingOrders} 
+              icon={Clock}
+              headerColor="bg-yellow-500/20 text-yellow-700 dark:text-yellow-400"
+              showStartButton
+            />
+          )}
           <KanbanColumn 
             title="EM PREPARO" 
             orders={preparingOrders} 
             icon={ChefHat}
             headerColor="bg-blue-500/20 text-blue-700 dark:text-blue-400"
             showReadyButton
+            showStartButton={!kdsSettings.showPendingColumn}
           />
           <KanbanColumn 
             title="PRONTO" 
