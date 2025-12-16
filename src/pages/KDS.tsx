@@ -5,17 +5,36 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle } from 'lucide-react';
+import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
 import { useScheduledAnnouncements } from '@/hooks/useScheduledAnnouncements';
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 
 type OrderTypeFilter = 'all' | 'table' | 'takeaway' | 'delivery';
 
+interface MetricDataPoint {
+  time: string;
+  avgWait: number;
+}
+
 const FILTER_STORAGE_KEY = 'kds-order-type-filter';
+const MAX_WAIT_ALERT_THRESHOLD = 25; // minutes
+const MAX_WAIT_ALERT_COOLDOWN = 300000; // 5 minutes in ms
+
+// Format time display in hours after 60 minutes
+const formatTimeDisplay = (minutes: number): string => {
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`;
+  }
+  return `${minutes} min`;
+};
 
 export default function KDS() {
   const { data: orders = [], isLoading, refetch } = useOrders();
@@ -24,6 +43,9 @@ export default function KDS() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [metricsHistory, setMetricsHistory] = useState<MetricDataPoint[]>([]);
+  const [isChartOpen, setIsChartOpen] = useState(false);
+  const [maxWaitAlertCooldown, setMaxWaitAlertCooldown] = useState(false);
   const [orderTypeFilter, setOrderTypeFilter] = useState<OrderTypeFilter>(() => {
     try {
       return (localStorage.getItem(FILTER_STORAGE_KEY) as OrderTypeFilter) || 'all';
@@ -31,9 +53,10 @@ export default function KDS() {
       return 'all';
     }
   });
-  const { playKdsNewOrderSound, settings } = useAudioNotification();
+  const { playKdsNewOrderSound, playMaxWaitAlertSound, settings } = useAudioNotification();
   const notifiedOrdersRef = useRef<Set<string>>(new Set());
   const previousOrdersRef = useRef<Order[]>([]);
+  const lastMetricUpdateRef = useRef<string>('');
 
   // Calculate order counts for condition-based announcements
   const getWaitTimeMinutes = (createdAt: string | null): number => {
@@ -94,7 +117,7 @@ export default function KDS() {
           <Clock className={cn("h-4 w-4", avgStatus.color)} />
           <span className="text-xs text-muted-foreground">Média:</span>
           <span className={cn("font-bold text-sm", avgStatus.color)}>
-            {orderCounts.avgWaitTimeMinutes} min
+            {formatTimeDisplay(orderCounts.avgWaitTimeMinutes)}
           </span>
         </div>
         
@@ -103,7 +126,7 @@ export default function KDS() {
           <Timer className={cn("h-4 w-4", maxStatus.color)} />
           <span className="text-xs text-muted-foreground">Máx:</span>
           <span className={cn("font-bold text-sm", maxStatus.color)}>
-            {orderCounts.maxWaitTimeMinutes} min
+            {formatTimeDisplay(orderCounts.maxWaitTimeMinutes)}
           </span>
         </div>
         
@@ -121,6 +144,52 @@ export default function KDS() {
           </div>
         )}
       </div>
+    );
+  };
+
+  // Metrics Chart Component
+  const MetricsChart = () => {
+    if (metricsHistory.length < 2) {
+      return (
+        <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">
+          Aguardando dados... (mínimo 2 minutos)
+        </div>
+      );
+    }
+
+    return (
+      <ResponsiveContainer width="100%" height={120}>
+        <LineChart data={metricsHistory}>
+          <XAxis 
+            dataKey="time" 
+            tick={{ fontSize: 10 }} 
+            interval="preserveStartEnd"
+            stroke="hsl(var(--muted-foreground))"
+          />
+          <YAxis 
+            tick={{ fontSize: 10 }} 
+            width={30}
+            stroke="hsl(var(--muted-foreground))"
+          />
+          <Tooltip 
+            contentStyle={{ 
+              backgroundColor: 'hsl(var(--background))', 
+              border: '1px solid hsl(var(--border))',
+              borderRadius: '6px',
+              fontSize: '12px'
+            }}
+            labelStyle={{ color: 'hsl(var(--foreground))' }}
+            formatter={(value: number) => [`${value} min`, 'Tempo Médio']}
+          />
+          <Line 
+            type="monotone" 
+            dataKey="avgWait" 
+            stroke="hsl(var(--primary))" 
+            strokeWidth={2}
+            dot={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
     );
   };
 
@@ -173,6 +242,42 @@ export default function KDS() {
       clearInterval(metricsTimer);
     };
   }, [isFullscreen]);
+
+  // Update metrics history every minute
+  useEffect(() => {
+    const timeKey = currentTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    
+    // Only add a new point if the minute changed
+    if (timeKey !== lastMetricUpdateRef.current) {
+      lastMetricUpdateRef.current = timeKey;
+      
+      setMetricsHistory(prev => {
+        const newPoint: MetricDataPoint = {
+          time: timeKey,
+          avgWait: orderCounts.avgWaitTimeMinutes
+        };
+        const updated = [...prev, newPoint];
+        // Keep only last 120 minutes (2 hours)
+        return updated.slice(-120);
+      });
+    }
+  }, [currentTime, orderCounts.avgWaitTimeMinutes]);
+
+  // Max wait alert sound
+  useEffect(() => {
+    if (
+      orderCounts.maxWaitTimeMinutes > MAX_WAIT_ALERT_THRESHOLD && 
+      !maxWaitAlertCooldown && 
+      soundEnabled && 
+      settings.enabled &&
+      activeOrdersList.length > 0
+    ) {
+      playMaxWaitAlertSound();
+      toast.warning(`⚠️ Pedido esperando há mais de ${MAX_WAIT_ALERT_THRESHOLD} minutos!`, { duration: 5000 });
+      setMaxWaitAlertCooldown(true);
+      setTimeout(() => setMaxWaitAlertCooldown(false), MAX_WAIT_ALERT_COOLDOWN);
+    }
+  }, [orderCounts.maxWaitTimeMinutes, maxWaitAlertCooldown, soundEnabled, settings.enabled, activeOrdersList.length, playMaxWaitAlertSound]);
 
   // Setup realtime subscription
   useEffect(() => {
@@ -299,26 +404,37 @@ export default function KDS() {
             <div className={cn("flex items-center gap-1.5 px-2 py-1 rounded-full text-sm", timeInfo.bgColor)}>
               <Clock className={cn("h-3.5 w-3.5", timeInfo.color)} />
               <span className={cn("font-bold", timeInfo.color)}>{timeInfo.text}</span>
+            </div>
           </div>
-          
-          {/* Metrics Panel - Desktop inline */}
-          <div className="hidden lg:block">
-            <MetricsPanel />
-          </div>
-        </div>
           <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
             <span className="font-mono">#{order.id.slice(-4).toUpperCase()}</span>
-            {order.customer_name && <span>• {order.customer_name}</span>}
+            {order.customer_name && (
+              <span className="font-medium text-primary">• {order.customer_name}</span>
+            )}
           </div>
         </CardHeader>
         <CardContent className="px-4 pb-3">
-          <div className="space-y-1.5 mb-3 border rounded-lg p-2 bg-background/50">
+          <div className="space-y-2 mb-3 border rounded-lg p-2 bg-background/50">
             {order.order_items?.map((item, idx) => (
               <div key={idx} className="text-sm">
-                <span className="font-bold text-primary">{item.quantity}x</span>{' '}
-                <span className="font-medium">{item.product?.name || 'Produto'}</span>
+                <div className="flex items-start gap-1">
+                  <span className="font-bold text-primary">{item.quantity}x</span>
+                  <div className="flex-1">
+                    <span className="font-medium">{item.product?.name || 'Produto'}</span>
+                    {item.variation?.name && (
+                      <span className="text-muted-foreground ml-1">({item.variation.name})</span>
+                    )}
+                  </div>
+                </div>
+                {/* Extras/Complementos */}
+                {item.extras && item.extras.length > 0 && (
+                  <div className="text-xs text-blue-600 dark:text-blue-400 ml-5 mt-0.5">
+                    + {item.extras.map(e => e.extra_name).join(', ')}
+                  </div>
+                )}
+                {/* Observações do item */}
                 {item.notes && (
-                  <div className="text-xs text-orange-500 ml-5">📝 {item.notes}</div>
+                  <div className="text-xs text-orange-500 ml-5 mt-0.5">📝 {item.notes}</div>
                 )}
               </div>
             ))}
@@ -382,7 +498,7 @@ export default function KDS() {
       </div>
       <ScrollArea className={cn(
         "bg-muted/30 rounded-b-lg p-2",
-        isFullscreen ? "h-[calc(100vh-140px)]" : "h-[calc(100vh-220px)]"
+        isFullscreen ? "h-[calc(100vh-200px)]" : "h-[calc(100vh-280px)]"
       )}>
         {orders.length === 0 ? (
           <div className="text-center text-muted-foreground py-8">
@@ -414,6 +530,11 @@ export default function KDS() {
               {activeOrders.length} pedido{activeOrders.length !== 1 ? 's' : ''} ativo{activeOrders.length !== 1 ? 's' : ''}
               {orderTypeFilter !== 'all' && ` (filtrado)`}
             </p>
+          </div>
+          
+          {/* Metrics Panel - Desktop inline */}
+          <div className="hidden lg:block">
+            <MetricsPanel />
           </div>
         </div>
         
@@ -461,6 +582,24 @@ export default function KDS() {
       <div className="lg:hidden mb-4">
         <MetricsPanel />
       </div>
+
+      {/* Metrics Chart (Collapsible) */}
+      {activeOrdersList.length > 0 && (
+        <Collapsible open={isChartOpen} onOpenChange={setIsChartOpen} className="mb-4">
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" size="sm" className="w-full justify-between">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                <span>Evolução do Tempo Médio (últimas 2h)</span>
+              </div>
+              {isChartOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2 p-3 bg-muted/50 rounded-lg border">
+            <MetricsChart />
+          </CollapsibleContent>
+        </Collapsible>
+      )}
 
       {/* Order Type Filter */}
       <div className="flex flex-wrap items-center gap-2 mb-4">

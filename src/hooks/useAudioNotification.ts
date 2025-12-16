@@ -19,18 +19,21 @@ const defaultSettings: NotificationSettings = {
     newReservation: true,
     orderReady: true,
     kdsNewOrder: true,
+    maxWaitAlert: true,
   },
   selectedSounds: {
     newOrder: 'beepClassic',
     newReservation: 'bell',
     orderReady: 'dingDong',
     kdsNewOrder: 'urgentAlert',
+    maxWaitAlert: 'urgentAlert',
   },
   customSoundUrls: {
     newOrder: PREDEFINED_SOUNDS.beepClassic.data,
     newReservation: PREDEFINED_SOUNDS.bell.data,
     orderReady: PREDEFINED_SOUNDS.dingDong.data,
     kdsNewOrder: PREDEFINED_SOUNDS.urgentAlert.data,
+    maxWaitAlert: PREDEFINED_SOUNDS.urgentAlert.data,
   },
 };
 
@@ -76,6 +79,7 @@ export function useAudioNotification() {
   const playNewReservationSound = useCallback(() => playSound('newReservation'), [playSound]);
   const playOrderReadySound = useCallback(() => playSound('orderReady'), [playSound]);
   const playKdsNewOrderSound = useCallback(() => playSound('kdsNewOrder'), [playSound]);
+  const playMaxWaitAlertSound = useCallback(() => playSound('maxWaitAlert'), [playSound]);
 
   const updateSettings = useCallback((updates: Partial<NotificationSettings>) => {
     setSettings(prev => ({ ...prev, ...updates }));
@@ -123,5 +127,6 @@ export function useAudioNotification() {
     playNewReservationSound,
     playOrderReadySound,
     playKdsNewOrderSound,
+    playMaxWaitAlertSound,
   };
 }
