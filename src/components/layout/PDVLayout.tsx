@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { Link, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserRole, AppRole } from '@/hooks/useUserRole';
+import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Pizza } from 'lucide-react';
 
 interface NavItem {
@@ -46,6 +48,9 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Initialize realtime notifications
+  useRealtimeNotifications();
+
   if (loading || rolesLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -70,21 +75,24 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
       {/* Mobile header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-sidebar border-b border-sidebar-border z-50 flex items-center px-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-sidebar-foreground"
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-        >
-          {sidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </Button>
-        <div className="flex items-center gap-3 ml-4">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            <Pizza className="h-5 w-5 text-primary-foreground" />
+      <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-sidebar border-b border-sidebar-border z-50 flex items-center justify-between px-4">
+        <div className="flex items-center">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-sidebar-foreground"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+          >
+            {sidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </Button>
+          <div className="flex items-center gap-3 ml-4">
+            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+              <Pizza className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <span className="text-sidebar-foreground font-semibold">PDV Pizzaria</span>
           </div>
-          <span className="text-sidebar-foreground font-semibold">PDV Pizzaria</span>
         </div>
+        <OfflineIndicator />
       </header>
 
       {/* Sidebar */}
@@ -97,7 +105,7 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="h-16 flex items-center px-6 border-b border-sidebar-border">
+          <div className="h-16 flex items-center justify-between px-6 border-b border-sidebar-border">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg">
                 <Pizza className="h-6 w-6 text-primary-foreground" />
@@ -107,6 +115,11 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
                 <p className="text-sidebar-foreground/60 text-xs">Ponto de Venda</p>
               </div>
             </div>
+          </div>
+
+          {/* Offline indicator for desktop */}
+          <div className="hidden lg:flex px-4 py-2 border-b border-sidebar-border">
+            <OfflineIndicator />
           </div>
 
           {/* Navigation */}
