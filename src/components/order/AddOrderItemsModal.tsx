@@ -445,6 +445,7 @@ export function AddOrderItemsModal({ open, onOpenChange, onSubmit, tableNumber }
         product={selectedProduct}
         onAdd={handleAddProduct}
         duplicateItems={duplicateItems}
+        channel="table"
       />
     </>
   );

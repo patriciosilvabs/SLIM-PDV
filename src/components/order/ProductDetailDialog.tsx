@@ -65,9 +65,10 @@ interface ProductDetailDialogProps {
   product: Product | null;
   onAdd: (product: Product, quantity: number, complements: SelectedComplement[], notes: string) => void;
   duplicateItems?: boolean;
+  channel?: 'counter' | 'delivery' | 'table';
 }
 
-export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplicateItems }: ProductDetailDialogProps) {
+export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplicateItems, channel }: ProductDetailDialogProps) {
   const [groups, setGroups] = useState<GroupWithOptions[]>([]);
   const [selections, setSelections] = useState<Record<string, SelectedComplement[]>>({});
   const [quantity, setQuantity] = useState(1);
@@ -96,12 +97,18 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
 
         const groupIds = productGroups.map(pg => pg.group_id);
 
-        // Get group details
-        const { data: groupsData } = await supabase
+        // Get group details - filter by channel if provided
+        let groupsQuery = supabase
           .from('complement_groups')
           .select('*')
           .in('id', groupIds)
           .eq('is_active', true);
+
+        if (channel) {
+          groupsQuery = groupsQuery.contains('channels', [channel]);
+        }
+
+        const { data: groupsData } = await groupsQuery;
 
         if (!groupsData) {
           setGroups([]);
@@ -157,7 +164,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
     setSelections({});
     setQuantity(1);
     setNotes('');
-  }, [product, open]);
+  }, [product, open, channel]);
 
   const handleSingleSelect = (group: GroupWithOptions, option: ComplementOption) => {
     const price = option.price_override ?? option.price;

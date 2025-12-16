@@ -947,6 +947,7 @@ export default function Counter() {
         product={selectedProduct}
         onAdd={handleAddFromDialog}
         duplicateItems={duplicateItems}
+        channel={orderType === 'delivery' ? 'delivery' : 'counter'}
       />
     </PDVLayout>
   );

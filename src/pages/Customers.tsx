@@ -8,6 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Search, 
   Plus, 
@@ -23,13 +25,15 @@ import {
   ShoppingBag,
   CheckCircle2,
   AlertCircle,
-  FileText
+  FileText,
+  Filter,
+  X
 } from 'lucide-react';
 import { useCustomers, useCustomerMutations, Customer } from '@/hooks/useCustomers';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
+import { format, subDays, isAfter, isBefore, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 function formatCurrency(value: number) {
@@ -61,6 +65,14 @@ export default function Customers() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Filter states
+  const [filterMinSpent, setFilterMinSpent] = useState('');
+  const [filterMaxSpent, setFilterMaxSpent] = useState('');
+  const [filterMinOrders, setFilterMinOrders] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [filterLastOrderDays, setFilterLastOrderDays] = useState<string>('');
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -100,16 +112,74 @@ export default function Customers() {
     enabled: !!selectedCustomer && historyDialogOpen,
   });
 
+  // Helper to check if customer is "active" (ordered in last 30 days)
+  const isActiveCustomer = (customer: Customer): boolean => {
+    if (!customer.last_order_at) return false;
+    return isAfter(parseISO(customer.last_order_at), subDays(new Date(), 30));
+  };
+
+  // Check if any filter is active
+  const hasActiveFilters = filterMinSpent || filterMaxSpent || filterMinOrders || filterStatus !== 'all' || filterLastOrderDays;
+
+  const clearFilters = () => {
+    setFilterMinSpent('');
+    setFilterMaxSpent('');
+    setFilterMinOrders('');
+    setFilterStatus('all');
+    setFilterLastOrderDays('');
+  };
+
   const filteredCustomers = useMemo(() => {
     if (!customers) return [];
-    if (!searchQuery.trim()) return customers;
     
-    const query = searchQuery.toLowerCase().trim();
-    return customers.filter(c => 
-      c.name.toLowerCase().includes(query) ||
-      c.phone?.toLowerCase().includes(query)
-    );
-  }, [customers, searchQuery]);
+    return customers.filter(c => {
+      // Text search
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim();
+        if (!c.name.toLowerCase().includes(query) && !c.phone?.toLowerCase().includes(query)) {
+          return false;
+        }
+      }
+      
+      // Min spent filter
+      if (filterMinSpent && c.total_spent < Number(filterMinSpent)) {
+        return false;
+      }
+      
+      // Max spent filter
+      if (filterMaxSpent && c.total_spent > Number(filterMaxSpent)) {
+        return false;
+      }
+      
+      // Min orders filter
+      if (filterMinOrders && c.total_orders < Number(filterMinOrders)) {
+        return false;
+      }
+      
+      // Status filter
+      if (filterStatus === 'active' && !isActiveCustomer(c)) {
+        return false;
+      }
+      if (filterStatus === 'inactive' && isActiveCustomer(c)) {
+        return false;
+      }
+      
+      // Last order days filter
+      if (filterLastOrderDays) {
+        const daysAgo = Number(filterLastOrderDays);
+        if (c.last_order_at) {
+          const cutoffDate = subDays(new Date(), daysAgo);
+          if (isBefore(parseISO(c.last_order_at), cutoffDate)) {
+            return false;
+          }
+        } else {
+          return false; // No order = exclude when filtering by last order
+        }
+      }
+      
+      return true;
+    });
+  }, [customers, searchQuery, filterMinSpent, filterMaxSpent, filterMinOrders, filterStatus, filterLastOrderDays]);
 
   const openEditDialog = (customer: Customer) => {
     setSelectedCustomer(customer);
@@ -211,15 +281,108 @@ export default function Customers() {
           </Button>
         </div>
 
-        {/* Search */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por nome ou telefone..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
+        {/* Search and Filters */}
+        <div className="space-y-3">
+          <div className="flex gap-3">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nome ou telefone..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Button
+              variant={hasActiveFilters ? 'default' : 'outline'}
+              onClick={() => setFiltersOpen(!filtersOpen)}
+              className="gap-2"
+            >
+              <Filter className="h-4 w-4" />
+              Filtros
+              {hasActiveFilters && (
+                <Badge variant="secondary" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                  !
+                </Badge>
+              )}
+            </Button>
+          </div>
+
+          {/* Advanced Filters */}
+          <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <CollapsibleContent>
+              <Card className="p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Gasto mínimo (R$)</Label>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      value={filterMinSpent}
+                      onChange={(e) => setFilterMinSpent(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Gasto máximo (R$)</Label>
+                    <Input
+                      type="number"
+                      placeholder="Sem limite"
+                      value={filterMaxSpent}
+                      onChange={(e) => setFilterMaxSpent(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Mín. de pedidos</Label>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      value={filterMinOrders}
+                      onChange={(e) => setFilterMinOrders(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Último pedido</Label>
+                    <Select value={filterLastOrderDays} onValueChange={setFilterLastOrderDays}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Qualquer data" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Qualquer data</SelectItem>
+                        <SelectItem value="7">Últimos 7 dias</SelectItem>
+                        <SelectItem value="30">Últimos 30 dias</SelectItem>
+                        <SelectItem value="60">Últimos 60 dias</SelectItem>
+                        <SelectItem value="90">Últimos 90 dias</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Status</Label>
+                    <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as any)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="active">Ativos (30 dias)</SelectItem>
+                        <SelectItem value="inactive">Inativos</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {hasActiveFilters && (
+                  <div className="mt-4 flex items-center justify-between pt-3 border-t">
+                    <p className="text-sm text-muted-foreground">
+                      {filteredCustomers.length} cliente(s) encontrado(s)
+                    </p>
+                    <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-2">
+                      <X className="h-4 w-4" />
+                      Limpar filtros
+                    </Button>
+                  </div>
+                )}
+              </Card>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
 
         {/* Stats Cards */}
