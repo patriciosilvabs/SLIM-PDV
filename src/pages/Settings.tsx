@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAllUsers, useUserRole, AppRole, UserWithRoles } from '@/hooks/useUserRole';
 import { RequireRole } from '@/components/auth/RequireRole';
 import { NotificationSettings } from '@/components/NotificationSettings';
+import { PushNotificationSettings } from '@/components/PushNotificationSettings';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { Users, Shield, Plus, X, Crown, Sparkles, AlertTriangle } from 'lucide-react';
@@ -193,6 +194,9 @@ export default function Settings() {
 
           {/* Notification Settings */}
           <NotificationSettings />
+
+          {/* Push Notification Settings */}
+          <PushNotificationSettings />
 
           {/* Role Legend */}
           <Card>
