@@ -18,6 +18,8 @@ export interface OrderItem {
   status: OrderStatus;
   created_at: string;
   product?: { name: string; image_url: string | null };
+  variation?: { name: string } | null;
+  extras?: { extra_name: string; price: number }[] | null;
 }
 
 export interface Order {
@@ -47,7 +49,7 @@ export function useOrders(status?: OrderStatus[]) {
     queryFn: async () => {
       let q = supabase
         .from('orders')
-        .select('*, table:tables(number), order_items(*, product:products(name, image_url))')
+        .select('*, table:tables(number), order_items(*, product:products(name, image_url), variation:product_variations(name), extras:order_item_extras(extra_name, price))')
         .order('created_at', { ascending: false });
       
       if (status && status.length > 0) {
