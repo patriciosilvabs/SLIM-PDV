@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -51,6 +52,7 @@ const timeSlots = [
 ];
 
 export default function Tables() {
+  const isMobile = useIsMobile();
   const { user } = useAuth();
   const { data: tables, isLoading } = useTables();
   const { data: orders } = useOrders(['pending', 'preparing', 'ready']);
@@ -688,8 +690,9 @@ export default function Tables() {
       </Dialog>
 
       {/* Mobile Table Details Dialog */}
-      <Dialog open={!!selectedTable} onOpenChange={() => setSelectedTable(null)}>
-        <DialogContent className="lg:hidden">
+      {isMobile && (
+        <Dialog open={!!selectedTable} onOpenChange={() => setSelectedTable(null)}>
+          <DialogContent>
           <DialogHeader>
             <DialogTitle>Mesa {selectedTable?.number}</DialogTitle>
           </DialogHeader>
@@ -740,6 +743,7 @@ export default function Tables() {
           </div>
         </DialogContent>
       </Dialog>
+      )}
 
       {/* Reservation Details Dialog */}
       <Dialog open={!!selectedReservation} onOpenChange={() => setSelectedReservation(null)}>
