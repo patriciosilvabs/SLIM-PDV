@@ -61,6 +61,45 @@ export default defineConfig(({ mode }) => ({
             }
           },
           {
+            urlPattern: /^https:\/\/.*supabase\.co\/rest\/v1\/.*/i,
+            handler: 'NetworkOnly',
+            method: 'POST',
+            options: {
+              backgroundSync: {
+                name: 'supabase-post-queue',
+                options: {
+                  maxRetentionTime: 24 * 60 // 24 hours in minutes
+                }
+              }
+            }
+          },
+          {
+            urlPattern: /^https:\/\/.*supabase\.co\/rest\/v1\/.*/i,
+            handler: 'NetworkOnly',
+            method: 'PATCH',
+            options: {
+              backgroundSync: {
+                name: 'supabase-patch-queue',
+                options: {
+                  maxRetentionTime: 24 * 60
+                }
+              }
+            }
+          },
+          {
+            urlPattern: /^https:\/\/.*supabase\.co\/rest\/v1\/.*/i,
+            handler: 'NetworkOnly',
+            method: 'DELETE',
+            options: {
+              backgroundSync: {
+                name: 'supabase-delete-queue',
+                options: {
+                  maxRetentionTime: 24 * 60
+                }
+              }
+            }
+          },
+          {
             urlPattern: /^https:\/\/.*supabase\.co\/auth\/v1\/.*/i,
             handler: 'NetworkOnly'
           },

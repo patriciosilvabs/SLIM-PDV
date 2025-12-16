@@ -1,4 +1,5 @@
-import { Wifi, WifiOff, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, AlertCircle, CheckCircle2, Download } from "lucide-react";
+import { Link } from "react-router-dom";
 import {
   Tooltip,
   TooltipContent,
@@ -10,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { SyncProgressDialog } from "./SyncProgressDialog";
 import { useOfflineSyncContext } from "@/contexts/OfflineSyncContext";
+import { useInstallPWA } from "@/hooks/useInstallPWA";
 
 export function OfflineIndicator() {
   const { 
@@ -19,7 +21,10 @@ export function OfflineIndicator() {
     triggerSync,
     clearQueue 
   } = useOfflineSyncContext();
+  const { canInstall, isInstalled, isStandalone } = useInstallPWA();
   const [dialogOpen, setDialogOpen] = useState(false);
+  
+  const showInstallLink = canInstall && !isInstalled && !isStandalone;
 
   const getStatusConfig = () => {
     if (!isOnline) {
@@ -66,34 +71,59 @@ export function OfflineIndicator() {
 
   return (
     <>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-2 h-9"
-              onClick={() => pendingOperations.length > 0 && setDialogOpen(true)}
-            >
-              <Icon className={`h-4 w-4 ${config.iconClass}`} />
-              <span className="hidden sm:inline text-xs">{config.label}</span>
-              {pendingOperations.length > 0 && (
-                <Badge variant={config.variant} className="h-5 px-1.5 text-xs">
-                  {pendingOperations.length}
-                </Badge>
+      <div className="flex items-center gap-1">
+        {showInstallLink && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2 h-9"
+                  asChild
+                >
+                  <Link to="/install">
+                    <Download className="h-4 w-4 text-primary" />
+                    <span className="hidden sm:inline text-xs">Instalar</span>
+                  </Link>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>Instalar app para acesso offline</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+        
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-2 h-9"
+                onClick={() => pendingOperations.length > 0 && setDialogOpen(true)}
+              >
+                <Icon className={`h-4 w-4 ${config.iconClass}`} />
+                <span className="hidden sm:inline text-xs">{config.label}</span>
+                {pendingOperations.length > 0 && (
+                  <Badge variant={config.variant} className="h-5 px-1.5 text-xs">
+                    {pendingOperations.length}
+                  </Badge>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>{config.description}</p>
+              {pendingOperations.length > 0 && isOnline && !isSyncing && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Clique para ver detalhes
+                </p>
               )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            <p>{config.description}</p>
-            {pendingOperations.length > 0 && isOnline && !isSyncing && (
-              <p className="text-xs text-muted-foreground mt-1">
-                Clique para ver detalhes
-              </p>
-            )}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
 
       <SyncProgressDialog
         open={dialogOpen}
