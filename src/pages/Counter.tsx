@@ -17,6 +17,7 @@ import { useProductExtras } from '@/hooks/useProductExtras';
 import { useProductExtraLinks } from '@/hooks/useProductExtraLinks';
 import { useOrderMutations } from '@/hooks/useOrders';
 import { useToast } from '@/hooks/use-toast';
+import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { Package, ShoppingCart, Trash2, Plus, Minus, Store, Truck, X, Gift } from 'lucide-react';
 
 function formatCurrency(value: number) {
@@ -48,6 +49,7 @@ export default function Counter() {
   const { data: extraLinks } = useProductExtraLinks();
   const { createOrder, addOrderItem } = useOrderMutations();
   const { toast } = useToast();
+  const { duplicateItems } = useOrderSettings();
 
   const [orderType, setOrderType] = useState<OrderType>('takeaway');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -439,23 +441,31 @@ export default function Counter() {
                             </p>
                           </div>
                           <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => updateQuantity(item.id, -1)}
-                            >
-                              <Minus className="h-3 w-3" />
-                            </Button>
-                            <span className="w-6 text-center text-sm">{item.quantity}</span>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => updateQuantity(item.id, 1)}
-                            >
-                              <Plus className="h-3 w-3" />
-                            </Button>
+                            {!duplicateItems ? (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => updateQuantity(item.id, -1)}
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </Button>
+                                <span className="w-6 text-center text-sm">{item.quantity}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => updateQuantity(item.id, 1)}
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                              </>
+                            ) : (
+                              <span className="text-sm text-muted-foreground px-2">
+                                Qtd: {item.quantity}
+                              </span>
+                            )}
                             <Button
                               variant="ghost"
                               size="icon"

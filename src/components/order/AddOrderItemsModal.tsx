@@ -12,6 +12,7 @@ import { useProductVariations } from '@/hooks/useProductVariations';
 import { ProductDetailDialog, SelectedComplement } from './ProductDetailDialog';
 import { ShoppingCart, Trash2, Plus, Minus, X, Gift, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useOrderSettings } from '@/hooks/useOrderSettings';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -44,6 +45,7 @@ export function AddOrderItemsModal({ open, onOpenChange, onSubmit, tableNumber }
   const { data: combos } = useCombos();
   const { data: comboItems } = useComboItems();
   const { data: variations } = useProductVariations();
+  const { duplicateItems } = useOrderSettings();
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -365,25 +367,31 @@ export function AddOrderItemsModal({ open, onOpenChange, onSubmit, tableNumber }
                           </Button>
                         </div>
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1">
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              className="h-6 w-6"
-                              onClick={() => updateQuantity(item.id, -1)}
-                            >
-                              <Minus className="h-3 w-3" />
-                            </Button>
-                            <span className="w-6 text-center text-sm">{item.quantity}</span>
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              className="h-6 w-6"
-                              onClick={() => updateQuantity(item.id, 1)}
-                            >
-                              <Plus className="h-3 w-3" />
-                            </Button>
-                          </div>
+                          {!duplicateItems ? (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                className="h-6 w-6"
+                                onClick={() => updateQuantity(item.id, -1)}
+                              >
+                                <Minus className="h-3 w-3" />
+                              </Button>
+                              <span className="w-6 text-center text-sm">{item.quantity}</span>
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                className="h-6 w-6"
+                                onClick={() => updateQuantity(item.id, 1)}
+                              >
+                                <Plus className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">
+                              Qtd: {item.quantity}
+                            </span>
+                          )}
                           <span className="font-semibold text-sm">
                             {formatCurrency(item.total_price)}
                           </span>
