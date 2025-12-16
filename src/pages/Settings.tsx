@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Users, Shield, Plus, X, Crown, Sparkles, AlertTriangle, UtensilsCrossed, Edit, Trash2, ShoppingCart } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
+import { useTableWaitSettings } from '@/hooks/useTableWaitSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -61,6 +62,7 @@ export default function Settings() {
   const { data: tables } = useTables();
   const { createTable, updateTable, deleteTable } = useTableMutations();
   const { duplicateItems, toggleDuplicateItems } = useOrderSettings();
+  const { settings: tableWaitSettings, updateSettings: updateTableWaitSettings } = useTableWaitSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
@@ -439,7 +441,7 @@ export default function Settings() {
                 Ajuste o comportamento do sistema de pedidos
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label className="font-medium">Duplicar itens em vez de somar quantidade</Label>
@@ -452,6 +454,40 @@ export default function Settings() {
                   checked={duplicateItems} 
                   onCheckedChange={toggleDuplicateItems} 
                 />
+              </div>
+
+              <div className="border-t pt-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="font-medium">Alerta de tempo de espera de mesa</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Tocar som quando uma mesa ocupada ultrapassar o tempo limite configurado
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Select
+                      value={tableWaitSettings.thresholdMinutes.toString()}
+                      onValueChange={(v) => updateTableWaitSettings({ thresholdMinutes: Number(v) })}
+                      disabled={!tableWaitSettings.enabled}
+                    >
+                      <SelectTrigger className="w-24">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="15">15 min</SelectItem>
+                        <SelectItem value="20">20 min</SelectItem>
+                        <SelectItem value="25">25 min</SelectItem>
+                        <SelectItem value="30">30 min</SelectItem>
+                        <SelectItem value="45">45 min</SelectItem>
+                        <SelectItem value="60">60 min</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Switch 
+                      checked={tableWaitSettings.enabled} 
+                      onCheckedChange={(enabled) => updateTableWaitSettings({ enabled })} 
+                    />
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

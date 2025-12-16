@@ -20,6 +20,7 @@ const defaultSettings: NotificationSettings = {
     orderReady: true,
     kdsNewOrder: true,
     maxWaitAlert: true,
+    tableWaitAlert: true,
   },
   selectedSounds: {
     newOrder: 'beepClassic',
@@ -27,6 +28,7 @@ const defaultSettings: NotificationSettings = {
     orderReady: 'dingDong',
     kdsNewOrder: 'urgentAlert',
     maxWaitAlert: 'urgentAlert',
+    tableWaitAlert: 'bell',
   },
   customSoundUrls: {
     newOrder: PREDEFINED_SOUNDS.beepClassic.data,
@@ -34,6 +36,7 @@ const defaultSettings: NotificationSettings = {
     orderReady: PREDEFINED_SOUNDS.dingDong.data,
     kdsNewOrder: PREDEFINED_SOUNDS.urgentAlert.data,
     maxWaitAlert: PREDEFINED_SOUNDS.urgentAlert.data,
+    tableWaitAlert: PREDEFINED_SOUNDS.bell.data,
   },
 };
 
@@ -80,6 +83,7 @@ export function useAudioNotification() {
   const playOrderReadySound = useCallback(() => playSound('orderReady'), [playSound]);
   const playKdsNewOrderSound = useCallback(() => playSound('kdsNewOrder'), [playSound]);
   const playMaxWaitAlertSound = useCallback(() => playSound('maxWaitAlert'), [playSound]);
+  const playTableWaitAlertSound = useCallback(() => playSound('tableWaitAlert'), [playSound]);
 
   const updateSettings = useCallback((updates: Partial<NotificationSettings>) => {
     setSettings(prev => ({ ...prev, ...updates }));
@@ -128,5 +132,6 @@ export function useAudioNotification() {
     playOrderReadySound,
     playKdsNewOrderSound,
     playMaxWaitAlertSound,
+    playTableWaitAlertSound,
   };
 }

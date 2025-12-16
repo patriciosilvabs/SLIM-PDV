@@ -16,6 +16,7 @@ import { useTables, useTableMutations, Table, TableStatus } from '@/hooks/useTab
 import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { useReservations, useReservationMutations, Reservation } from '@/hooks/useReservations';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTableWaitSettings } from '@/hooks/useTableWaitSettings';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
 import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell } from 'lucide-react';
@@ -59,7 +60,8 @@ export default function Tables() {
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { playOrderReadySound, settings: audioSettings } = useAudioNotification();
+  const { settings: tableWaitSettings } = useTableWaitSettings();
+  const { playOrderReadySound, playTableWaitAlertSound, settings: audioSettings } = useAudioNotification();
   const { data: tables, isLoading } = useTables();
   const { data: orders } = useOrders(['pending', 'preparing', 'ready']);
   const { createTable, updateTable } = useTableMutations();
@@ -67,6 +69,7 @@ export default function Tables() {
   
   // Refs for tracking order status changes
   const previousOrdersRef = useRef<Order[]>([]);
+  const tableWaitAlertCooldownRef = useRef<Map<string, number>>(new Map());
   const notifiedReadyOrdersRef = useRef<Set<string>>(new Set());
   
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -153,6 +156,55 @@ export default function Tables() {
 
     previousOrdersRef.current = orders;
   }, [orders, tables, playOrderReadySound, audioSettings.enabled]);
+
+  // Check table wait times and trigger alert if threshold exceeded
+  useEffect(() => {
+    if (!tableWaitSettings.enabled || !orders || !audioSettings.enabled) return;
+
+    const checkTableWaitTimes = () => {
+      const now = Date.now();
+      
+      orders.forEach(order => {
+        // Only table orders (dine_in) that are not ready/delivered
+        if (order.order_type !== 'dine_in') return;
+        if (order.status === 'ready' || order.status === 'delivered' || order.status === 'cancelled') return;
+        
+        const orderTime = new Date(order.created_at!).getTime();
+        const waitMinutes = Math.floor((now - orderTime) / 60000);
+        
+        // If exceeded threshold
+        if (waitMinutes >= tableWaitSettings.thresholdMinutes) {
+          const lastAlert = tableWaitAlertCooldownRef.current.get(order.id) || 0;
+          const cooldownMs = tableWaitSettings.cooldownMinutes * 60000;
+          
+          // Check cooldown
+          if (now - lastAlert >= cooldownMs) {
+            // Play alert sound
+            playTableWaitAlertSound();
+            
+            // Show toast
+            const table = tables?.find(t => t.id === order.table_id);
+            toast.warning(
+              `⏰ Mesa ${table?.number || '?'} - ${waitMinutes} minutos!`,
+              { 
+                description: `Tempo de espera ultrapassou ${tableWaitSettings.thresholdMinutes} minutos`,
+                duration: 8000 
+              }
+            );
+            
+            // Update cooldown
+            tableWaitAlertCooldownRef.current.set(order.id, now);
+          }
+        }
+      });
+    };
+
+    // Check immediately and every minute
+    checkTableWaitTimes();
+    const interval = setInterval(checkTableWaitTimes, 60000);
+    
+    return () => clearInterval(interval);
+  }, [orders, tables, tableWaitSettings, audioSettings.enabled, playTableWaitAlertSound]);
 
   const getTableOrder = (tableId: string) => {
     return orders?.find(o => o.table_id === tableId && o.status !== 'delivered' && o.status !== 'cancelled');
