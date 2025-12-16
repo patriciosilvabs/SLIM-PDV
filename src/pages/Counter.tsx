@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { useSearchCustomers, useCustomerMutations, Customer } from '@/hooks/useCustomers';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { ProductDetailDialog, SelectedComplement } from '@/components/order/ProductDetailDialog';
 import { 
   Package, 
   ShoppingCart, 
@@ -34,7 +35,9 @@ import {
   Menu,
   Phone,
   User,
-  MapPin
+  MapPin,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -68,6 +71,7 @@ interface OrderItem {
   total_price: number;
   notes?: string;
   combo_name?: string;
+  complements?: SelectedComplement[];
 }
 
 type OrderType = 'takeaway' | 'delivery';
@@ -95,6 +99,10 @@ export default function Counter() {
   const [searchQuery, setSearchQuery] = useState('');
   const [notesOpen, setNotesOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  
+  // ProductDetailDialog state
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [productDialogOpen, setProductDialogOpen] = useState(false);
   
   // Customer search state
   const [customerSearch, setCustomerSearch] = useState('');
@@ -209,6 +217,53 @@ export default function Counter() {
     setCustomerAddress(customer.address || '');
     setCustomerSearch(customer.name);
     setShowCustomerDropdown(false);
+  };
+
+  // Handle product click - open ProductDetailDialog
+  const handleProductClick = (product: any) => {
+    setSelectedProduct(product);
+    setProductDialogOpen(true);
+  };
+
+  // Handle add from ProductDetailDialog
+  const handleAddFromDialog = (
+    product: any, 
+    quantity: number, 
+    complements: SelectedComplement[], 
+    itemNotes: string
+  ) => {
+    const complementsTotal = complements.reduce((sum, c) => sum + (c.price * c.quantity), 0);
+    const productPrice = product.is_promotion && product.promotion_price 
+      ? product.promotion_price 
+      : product.price;
+    const unitPrice = productPrice + complementsTotal;
+
+    if (duplicateItems && quantity > 1) {
+      // Create separate items
+      for (let i = 0; i < quantity; i++) {
+        setOrderItems(prev => [...prev, {
+          id: `${product.id}-${Date.now()}-${i}`,
+          product_id: product.id,
+          product_name: product.name,
+          quantity: 1,
+          unit_price: unitPrice,
+          total_price: unitPrice,
+          notes: itemNotes || undefined,
+          complements,
+        }]);
+      }
+    } else {
+      setOrderItems(prev => [...prev, {
+        id: `${product.id}-${Date.now()}`,
+        product_id: product.id,
+        product_name: product.name,
+        quantity,
+        unit_price: unitPrice,
+        total_price: unitPrice * quantity,
+        notes: itemNotes || undefined,
+        complements,
+      }]);
+    }
   };
 
   const addProduct = (product: any, variation?: any) => {
@@ -567,15 +622,8 @@ export default function Counter() {
                       return (
                         <div
                           key={product.id}
-                          onClick={() => {
-                            if (!hasVariations) {
-                              addProduct(product);
-                            }
-                          }}
-                          className={cn(
-                            "flex items-center gap-3 p-3 rounded-xl border bg-card transition-all",
-                            !hasVariations && "hover:border-primary hover:shadow-sm cursor-pointer"
-                          )}
+                          onClick={() => handleProductClick(product)}
+                          className="flex items-center gap-3 p-3 rounded-xl border bg-card hover:border-primary hover:shadow-sm cursor-pointer transition-all"
                         >
                           <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                             {product.image_url ? (
@@ -592,28 +640,11 @@ export default function Counter() {
                                 {formatCurrency(minPrice)}
                               </span>
                             </p>
-                            
                             {hasVariations && (
-                              <div className="flex flex-wrap gap-1 mt-2">
-                                {productVariations.slice(0, 3).map(v => (
-                                  <Button
-                                    key={v.id}
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-xs h-6 px-2"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      addProduct(product, v);
-                                    }}
-                                  >
-                                    {v.name}
-                                  </Button>
-                                ))}
-                                {productVariations.length > 3 && (
-                                  <span className="text-xs text-muted-foreground self-center">
-                                    +{productVariations.length - 3}
-                                  </span>
-                                )}
+                              <div className="flex items-center gap-1 mt-1">
+                                <Badge variant="outline" className="text-xs">
+                                  {productVariations.length} tamanhos
+                                </Badge>
                               </div>
                             )}
                           </div>
@@ -727,7 +758,7 @@ export default function Counter() {
               </div>
             )}
 
-            {/* Phone field */}
+            {/* Phone field with validation */}
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -735,9 +766,16 @@ export default function Counter() {
                   placeholder="(11) 99999-9999"
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(formatPhoneNumber(e.target.value))}
-                  className="h-9 pl-9"
+                  className="h-9 pl-9 pr-9"
                   type="tel"
                 />
+                {/* Validation icon */}
+                {customerPhone && customerPhone.replace(/\D/g, '').length >= 10 && (
+                  <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-green-500" />
+                )}
+                {customerPhone && customerPhone.replace(/\D/g, '').length > 0 && customerPhone.replace(/\D/g, '').length < 10 && (
+                  <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-amber-500" />
+                )}
               </div>
               {customerPhone && customerPhone.replace(/\D/g, '').length >= 10 && (
                 <Button
@@ -824,6 +862,22 @@ export default function Counter() {
                           {item.combo_name}
                         </Badge>
                       )}
+                      {/* Show complements */}
+                      {item.complements && item.complements.length > 0 && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {item.complements.map((c, i) => (
+                            <span key={i}>
+                              {c.quantity > 1 ? `${c.quantity}x ` : ''}{c.option_name}
+                              {i < item.complements!.length - 1 ? ', ' : ''}
+                            </span>
+                          ))}
+                        </p>
+                      )}
+                      {item.notes && (
+                        <p className="text-xs text-amber-600 mt-0.5 italic">
+                          Obs: {item.notes}
+                        </p>
+                      )}
                       <p className="text-xs text-muted-foreground">
                         {formatCurrency(item.unit_price)} × {item.quantity}
                       </p>
@@ -885,6 +939,15 @@ export default function Counter() {
           </div>
         </div>
       </div>
+
+      {/* ProductDetailDialog for product selection with complements */}
+      <ProductDetailDialog
+        open={productDialogOpen}
+        onOpenChange={setProductDialogOpen}
+        product={selectedProduct}
+        onAdd={handleAddFromDialog}
+        duplicateItems={duplicateItems}
+      />
     </PDVLayout>
   );
 }
