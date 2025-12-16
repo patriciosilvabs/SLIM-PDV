@@ -358,9 +358,46 @@ export type Database = {
           },
         ]
       }
+      product_extra_links: {
+        Row: {
+          created_at: string | null
+          extra_id: string
+          id: string
+          product_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          extra_id: string
+          id?: string
+          product_id: string
+        }
+        Update: {
+          created_at?: string | null
+          extra_id?: string
+          id?: string
+          product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_extra_links_extra_id_fkey"
+            columns: ["extra_id"]
+            isOneToOne: false
+            referencedRelation: "product_extras"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_extra_links_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_extras: {
         Row: {
           created_at: string | null
+          description: string | null
           id: string
           is_active: boolean | null
           name: string
@@ -368,6 +405,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          description?: string | null
           id?: string
           is_active?: boolean | null
           name: string
@@ -375,6 +413,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          description?: string | null
           id?: string
           is_active?: boolean | null
           name?: string
@@ -420,6 +459,7 @@ export type Database = {
       }
       product_variations: {
         Row: {
+          description: string | null
           id: string
           is_active: boolean | null
           name: string
@@ -427,6 +467,7 @@ export type Database = {
           product_id: string
         }
         Insert: {
+          description?: string | null
           id?: string
           is_active?: boolean | null
           name: string
@@ -434,6 +475,7 @@ export type Database = {
           product_id: string
         }
         Update: {
+          description?: string | null
           id?: string
           is_active?: boolean | null
           name?: string
