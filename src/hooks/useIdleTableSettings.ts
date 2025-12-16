@@ -6,12 +6,14 @@ interface IdleTableSettings {
   enabled: boolean;
   thresholdMinutes: number; // Tempo máximo sem itens (5, 10, 15, 20, 30 min)
   autoClose: boolean;       // Se true, fecha automaticamente; se false, só alerta
+  includeDeliveredOrders: boolean; // Se true, considera pedidos entregues como ociosos
 }
 
 const defaultSettings: IdleTableSettings = {
   enabled: true,
   thresholdMinutes: 15,    // Padrão: 15 minutos
   autoClose: false,         // Padrão: apenas alertar (mais seguro)
+  includeDeliveredOrders: false, // Padrão: não considerar pedidos entregues
 };
 
 export function useIdleTableSettings() {

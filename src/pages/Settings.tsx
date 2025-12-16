@@ -492,7 +492,7 @@ export default function Settings() {
                 </div>
               </div>
 
-              <div className="border-t pt-6">
+              <div className="border-t pt-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label className="font-medium">Mesa ociosa (sem itens)</Label>
@@ -530,6 +530,20 @@ export default function Settings() {
                       onCheckedChange={(enabled) => updateIdleTableSettings({ enabled })} 
                     />
                   </div>
+                </div>
+                
+                <div className="flex items-center justify-between pl-4 border-l-2 border-muted">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm">Incluir pedidos entregues</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Também alertar quando o pedido já foi servido
+                    </p>
+                  </div>
+                  <Switch 
+                    checked={idleTableSettings.includeDeliveredOrders} 
+                    onCheckedChange={(includeDeliveredOrders) => updateIdleTableSettings({ includeDeliveredOrders })}
+                    disabled={!idleTableSettings.enabled}
+                  />
                 </div>
               </div>
             </CardContent>
