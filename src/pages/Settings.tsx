@@ -14,7 +14,9 @@ import { NotificationSettings } from '@/components/NotificationSettings';
 import { PushNotificationSettings } from '@/components/PushNotificationSettings';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Users, Shield, Plus, X, Crown, Sparkles, AlertTriangle, UtensilsCrossed, Edit, Trash2 } from 'lucide-react';
+import { Users, Shield, Plus, X, Crown, Sparkles, AlertTriangle, UtensilsCrossed, Edit, Trash2, ShoppingCart } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -57,6 +59,7 @@ export default function Settings() {
   const { data: hasAdmins, isLoading: checkingAdmins, refetch: refetchAdmins } = useHasAdmins();
   const { data: tables } = useTables();
   const { createTable, updateTable, deleteTable } = useTableMutations();
+  const { duplicateItems, toggleDuplicateItems } = useOrderSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
@@ -423,6 +426,34 @@ export default function Settings() {
               </div>
             </DialogContent>
           </Dialog>
+
+          {/* Order Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ShoppingCart className="h-5 w-5" />
+                Configurações de Pedido
+              </CardTitle>
+              <CardDescription>
+                Ajuste o comportamento do sistema de pedidos
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="font-medium">Duplicar itens em vez de somar quantidade</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Quando ativo, adicionar o mesmo produto cria um novo item separado no pedido.
+                    Facilita a visualização de múltiplos itens na comanda da cozinha.
+                  </p>
+                </div>
+                <Switch 
+                  checked={duplicateItems} 
+                  onCheckedChange={toggleDuplicateItems} 
+                />
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Notification Settings */}
           <NotificationSettings />
