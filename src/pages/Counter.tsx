@@ -15,6 +15,8 @@ import { useProductVariations } from '@/hooks/useProductVariations';
 import { useOrderMutations } from '@/hooks/useOrders';
 import { useToast } from '@/hooks/use-toast';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
+import { useSearchCustomers, useCustomerMutations, Customer } from '@/hooks/useCustomers';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { 
   Package, 
   ShoppingCart, 
@@ -27,7 +29,11 @@ import {
   MessageSquare,
   X,
   Minus as MinimizeIcon,
-  Gift
+  Gift,
+  Menu,
+  Phone,
+  User,
+  MapPin
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -59,6 +65,8 @@ export default function Counter() {
   const { createOrder, addOrderItem } = useOrderMutations();
   const { toast } = useToast();
   const { duplicateItems } = useOrderSettings();
+  const { findOrCreateCustomer, updateCustomerStats } = useCustomerMutations();
+  const isMobile = useIsMobile();
 
   const [orderType, setOrderType] = useState<OrderType>('takeaway');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -70,12 +78,56 @@ export default function Counter() {
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [notesOpen, setNotesOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  
+  // Customer search state
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const customerSearchRef = useRef<HTMLDivElement>(null);
 
+  const { data: searchedCustomers } = useSearchCustomers(customerSearch);
+  
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const activeCategories = categories?.filter(c => c.is_active !== false) || [];
   const activeProducts = products?.filter(p => p.is_available !== false) || [];
   const activeCombos = combos?.filter(c => c.is_active !== false) || [];
+
+  // Check if tablet (768px-1024px)
+  const [isTablet, setIsTablet] = useState(false);
+  
+  useEffect(() => {
+    const checkTablet = () => {
+      const width = window.innerWidth;
+      setIsTablet(width >= 768 && width < 1024);
+    };
+    
+    checkTablet();
+    window.addEventListener('resize', checkTablet);
+    return () => window.removeEventListener('resize', checkTablet);
+  }, []);
+
+  // Auto-collapse sidebar on tablet
+  useEffect(() => {
+    if (isTablet) {
+      setSidebarOpen(false);
+    } else {
+      setSidebarOpen(true);
+    }
+  }, [isTablet]);
+
+  // Close customer dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (customerSearchRef.current && !customerSearchRef.current.contains(e.target as Node)) {
+        setShowCustomerDropdown(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Filter products by category and search
   const filteredProducts = useMemo(() => {
@@ -124,6 +176,24 @@ export default function Counter() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [orderItems, isCreatingOrder]);
+
+  // Handle customer search input
+  const handleCustomerSearchChange = (value: string) => {
+    setCustomerSearch(value);
+    setCustomerName(value);
+    setShowCustomerDropdown(true);
+    setSelectedCustomer(null);
+  };
+
+  // Handle customer selection
+  const selectCustomer = (customer: Customer) => {
+    setSelectedCustomer(customer);
+    setCustomerName(customer.name);
+    setCustomerPhone(customer.phone || '');
+    setCustomerAddress(customer.address || '');
+    setCustomerSearch(customer.name);
+    setShowCustomerDropdown(false);
+  };
 
   const addProduct = (product: any, variation?: any) => {
     const itemId = `${product.id}-${variation?.id || 'base'}-${Date.now()}`;
@@ -194,6 +264,8 @@ export default function Counter() {
     setCustomerName('');
     setCustomerPhone('');
     setCustomerAddress('');
+    setCustomerSearch('');
+    setSelectedCustomer(null);
     setNotes('');
   };
 
@@ -205,6 +277,22 @@ export default function Counter() {
 
     setIsCreatingOrder(true);
     try {
+      // Find or create customer if phone is provided
+      let customerId: string | null = null;
+      if (customerPhone || customerName) {
+        try {
+          const customer = await findOrCreateCustomer.mutateAsync({
+            name: customerName || undefined,
+            phone: customerPhone || undefined,
+            address: orderType === 'delivery' ? customerAddress || undefined : undefined,
+          });
+          customerId = customer?.id || null;
+        } catch (e) {
+          // Continue without customer if creation fails
+          console.error('Failed to create/find customer:', e);
+        }
+      }
+
       const order = await createOrder.mutateAsync({
         order_type: orderType,
         customer_name: customerName || null,
@@ -227,6 +315,15 @@ export default function Counter() {
           notes: item.notes || null,
           status: 'pending',
         });
+      }
+
+      // Update customer stats
+      if (customerId) {
+        try {
+          await updateCustomerStats.mutateAsync({ customerId, orderTotal: subtotal });
+        } catch (e) {
+          console.error('Failed to update customer stats:', e);
+        }
       }
 
       toast({ title: 'Pedido criado com sucesso!' });
@@ -257,17 +354,48 @@ export default function Counter() {
   return (
     <PDVLayout>
       <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+        {/* Mobile/Tablet sidebar toggle */}
+        {isTablet && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="fixed top-16 left-2 z-50 lg:hidden"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+        )}
+
         {/* Left Sidebar - Categories */}
-        <div className="w-48 border-r bg-muted/30 flex flex-col">
-          <div className="p-3 border-b">
+        <div 
+          className={cn(
+            "border-r bg-muted/30 flex flex-col transition-all duration-300",
+            sidebarOpen ? "w-48" : "w-0 overflow-hidden",
+            isTablet && sidebarOpen && "absolute left-0 top-0 bottom-0 z-40 shadow-lg"
+          )}
+        >
+          <div className="p-3 border-b flex items-center justify-between">
             <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
               Categorias
             </h3>
+            {isTablet && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setSidebarOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
           </div>
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-1">
               <button
-                onClick={() => setSelectedCategory(null)}
+                onClick={() => {
+                  setSelectedCategory(null);
+                  if (isTablet) setSidebarOpen(false);
+                }}
                 className={cn(
                   "w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                   selectedCategory === null
@@ -280,7 +408,10 @@ export default function Counter() {
               {activeCategories.map(cat => (
                 <button
                   key={cat.id}
-                  onClick={() => setSelectedCategory(cat.id)}
+                  onClick={() => {
+                    setSelectedCategory(cat.id);
+                    if (isTablet) setSidebarOpen(false);
+                  }}
                   className={cn(
                     "w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                     selectedCategory === cat.id
@@ -296,29 +427,49 @@ export default function Counter() {
           </ScrollArea>
         </div>
 
+        {/* Overlay for tablet sidebar */}
+        {isTablet && sidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-background/80 z-30"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
         {/* Center - Products */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Search Bar */}
           <div className="p-4 border-b bg-background">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                ref={searchInputRef}
-                placeholder="Encontre produtos por nome ou código PDV (Ctrl + b)"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 h-11"
-              />
-              {searchQuery && (
+            <div className="relative flex items-center gap-2">
+              {isTablet && !sidebarOpen && (
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="icon"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                  onClick={() => setSearchQuery('')}
+                  className="shrink-0"
+                  onClick={() => setSidebarOpen(true)}
                 >
-                  <X className="h-4 w-4" />
+                  <Menu className="h-4 w-4" />
                 </Button>
               )}
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  ref={searchInputRef}
+                  placeholder="Encontre produtos por nome ou código PDV (Ctrl + b)"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-11"
+                />
+                {searchQuery && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                    onClick={() => setSearchQuery('')}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -461,7 +612,10 @@ export default function Counter() {
         </div>
 
         {/* Right Panel - Order */}
-        <div className="w-80 border-l bg-background flex flex-col">
+        <div className={cn(
+          "border-l bg-background flex flex-col transition-all duration-300",
+          isTablet ? "w-72" : "w-80"
+        )}>
           {/* Header */}
           <div className="p-3 border-b flex items-center justify-between">
             <h3 className="font-semibold">Novo pedido</h3>
@@ -482,12 +636,92 @@ export default function Counter() {
 
           {/* Customer Search */}
           <div className="p-3 border-b space-y-3">
-            <Input
-              placeholder="Pesquisar cliente..."
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              className="h-9"
-            />
+            {/* Customer search with autocomplete */}
+            <div ref={customerSearchRef} className="relative">
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Pesquisar cliente..."
+                  value={customerSearch}
+                  onChange={(e) => handleCustomerSearchChange(e.target.value)}
+                  onFocus={() => customerSearch.length >= 2 && setShowCustomerDropdown(true)}
+                  className="h-9 pl-9"
+                />
+              </div>
+              
+              {/* Customer dropdown */}
+              {showCustomerDropdown && searchedCustomers && searchedCustomers.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                  {searchedCustomers.map((customer) => (
+                    <button
+                      key={customer.id}
+                      onClick={() => selectCustomer(customer)}
+                      className="w-full text-left px-3 py-2.5 hover:bg-muted transition-colors border-b last:border-b-0"
+                    >
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{customer.name}</p>
+                          {customer.phone && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Phone className="h-3 w-3" />
+                              {customer.phone}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-xs text-muted-foreground">
+                            {customer.total_orders} pedidos
+                          </p>
+                          <p className="text-xs font-medium text-primary">
+                            {formatCurrency(customer.total_spent || 0)}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Selected customer info */}
+            {selectedCustomer && (
+              <div className="bg-muted/50 rounded-lg p-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Cliente selecionado</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 px-1 text-xs"
+                    onClick={() => {
+                      setSelectedCustomer(null);
+                      setCustomerSearch('');
+                      setCustomerName('');
+                      setCustomerPhone('');
+                      setCustomerAddress('');
+                    }}
+                  >
+                    Limpar
+                  </Button>
+                </div>
+                <p className="font-medium">{selectedCustomer.name}</p>
+                <p className="text-muted-foreground">
+                  {selectedCustomer.total_orders} pedidos • {formatCurrency(selectedCustomer.total_spent || 0)} total
+                </p>
+              </div>
+            )}
+
+            {/* Phone field */}
+            <div className="relative">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Telefone (WhatsApp)..."
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                className="h-9 pl-9"
+                type="tel"
+              />
+            </div>
             
             {/* Order Type */}
             <Select value={orderType} onValueChange={(v: OrderType) => setOrderType(v)}>
@@ -501,13 +735,16 @@ export default function Counter() {
             </Select>
 
             {orderType === 'delivery' && (
-              <Textarea
-                placeholder="Endereço de entrega..."
-                value={customerAddress}
-                onChange={(e) => setCustomerAddress(e.target.value)}
-                rows={2}
-                className="text-sm"
-              />
+              <div className="relative">
+                <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Textarea
+                  placeholder="Endereço de entrega..."
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                  rows={2}
+                  className="text-sm pl-9"
+                />
+              </div>
             )}
 
             {/* Notes Collapsible */}
