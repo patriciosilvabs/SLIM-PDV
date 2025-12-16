@@ -973,6 +973,10 @@ export type Database = {
       }
       scheduled_announcements: {
         Row: {
+          condition_comparison: string | null
+          condition_threshold: number | null
+          condition_type: string | null
+          cooldown_minutes: number | null
           created_at: string | null
           created_by: string | null
           file_path: string
@@ -985,9 +989,14 @@ export type Database = {
           scheduled_days: number[] | null
           scheduled_time: string
           target_screens: string[] | null
+          trigger_type: string
           volume: number | null
         }
         Insert: {
+          condition_comparison?: string | null
+          condition_threshold?: number | null
+          condition_type?: string | null
+          cooldown_minutes?: number | null
           created_at?: string | null
           created_by?: string | null
           file_path: string
@@ -1000,9 +1009,14 @@ export type Database = {
           scheduled_days?: number[] | null
           scheduled_time: string
           target_screens?: string[] | null
+          trigger_type?: string
           volume?: number | null
         }
         Update: {
+          condition_comparison?: string | null
+          condition_threshold?: number | null
+          condition_type?: string | null
+          cooldown_minutes?: number | null
           created_at?: string | null
           created_by?: string | null
           file_path?: string
@@ -1015,6 +1029,7 @@ export type Database = {
           scheduled_days?: number[] | null
           scheduled_time?: string
           target_screens?: string[] | null
+          trigger_type?: string
           volume?: number | null
         }
         Relationships: []

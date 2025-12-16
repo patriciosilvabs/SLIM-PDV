@@ -17,11 +17,24 @@ export interface ScheduledAnnouncement {
   created_by: string | null;
   created_at: string;
   last_played_at: string | null;
+  // New condition-based fields
+  trigger_type: 'scheduled' | 'condition';
+  condition_type: 'orders_in_production' | 'orders_pending' | 'orders_total_active' | null;
+  condition_threshold: number;
+  condition_comparison: 'greater_than' | 'less_than' | 'equals';
+  cooldown_minutes: number;
+}
+
+export interface OrderCounts {
+  pending: number;
+  preparing: number;
+  total: number;
 }
 
 const STORAGE_KEY = 'pdv-announcements-played-today';
+const COOLDOWN_STORAGE_KEY = 'pdv-announcements-cooldowns';
 
-export function useScheduledAnnouncements(currentScreen?: string) {
+export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: OrderCounts) {
   const queryClient = useQueryClient();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playedToday, setPlayedToday] = useState<Set<string>>(() => {
@@ -38,6 +51,17 @@ export function useScheduledAnnouncements(currentScreen?: string) {
     return new Set();
   });
 
+  // Cooldown tracking for condition-based announcements
+  const [cooldowns, setCooldowns] = useState<Record<string, number>>(() => {
+    try {
+      const stored = localStorage.getItem(COOLDOWN_STORAGE_KEY);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch {}
+    return {};
+  });
+
   // Save played announcements to localStorage
   useEffect(() => {
     const today = new Date().toDateString();
@@ -46,6 +70,11 @@ export function useScheduledAnnouncements(currentScreen?: string) {
       ids: Array.from(playedToday)
     }));
   }, [playedToday]);
+
+  // Save cooldowns to localStorage
+  useEffect(() => {
+    localStorage.setItem(COOLDOWN_STORAGE_KEY, JSON.stringify(cooldowns));
+  }, [cooldowns]);
 
   const { data: announcements = [], isLoading } = useQuery({
     queryKey: ['scheduled-announcements'],
@@ -160,8 +189,18 @@ export function useScheduledAnnouncements(currentScreen?: string) {
       console.warn('Erro ao reproduzir anúncio:', err);
     });
 
-    // Mark as played
-    setPlayedToday(prev => new Set([...prev, announcement.id]));
+    // Mark as played (for scheduled announcements)
+    if (announcement.trigger_type === 'scheduled') {
+      setPlayedToday(prev => new Set([...prev, announcement.id]));
+    }
+
+    // Update cooldown for condition-based announcements
+    if (announcement.trigger_type === 'condition') {
+      setCooldowns(prev => ({
+        ...prev,
+        [announcement.id]: Date.now()
+      }));
+    }
 
     // Update last_played_at in database
     supabase
@@ -171,50 +210,138 @@ export function useScheduledAnnouncements(currentScreen?: string) {
       .then();
   }, []);
 
-  // Check and play announcements every minute
+  // Check if a condition is met
+  const checkCondition = useCallback((
+    announcement: ScheduledAnnouncement,
+    counts: OrderCounts
+  ): boolean => {
+    if (!announcement.condition_type) return false;
+
+    let value: number;
+    switch (announcement.condition_type) {
+      case 'orders_in_production':
+        value = counts.preparing;
+        break;
+      case 'orders_pending':
+        value = counts.pending;
+        break;
+      case 'orders_total_active':
+        value = counts.total;
+        break;
+      default:
+        return false;
+    }
+
+    const threshold = announcement.condition_threshold;
+    switch (announcement.condition_comparison) {
+      case 'greater_than':
+        return value > threshold;
+      case 'less_than':
+        return value < threshold;
+      case 'equals':
+        return value === threshold;
+      default:
+        return false;
+    }
+  }, []);
+
+  // Check if announcement is in cooldown
+  const isInCooldown = useCallback((announcement: ScheduledAnnouncement): boolean => {
+    const lastPlayed = cooldowns[announcement.id];
+    if (!lastPlayed) return false;
+    
+    const cooldownMs = announcement.cooldown_minutes * 60 * 1000;
+    return (Date.now() - lastPlayed) < cooldownMs;
+  }, [cooldowns]);
+
+  // Check and play scheduled announcements every minute
   useEffect(() => {
     if (!currentScreen || announcements.length === 0) return;
 
-    const checkAndPlay = () => {
+    const checkScheduledAnnouncements = () => {
       const now = new Date();
       const currentTimeStr = now.toTimeString().slice(0, 5); // HH:MM
       const currentDay = now.getDay() || 7; // 1-7 (Monday-Sunday), convert 0 to 7
 
-      announcements.forEach(announcement => {
-        // Skip if not for this screen
-        if (!announcement.target_screens.includes(currentScreen)) return;
+      announcements
+        .filter(a => a.trigger_type === 'scheduled')
+        .forEach(announcement => {
+          // Skip if not for this screen
+          if (!announcement.target_screens.includes(currentScreen)) return;
 
-        // Skip if already played today
-        if (playedToday.has(announcement.id)) return;
+          // Skip if already played today
+          if (playedToday.has(announcement.id)) return;
 
-        // Check time (compare HH:MM)
-        const scheduledTime = announcement.scheduled_time.slice(0, 5);
-        if (scheduledTime !== currentTimeStr) return;
+          // Check time (compare HH:MM)
+          const scheduledTime = announcement.scheduled_time.slice(0, 5);
+          if (scheduledTime !== currentTimeStr) return;
 
-        // Check schedule type
-        if (announcement.schedule_type === 'once') {
-          const scheduledDate = announcement.scheduled_date;
-          if (scheduledDate && new Date(scheduledDate).toDateString() !== now.toDateString()) {
-            return;
+          // Check schedule type
+          if (announcement.schedule_type === 'once') {
+            const scheduledDate = announcement.scheduled_date;
+            if (scheduledDate && new Date(scheduledDate).toDateString() !== now.toDateString()) {
+              return;
+            }
+          } else if (announcement.schedule_type === 'weekly') {
+            if (!announcement.scheduled_days.includes(currentDay)) return;
           }
-        } else if (announcement.schedule_type === 'weekly') {
-          if (!announcement.scheduled_days.includes(currentDay)) return;
-        }
-        // 'daily' runs every day
+          // 'daily' runs every day
 
-        // Play the announcement
-        playAnnouncement(announcement);
-        toast.info(`🔊 ${announcement.name}`, { duration: 3000 });
-      });
+          // Play the announcement
+          playAnnouncement(announcement);
+          toast.info(`🔊 ${announcement.name}`, { duration: 3000 });
+        });
     };
 
     // Check immediately
-    checkAndPlay();
+    checkScheduledAnnouncements();
 
     // Check every minute
-    const interval = setInterval(checkAndPlay, 60000);
+    const interval = setInterval(checkScheduledAnnouncements, 60000);
     return () => clearInterval(interval);
   }, [announcements, currentScreen, playedToday, playAnnouncement]);
+
+  // Check condition-based announcements every 30 seconds
+  useEffect(() => {
+    if (!currentScreen || !orderCounts || announcements.length === 0) return;
+
+    const checkConditionAnnouncements = () => {
+      announcements
+        .filter(a => a.trigger_type === 'condition')
+        .forEach(announcement => {
+          // Skip if not for this screen
+          if (!announcement.target_screens.includes(currentScreen)) return;
+
+          // Skip if in cooldown
+          if (isInCooldown(announcement)) return;
+
+          // Check if condition is met
+          if (checkCondition(announcement, orderCounts)) {
+            // Play the announcement
+            playAnnouncement(announcement);
+            
+            // Show visual alert
+            const conditionLabels: Record<string, string> = {
+              orders_in_production: 'pedidos em produção',
+              orders_pending: 'pedidos pendentes',
+              orders_total_active: 'pedidos ativos'
+            };
+            const conditionLabel = conditionLabels[announcement.condition_type || ''] || '';
+            toast.warning(`🔴 ALERTA: ${announcement.name}`, { 
+              description: `Mais de ${announcement.condition_threshold} ${conditionLabel}`,
+              duration: 6000 
+            });
+          }
+        });
+    };
+
+    // Check immediately
+    checkConditionAnnouncements();
+
+    // Check every 30 seconds
+    const interval = setInterval(checkConditionAnnouncements, 30000);
+    return () => clearInterval(interval);
+  }, [announcements, currentScreen, orderCounts, playAnnouncement, checkCondition, isInCooldown]);
 
   return {
     announcements,
