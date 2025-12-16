@@ -164,15 +164,30 @@ export default function OrderManagement() {
           )}
           
           <div className="border-t border-border pt-2 mt-2">
-            <div className="space-y-1 max-h-24 overflow-y-auto">
-              {order.order_items?.slice(0, 3).map((item, idx) => (
-                <p key={idx} className="text-xs text-muted-foreground">
-                  {item.quantity}x {item.product?.name || 'Produto'}
-                </p>
+            <div className="space-y-2 max-h-32 overflow-y-auto">
+              {order.order_items?.slice(0, 4).map((item: any, idx) => (
+                <div key={idx} className="text-xs">
+                  <p className="text-muted-foreground font-medium">
+                    {item.quantity}x {item.product?.name || 'Produto'}
+                    {item.variation?.name && ` (${item.variation.name})`}
+                  </p>
+                  {/* Sabores/Complementos */}
+                  {item.extras && item.extras.length > 0 && (
+                    <p className="text-muted-foreground/70 pl-2">
+                      {item.extras.map((e: any) => 
+                        e.extra_name.split(': ').slice(1).join(': ')
+                      ).join(', ')}
+                    </p>
+                  )}
+                  {/* Observações */}
+                  {item.notes && (
+                    <p className="text-amber-600/80 pl-2 italic">📝 {item.notes}</p>
+                  )}
+                </div>
               ))}
-              {order.order_items && order.order_items.length > 3 && (
+              {order.order_items && order.order_items.length > 4 && (
                 <p className="text-xs text-muted-foreground">
-                  +{order.order_items.length - 3} itens...
+                  +{order.order_items.length - 4} itens...
                 </p>
               )}
             </div>

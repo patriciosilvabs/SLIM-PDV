@@ -23,7 +23,8 @@ import { useIdleTableSettings } from '@/hooks/useIdleTableSettings';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 const roleLabels: Record<AppRole, string> = {
   admin: 'Administrador',
@@ -91,6 +92,12 @@ export default function Settings() {
     password: '',
     role: 'waiter' as AppRole,
   });
+
+  // Edit user state
+  const [isEditUserDialogOpen, setIsEditUserDialogOpen] = useState(false);
+  const [userToEdit, setUserToEdit] = useState<UserWithRoles | null>(null);
+  const [editUserName, setEditUserName] = useState('');
+  const [isSavingUser, setIsSavingUser] = useState(false);
 
   // Check if current user can bootstrap (no admins exist)
   const canBootstrap = !checkingAdmins && hasAdmins === false && user?.id;
@@ -172,6 +179,40 @@ export default function Settings() {
         description: error.message, 
         variant: 'destructive' 
       });
+    }
+  };
+
+  // Edit user name handler
+  const handleOpenEditUser = (user: UserWithRoles) => {
+    setUserToEdit(user);
+    setEditUserName(user.name);
+    setIsEditUserDialogOpen(true);
+  };
+
+  const handleUpdateUserName = async () => {
+    if (!userToEdit || !editUserName.trim()) return;
+    
+    setIsSavingUser(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ name: editUserName.trim().toUpperCase() })
+        .eq('id', userToEdit.id);
+      
+      if (error) throw error;
+      
+      toast({ title: 'Nome atualizado com sucesso!' });
+      refetch();
+      setIsEditUserDialogOpen(false);
+      setUserToEdit(null);
+    } catch (error: any) {
+      toast({ 
+        title: 'Erro ao atualizar nome', 
+        description: error.message, 
+        variant: 'destructive' 
+      });
+    } finally {
+      setIsSavingUser(false);
     }
   };
 
@@ -791,16 +832,42 @@ export default function Settings() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            {/* Edit user button */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOpenEditUser(user)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            {/* Role removal with confirmation */}
                             {user.user_roles.map((ur) => (
-                              <Button
-                                key={ur.role}
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleRemoveRole(user.id, ur.role)}
-                                className="text-destructive hover:text-destructive"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
+                              <AlertDialog key={ur.role}>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:text-destructive"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Remover função?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Tem certeza que deseja remover a função "{roleLabels[ur.role]}" de {user.name}?
+                                      Esta ação não pode ser desfeita.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleRemoveRole(user.id, ur.role)}>
+                                      Confirmar
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
                             ))}
                           </div>
                         </TableCell>
@@ -811,6 +878,42 @@ export default function Settings() {
               )}
             </CardContent>
           </Card>
+
+          {/* Edit User Dialog */}
+          <Dialog open={isEditUserDialogOpen} onOpenChange={setIsEditUserDialogOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Edit className="h-5 w-5" />
+                  Editar Usuário
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-4">
+                <div className="space-y-2">
+                  <Label>Nome *</Label>
+                  <Input
+                    placeholder="NOME DO FUNCIONÁRIO"
+                    value={editUserName}
+                    onChange={(e) => setEditUserName(e.target.value.toUpperCase())}
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  ID: {userToEdit?.id.slice(0, 8)}...
+                </p>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsEditUserDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={handleUpdateUserName} 
+                  disabled={isSavingUser || !editUserName.trim()}
+                >
+                  {isSavingUser ? 'Salvando...' : 'Salvar'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* Create User Dialog */}
           <Dialog open={isCreateUserDialogOpen} onOpenChange={setIsCreateUserDialogOpen}>

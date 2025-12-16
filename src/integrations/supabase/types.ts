@@ -1081,6 +1081,58 @@ export type Database = {
           },
         ]
       }
+      table_switches: {
+        Row: {
+          from_table_id: string
+          id: string
+          order_id: string
+          reason: string | null
+          switched_at: string
+          switched_by: string | null
+          to_table_id: string
+        }
+        Insert: {
+          from_table_id: string
+          id?: string
+          order_id: string
+          reason?: string | null
+          switched_at?: string
+          switched_by?: string | null
+          to_table_id: string
+        }
+        Update: {
+          from_table_id?: string
+          id?: string
+          order_id?: string
+          reason?: string | null
+          switched_at?: string
+          switched_by?: string | null
+          to_table_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "table_switches_from_table_id_fkey"
+            columns: ["from_table_id"]
+            isOneToOne: false
+            referencedRelation: "tables"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "table_switches_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "table_switches_to_table_id_fkey"
+            columns: ["to_table_id"]
+            isOneToOne: false
+            referencedRelation: "tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tables: {
         Row: {
           capacity: number | null

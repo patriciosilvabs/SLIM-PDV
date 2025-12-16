@@ -17,12 +17,13 @@ import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { useReservations, useReservationMutations, Reservation } from '@/hooks/useReservations';
 import { useOpenCashRegister, useCashRegisterMutations, PaymentMethod } from '@/hooks/useCashRegister';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUserRole } from '@/hooks/useUserRole';
 import { useTableWaitSettings } from '@/hooks/useTableWaitSettings';
 import { useIdleTableSettings } from '@/hooks/useIdleTableSettings';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
-import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus, ArrowRightLeft } from 'lucide-react';
+import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus, ArrowRightLeft, Edit, XCircle } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
@@ -85,6 +86,8 @@ export default function Tables() {
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { hasAnyRole } = useUserRole();
+  const canDeleteItems = hasAnyRole(['admin', 'cashier']);
   const { settings: tableWaitSettings } = useTableWaitSettings();
   const { settings: idleTableSettings } = useIdleTableSettings();
   const { playOrderReadySound, playTableWaitAlertSound, playIdleTableAlertSound, settings: audioSettings } = useAudioNotification();
@@ -151,6 +154,10 @@ export default function Tables() {
   // Switch table states
   const [isSwitchTableDialogOpen, setIsSwitchTableDialogOpen] = useState(false);
   const [isSwitchingTable, setIsSwitchingTable] = useState(false);
+
+  // Customer name editing states
+  const [isEditingCustomerName, setIsEditingCustomerName] = useState(false);
+  const [editedCustomerName, setEditedCustomerName] = useState('');
 
   // Realtime subscription for orders
   useEffect(() => {
@@ -451,7 +458,7 @@ export default function Tables() {
     }
   };
 
-  // Switch table function
+  // Switch table function with audit log
   const handleSwitchTable = async (newTableId: string) => {
     if (!selectedTable || !selectedOrder) return;
     
@@ -460,19 +467,27 @@ export default function Tables() {
       const newTable = tables?.find(t => t.id === newTableId);
       if (!newTable) throw new Error('Mesa não encontrada');
       
-      // 1. Update order with new table
+      // 1. Log the table switch for audit
+      await supabase.from('table_switches').insert({
+        order_id: selectedOrder.id,
+        from_table_id: selectedTable.id,
+        to_table_id: newTableId,
+        switched_by: user?.id || null,
+      });
+      
+      // 2. Update order with new table
       await updateOrder.mutateAsync({
         id: selectedOrder.id,
         table_id: newTableId
       });
       
-      // 2. Free the old table
+      // 3. Free the old table
       await updateTable.mutateAsync({
         id: selectedTable.id,
         status: 'available'
       });
       
-      // 3. Occupy the new table
+      // 4. Occupy the new table
       await updateTable.mutateAsync({
         id: newTableId,
         status: 'occupied'
@@ -486,6 +501,60 @@ export default function Tables() {
       toast.error('Erro ao trocar mesa');
     } finally {
       setIsSwitchingTable(false);
+    }
+  };
+
+  // Save edited customer name
+  const handleSaveCustomerName = async () => {
+    if (!selectedOrder) return;
+    try {
+      await updateOrder.mutateAsync({
+        id: selectedOrder.id,
+        customer_name: editedCustomerName.trim() || null
+      });
+      toast.success('Nome do cliente atualizado');
+      setIsEditingCustomerName(false);
+    } catch (error) {
+      toast.error('Erro ao atualizar nome');
+    }
+  };
+
+  // Close empty table (no consumption)
+  const handleCloseEmptyTable = async () => {
+    if (!selectedTable || !selectedOrder) return;
+    try {
+      await updateOrder.mutateAsync({ id: selectedOrder.id, status: 'cancelled' });
+      await updateTable.mutateAsync({ id: selectedTable.id, status: 'available' });
+      toast.success(`Mesa ${selectedTable.number} fechada (sem consumo)`);
+      setSelectedTable(null);
+    } catch (error) {
+      toast.error('Erro ao fechar mesa');
+    }
+  };
+
+  // Delete order item (only admin/cashier)
+  const handleDeleteOrderItem = async (itemId: string, orderId: string) => {
+    if (!canDeleteItems) {
+      toast.error('Você não tem permissão para excluir itens');
+      return;
+    }
+    try {
+      const { error } = await supabase.from('order_items').delete().eq('id', itemId);
+      if (error) throw error;
+      
+      // Recalculate order total
+      const { data: remainingItems } = await supabase
+        .from('order_items')
+        .select('total_price')
+        .eq('order_id', orderId);
+      
+      const newTotal = remainingItems?.reduce((sum, item) => sum + (item.total_price || 0), 0) || 0;
+      await updateOrder.mutateAsync({ id: orderId, total: newTotal, subtotal: newTotal });
+      
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast.success('Item removido');
+    } catch (error) {
+      toast.error('Erro ao remover item');
     }
   };
 
@@ -591,9 +660,14 @@ export default function Tables() {
       setSplitCount(2);
       setSplitMode('equal');
       setCustomSplits([]);
+      // Reset customer name editing
+      setIsEditingCustomerName(false);
+      setEditedCustomerName('');
     } else {
       setIsClosingBill(false);
       setRegisteredPayments([]);
+      setIsEditingCustomerName(false);
+      setEditedCustomerName('');
     }
   }, [selectedTable?.id]);
   
@@ -836,12 +910,42 @@ export default function Tables() {
                                 <span>{formatDistanceToNow(new Date(selectedOrder.created_at), { locale: ptBR })}</span>
                               </div>
                             )}
-                            {selectedOrder.customer_name && (
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="text-muted-foreground">Cliente</span>
-                                <span>{selectedOrder.customer_name}</span>
-                              </div>
-                            )}
+                            {/* Editable Customer Name */}
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground">Cliente</span>
+                              {isEditingCustomerName ? (
+                                <div className="flex items-center gap-1">
+                                  <Input
+                                    value={editedCustomerName}
+                                    onChange={(e) => setEditedCustomerName(e.target.value)}
+                                    className="h-7 w-32 text-sm"
+                                    placeholder="Nome do cliente"
+                                    autoFocus
+                                  />
+                                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleSaveCustomerName}>
+                                    <Check className="h-3 w-3" />
+                                  </Button>
+                                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setIsEditingCustomerName(false)}>
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1">
+                                  <span>{selectedOrder.customer_name || '-'}</span>
+                                  <Button 
+                                    size="icon" 
+                                    variant="ghost" 
+                                    className="h-6 w-6"
+                                    onClick={() => {
+                                      setEditedCustomerName(selectedOrder.customer_name || '');
+                                      setIsEditingCustomerName(true);
+                                    }}
+                                  >
+                                    <Edit className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -854,21 +958,47 @@ export default function Tables() {
                                 {selectedOrder.order_items.map((item: any) => (
                                   <div 
                                     key={item.id} 
-                                    className="flex items-center justify-between p-2 bg-muted/50 rounded"
+                                    className="flex items-start justify-between p-2 bg-muted/50 rounded group"
                                   >
                                     <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium truncate">
+                                      <p className="text-sm font-medium">
                                         {item.quantity}x {item.product?.name || 'Produto'}
+                                        {item.variation?.name && (
+                                          <span className="text-muted-foreground font-normal"> - {item.variation.name}</span>
+                                        )}
                                       </p>
+                                      {/* Sabores/Complementos */}
+                                      {item.extras && item.extras.length > 0 && (
+                                        <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                                          {item.extras.map((extra: any, idx: number) => (
+                                            <p key={idx} className="pl-2">
+                                              • {extra.extra_name.split(': ').slice(1).join(': ')}
+                                            </p>
+                                          ))}
+                                        </div>
+                                      )}
+                                      {/* Observações */}
                                       {item.notes && (
-                                        <p className="text-xs text-muted-foreground truncate">
-                                          {item.notes}
+                                        <p className="text-xs text-amber-600 mt-1 pl-2 italic">
+                                          📝 {item.notes}
                                         </p>
                                       )}
                                     </div>
-                                    <span className="text-sm font-medium ml-2">
-                                      {formatCurrency(item.total_price)}
-                                    </span>
+                                    <div className="flex items-center gap-1 ml-2">
+                                      <span className="text-sm font-medium">
+                                        {formatCurrency(item.total_price)}
+                                      </span>
+                                      {canDeleteItems && (
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon" 
+                                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                          onClick={() => handleDeleteOrderItem(item.id, item.order_id)}
+                                        >
+                                          <Trash2 className="h-3 w-3 text-destructive" />
+                                        </Button>
+                                      )}
+                                    </div>
                                   </div>
                                 ))}
                               </div>
@@ -882,11 +1012,20 @@ export default function Tables() {
                             </div>
                           </div>
                         ) : selectedTable.status === 'occupied' ? (
-                          <div className="flex-1 flex items-center justify-center">
-                            <div className="text-center text-muted-foreground">
+                          <div className="flex-1 flex flex-col items-center justify-center">
+                            <div className="text-center text-muted-foreground mb-4">
                               <ShoppingBag className="h-12 w-12 mx-auto mb-2 opacity-50" />
                               <p className="text-sm">Nenhum item no pedido</p>
                             </div>
+                            {/* Close empty table button */}
+                            <Button 
+                              variant="destructive" 
+                              size="sm"
+                              onClick={handleCloseEmptyTable}
+                            >
+                              <XCircle className="h-4 w-4 mr-2" />
+                              Fechar Mesa (Sem Consumo)
+                            </Button>
                           </div>
                         ) : null}
 
@@ -909,10 +1048,13 @@ export default function Tables() {
                                 <ArrowRightLeft className="h-4 w-4 mr-2" />
                                 Trocar Mesa
                               </Button>
-                              <Button variant="outline" className="w-full" onClick={handleStartClosing}>
-                                <Receipt className="h-4 w-4 mr-2" />
-                                Fechar Conta
-                              </Button>
+                              {/* Only show Fechar Conta if there are items */}
+                              {selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
+                                <Button variant="outline" className="w-full" onClick={handleStartClosing}>
+                                  <Receipt className="h-4 w-4 mr-2" />
+                                  Fechar Conta
+                                </Button>
+                              )}
                             </>
                           )}
 
@@ -1467,17 +1609,37 @@ export default function Tables() {
           {/* MOBILE: Regular View */}
           {!isClosingBill && (
             <div className="space-y-4 pt-4">
-              {selectedOrder && selectedOrder.order_items && selectedOrder.order_items.length > 0 && (
+              {selectedOrder && selectedOrder.order_items && selectedOrder.order_items.length > 0 ? (
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium">Itens do Pedido</h4>
-                  <div className="max-h-[150px] overflow-y-auto space-y-1">
+                  <div className="max-h-[180px] overflow-y-auto space-y-2">
                     {selectedOrder.order_items.map((item: any) => (
                       <div 
                         key={item.id} 
-                        className="flex items-center justify-between p-2 bg-muted/50 rounded text-sm"
+                        className="p-2 bg-muted/50 rounded text-sm"
                       >
-                        <span className="truncate">{item.quantity}x {item.product?.name || 'Produto'}</span>
-                        <span className="font-medium">{formatCurrency(item.total_price)}</span>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <span className="font-medium">
+                              {item.quantity}x {item.product?.name || 'Produto'}
+                              {item.variation?.name && (
+                                <span className="text-muted-foreground font-normal"> - {item.variation.name}</span>
+                              )}
+                            </span>
+                            {/* Sabores/Complementos */}
+                            {item.extras && item.extras.length > 0 && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {item.extras.map((extra: any, idx: number) => (
+                                  <p key={idx} className="pl-2">• {extra.extra_name.split(': ').slice(1).join(': ')}</p>
+                                ))}
+                              </div>
+                            )}
+                            {item.notes && (
+                              <p className="text-xs text-amber-600 mt-1 italic">📝 {item.notes}</p>
+                            )}
+                          </div>
+                          <span className="font-medium ml-2">{formatCurrency(item.total_price)}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1486,7 +1648,22 @@ export default function Tables() {
                     <span className="text-primary">{formatCurrency(selectedOrder.total || 0)}</span>
                   </div>
                 </div>
-              )}
+              ) : selectedOrder && (!selectedOrder.order_items || selectedOrder.order_items.length === 0) ? (
+                <div className="text-center py-4 space-y-3">
+                  <div className="text-muted-foreground">
+                    <ShoppingBag className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">Nenhum item no pedido</p>
+                  </div>
+                  <Button 
+                    variant="destructive" 
+                    size="sm"
+                    onClick={handleCloseEmptyTable}
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Fechar Mesa (Sem Consumo)
+                  </Button>
+                </div>
+              ) : null}
 
               {selectedTable?.status === 'occupied' && (
                 <>
@@ -1494,10 +1671,12 @@ export default function Tables() {
                     <Plus className="h-4 w-4 mr-2" />
                     Adicionar Pedido
                   </Button>
-                  <Button variant="outline" className="w-full" onClick={handleStartClosing}>
-                    <Receipt className="h-4 w-4 mr-2" />
-                    Fechar Conta
-                  </Button>
+                  {selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
+                    <Button variant="outline" className="w-full" onClick={handleStartClosing}>
+                      <Receipt className="h-4 w-4 mr-2" />
+                      Fechar Conta
+                    </Button>
+                  )}
                 </>
               )}
 
