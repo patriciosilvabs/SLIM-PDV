@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
-import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Pizza, Store } from 'lucide-react';
+import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Pizza, Store, Users } from 'lucide-react';
 
 interface NavItem {
   name: string;
@@ -23,6 +23,7 @@ const navigation: NavItem[] = [
   { name: 'Balcão', href: '/counter', icon: Store, roles: ['admin', 'waiter', 'cashier'] },
   { name: 'Pedidos', href: '/orders', icon: ShoppingBag, roles: ['admin', 'waiter', 'kitchen', 'cashier'] },
   { name: 'Cardápio', href: '/menu', icon: Pizza, roles: ['admin', 'waiter', 'kitchen'] },
+  { name: 'Clientes', href: '/customers', icon: Users, roles: ['admin', 'cashier', 'waiter'] },
   { name: 'Estoque', href: '/stock', icon: Package, roles: ['admin', 'kitchen'] },
   { name: 'Caixa', href: '/cash-register', icon: CreditCard, roles: ['admin', 'cashier'] },
   { name: 'Relatórios', href: '/reports', icon: BarChart3, roles: ['admin', 'cashier'] },
