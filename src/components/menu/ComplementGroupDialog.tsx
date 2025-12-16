@@ -7,7 +7,8 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Trash2, GripVertical, Lock } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Plus, Trash2, GripVertical, Lock, ChevronDown, Settings2 } from 'lucide-react';
 import { ComplementGroup } from '@/hooks/useComplementGroups';
 import { ComplementOption } from '@/hooks/useComplementOptions';
 import {
@@ -53,6 +54,13 @@ const CHANNEL_OPTIONS = [
   { value: 'delivery', label: 'Delivery' },
   { value: 'counter', label: 'Balcão' },
   { value: 'table', label: 'Mesa' },
+];
+
+const PRICE_CALCULATION_TYPES = [
+  { value: 'sum', label: 'A soma dos preços', description: 'das opções escolhidas' },
+  { value: 'average', label: 'A média dos preços', description: 'das opções escolhidas' },
+  { value: 'highest', label: 'O preço da opção', description: 'mais cara escolhida' },
+  { value: 'lowest', label: 'O preço da opção', description: 'mais barata escolhida' },
 ];
 
 interface SortableOptionProps {
@@ -122,8 +130,10 @@ export function ComplementGroupDialog({
     visibility: 'visible',
     channels: ['delivery', 'counter', 'table'],
     is_active: true,
+    price_calculation_type: 'sum',
   });
   const [selectedOptionIds, setSelectedOptionIds] = React.useState<string[]>([]);
+  const [isAdvancedOpen, setIsAdvancedOpen] = React.useState(false);
   const [showOptionPicker, setShowOptionPicker] = React.useState(false);
 
   const sensors = useSensors(
@@ -145,7 +155,9 @@ export function ComplementGroupDialog({
         visibility: group.visibility || 'visible',
         channels: group.channels || ['delivery', 'counter', 'table'],
         is_active: group.is_active ?? true,
+        price_calculation_type: group.price_calculation_type || 'sum',
       });
+      setIsAdvancedOpen(group.price_calculation_type !== 'sum' && group.price_calculation_type !== null);
     }
     setSelectedOptionIds(linkedOptionIds);
   }, [group, linkedOptionIds, open]);
@@ -359,6 +371,36 @@ export function ComplementGroupDialog({
               </div>
             </div>
           )}
+
+          {/* Advanced Configuration */}
+          <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" className="w-full justify-between p-4 h-auto border rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Settings2 className="h-4 w-4" />
+                  <span className="font-medium">Configurações avançadas</span>
+                </div>
+                <ChevronDown className={`h-4 w-4 transition-transform ${isAdvancedOpen ? 'rotate-180' : ''}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-3 space-y-3">
+              <Label className="text-sm text-muted-foreground">O preço do complemento será:</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {PRICE_CALCULATION_TYPES.map(type => (
+                  <Button
+                    key={type.value}
+                    type="button"
+                    variant={form.price_calculation_type === type.value ? 'default' : 'outline'}
+                    className="h-auto py-3 flex flex-col items-start text-left"
+                    onClick={() => setForm({ ...form, price_calculation_type: type.value as ComplementGroup['price_calculation_type'] })}
+                  >
+                    <span className="font-medium text-sm">{type.label}</span>
+                    <span className="text-xs opacity-70 font-normal">{type.description}</span>
+                  </Button>
+                ))}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
 
         {/* Footer */}

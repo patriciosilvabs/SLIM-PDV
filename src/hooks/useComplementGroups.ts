@@ -14,6 +14,7 @@ export interface ComplementGroup {
   channels: string[] | null;
   sort_order: number | null;
   is_active: boolean | null;
+  price_calculation_type: 'sum' | 'average' | 'highest' | 'lowest' | null;
   created_at: string | null;
   updated_at: string | null;
 }

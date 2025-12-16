@@ -259,6 +259,7 @@ export type Database = {
           max_selections: number | null
           min_selections: number | null
           name: string
+          price_calculation_type: string | null
           selection_type: string
           sort_order: number | null
           updated_at: string | null
@@ -274,6 +275,7 @@ export type Database = {
           max_selections?: number | null
           min_selections?: number | null
           name: string
+          price_calculation_type?: string | null
           selection_type?: string
           sort_order?: number | null
           updated_at?: string | null
@@ -289,6 +291,7 @@ export type Database = {
           max_selections?: number | null
           min_selections?: number | null
           name?: string
+          price_calculation_type?: string | null
           selection_type?: string
           sort_order?: number | null
           updated_at?: string | null
