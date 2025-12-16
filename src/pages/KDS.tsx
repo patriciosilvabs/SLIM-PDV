@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter } from 'lucide-react';
+import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
@@ -61,6 +61,69 @@ export default function KDS() {
     delayedOrdersCount: waitTimes.filter(t => t > defaultDelayThreshold).length
   };
 
+  // Helper function to get color status based on metric thresholds
+  const getMetricStatus = (type: 'avg' | 'max' | 'delayed', value: number) => {
+    if (type === 'avg') {
+      if (value < 10) return { color: 'text-green-500', bg: 'bg-green-500/10', status: 'ok' as const };
+      if (value < 20) return { color: 'text-yellow-500', bg: 'bg-yellow-500/10', status: 'warning' as const };
+      return { color: 'text-red-500', bg: 'bg-red-500/10', status: 'critical' as const };
+    }
+    if (type === 'max') {
+      if (value < 15) return { color: 'text-green-500', bg: 'bg-green-500/10', status: 'ok' as const };
+      if (value < 25) return { color: 'text-yellow-500', bg: 'bg-yellow-500/10', status: 'warning' as const };
+      return { color: 'text-red-500', bg: 'bg-red-500/10', status: 'critical' as const };
+    }
+    // delayed
+    if (value === 0) return { color: 'text-green-500', bg: 'bg-green-500/10', status: 'ok' as const };
+    if (value <= 3) return { color: 'text-yellow-500', bg: 'bg-yellow-500/10', status: 'warning' as const };
+    return { color: 'text-red-500', bg: 'bg-red-500/10', status: 'critical' as const };
+  };
+
+  // Metrics Panel Component
+  const MetricsPanel = () => {
+    const avgStatus = getMetricStatus('avg', orderCounts.avgWaitTimeMinutes);
+    const maxStatus = getMetricStatus('max', orderCounts.maxWaitTimeMinutes);
+    const delayedStatus = getMetricStatus('delayed', orderCounts.delayedOrdersCount);
+
+    if (activeOrdersList.length === 0) return null;
+
+    return (
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg border">
+        {/* Tempo Médio */}
+        <div className={cn("flex items-center gap-1.5 px-2 py-1 rounded", avgStatus.bg)}>
+          <Clock className={cn("h-4 w-4", avgStatus.color)} />
+          <span className="text-xs text-muted-foreground">Média:</span>
+          <span className={cn("font-bold text-sm", avgStatus.color)}>
+            {orderCounts.avgWaitTimeMinutes} min
+          </span>
+        </div>
+        
+        {/* Pedido Mais Antigo */}
+        <div className={cn("flex items-center gap-1.5 px-2 py-1 rounded", maxStatus.bg)}>
+          <Timer className={cn("h-4 w-4", maxStatus.color)} />
+          <span className="text-xs text-muted-foreground">Máx:</span>
+          <span className={cn("font-bold text-sm", maxStatus.color)}>
+            {orderCounts.maxWaitTimeMinutes} min
+          </span>
+        </div>
+        
+        {/* Pedidos Atrasados */}
+        {orderCounts.delayedOrdersCount > 0 && (
+          <div className={cn(
+            "flex items-center gap-1.5 px-2 py-1 rounded",
+            delayedStatus.bg,
+            delayedStatus.status === 'critical' && "animate-pulse"
+          )}>
+            <AlertTriangle className={cn("h-4 w-4", delayedStatus.color)} />
+            <span className={cn("font-bold text-sm", delayedStatus.color)}>
+              {orderCounts.delayedOrdersCount} atrasado{orderCounts.delayedOrdersCount > 1 ? 's' : ''}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // Listen for scheduled announcements (now with order counts for demand-based triggers)
   useScheduledAnnouncements('kds', orderCounts);
 
@@ -93,13 +156,22 @@ export default function KDS() {
   const preparingOrders = activeOrders.filter(o => o.status === 'preparing');
   const readyOrders = activeOrders.filter(o => o.status === 'ready');
 
-  // Real-time clock for fullscreen mode
+  // Real-time clock and metrics update
   useEffect(() => {
-    if (!isFullscreen) return;
-    const timer = setInterval(() => {
+    // Update every second for clock display in fullscreen
+    const clockTimer = isFullscreen ? setInterval(() => {
       setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
+    }, 1000) : null;
+    
+    // Update every minute for metrics recalculation (even when not fullscreen)
+    const metricsTimer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000);
+    
+    return () => {
+      if (clockTimer) clearInterval(clockTimer);
+      clearInterval(metricsTimer);
+    };
   }, [isFullscreen]);
 
   // Setup realtime subscription
@@ -227,8 +299,13 @@ export default function KDS() {
             <div className={cn("flex items-center gap-1.5 px-2 py-1 rounded-full text-sm", timeInfo.bgColor)}>
               <Clock className={cn("h-3.5 w-3.5", timeInfo.color)} />
               <span className={cn("font-bold", timeInfo.color)}>{timeInfo.text}</span>
-            </div>
           </div>
+          
+          {/* Metrics Panel - Desktop inline */}
+          <div className="hidden lg:block">
+            <MetricsPanel />
+          </div>
+        </div>
           <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
             <span className="font-mono">#{order.id.slice(-4).toUpperCase()}</span>
             {order.customer_name && <span>• {order.customer_name}</span>}
@@ -378,6 +455,11 @@ export default function KDS() {
             <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
           </Button>
         </div>
+      </div>
+
+      {/* Metrics Panel - Mobile */}
+      <div className="lg:hidden mb-4">
+        <MetricsPanel />
       </div>
 
       {/* Order Type Filter */}
