@@ -48,19 +48,25 @@ export function getDateRange(range: DateRange, customStart?: Date, customEnd?: D
   }
 }
 
-export function useSalesReport(range: DateRange, customStart?: Date, customEnd?: Date) {
+export function useSalesReport(range: DateRange, customStart?: Date, customEnd?: Date, employeeId?: string) {
   const { start, end } = getDateRange(range, customStart, customEnd);
   
   return useQuery({
-    queryKey: ['sales-report', range, customStart?.toISOString(), customEnd?.toISOString()],
+    queryKey: ['sales-report', range, customStart?.toISOString(), customEnd?.toISOString(), employeeId],
     queryFn: async (): Promise<SalesReportData> => {
       // Get orders in range that are delivered
-      const { data: orders, error: ordersError } = await supabase
+      let ordersQuery = supabase
         .from('orders')
         .select('id, total, created_at')
         .eq('status', 'delivered')
         .gte('created_at', start.toISOString())
         .lte('created_at', end.toISOString());
+      
+      if (employeeId) {
+        ordersQuery = ordersQuery.eq('created_by', employeeId);
+      }
+      
+      const { data: orders, error: ordersError } = await ordersQuery;
       
       if (ordersError) throw ordersError;
 
@@ -118,19 +124,25 @@ export function useSalesReport(range: DateRange, customStart?: Date, customEnd?:
   });
 }
 
-export function useProductsReport(range: DateRange, customStart?: Date, customEnd?: Date) {
+export function useProductsReport(range: DateRange, customStart?: Date, customEnd?: Date, employeeId?: string) {
   const { start, end } = getDateRange(range, customStart, customEnd);
   
   return useQuery({
-    queryKey: ['products-report', range, customStart?.toISOString(), customEnd?.toISOString()],
+    queryKey: ['products-report', range, customStart?.toISOString(), customEnd?.toISOString(), employeeId],
     queryFn: async (): Promise<ProductReportData[]> => {
       // Get orders in range
-      const { data: orders, error: ordersError } = await supabase
+      let ordersQuery = supabase
         .from('orders')
         .select('id')
         .eq('status', 'delivered')
         .gte('created_at', start.toISOString())
         .lte('created_at', end.toISOString());
+      
+      if (employeeId) {
+        ordersQuery = ordersQuery.eq('created_by', employeeId);
+      }
+      
+      const { data: orders, error: ordersError } = await ordersQuery;
       
       if (ordersError) throw ordersError;
 

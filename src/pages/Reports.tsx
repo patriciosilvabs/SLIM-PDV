@@ -5,7 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSalesReport, useProductsReport, usePeakHoursAnalysis, useCashRegisterHistory, DateRange, getDateRange } from '@/hooks/useReports';
+import { useEmployees } from '@/hooks/useEmployees';
+import { useTableSwitches } from '@/hooks/useTableSwitches';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
@@ -28,7 +31,9 @@ import {
   ShoppingBag, 
   DollarSign,
   Clock,
-  Receipt
+  Receipt,
+  ArrowRightLeft,
+  User
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -51,13 +56,18 @@ export default function Reports() {
   const [dateRange, setDateRange] = useState<DateRange>('today');
   const [customStart, setCustomStart] = useState<Date>();
   const [customEnd, setCustomEnd] = useState<Date>();
+  const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
 
-  const { data: salesReport, isLoading: salesLoading } = useSalesReport(dateRange, customStart, customEnd);
-  const { data: productsReport, isLoading: productsLoading } = useProductsReport(dateRange, customStart, customEnd);
+  const { data: employees } = useEmployees();
+  const employeeId = selectedEmployee === 'all' ? undefined : selectedEmployee;
+
+  const { data: salesReport, isLoading: salesLoading } = useSalesReport(dateRange, customStart, customEnd, employeeId);
+  const { data: productsReport, isLoading: productsLoading } = useProductsReport(dateRange, customStart, customEnd, employeeId);
   const { data: peakHours, isLoading: peakLoading } = usePeakHoursAnalysis(dateRange, customStart, customEnd);
   const { data: cashHistory } = useCashRegisterHistory();
-
+  
   const { start, end } = getDateRange(dateRange, customStart, customEnd);
+  const { data: tableSwitches } = useTableSwitches(start, end);
 
   // Prepare peak hours heat map data
   const peakHoursGrid = () => {
@@ -81,7 +91,21 @@ export default function Reports() {
             </p>
           </div>
           
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
+            {/* Employee Filter */}
+            <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+              <SelectTrigger className="w-[180px]">
+                <User className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Funcionário" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {employees?.map(emp => (
+                  <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
             {(['today', 'yesterday', 'week', 'month'] as DateRange[]).map((range) => (
               <Button
                 key={range}
@@ -121,11 +145,12 @@ export default function Reports() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
+          <TabsList className="flex-wrap">
             <TabsTrigger value="sales">Vendas</TabsTrigger>
             <TabsTrigger value="products">Produtos</TabsTrigger>
             <TabsTrigger value="peak">Horários de Pico</TabsTrigger>
             <TabsTrigger value="cash">Histórico de Caixa</TabsTrigger>
+            <TabsTrigger value="switches">Trocas de Mesa</TabsTrigger>
           </TabsList>
 
           {/* Sales Tab */}
@@ -497,6 +522,57 @@ export default function Reports() {
                   {(!cashHistory || cashHistory.length === 0) && (
                     <p className="text-center py-8 text-muted-foreground">
                       Nenhum histórico de caixa encontrado
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Table Switches Tab */}
+          <TabsContent value="switches" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ArrowRightLeft className="h-5 w-5" />
+                  Histórico de Trocas de Mesa
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {tableSwitches?.map((sw) => (
+                    <div 
+                      key={sw.id}
+                      className="p-4 bg-muted/50 rounded-lg flex items-center justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center gap-3 mb-1">
+                          <span className="font-semibold">Mesa {sw.from_table?.number || '?'}</span>
+                          <ArrowRightLeft className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-semibold">Mesa {sw.to_table?.number || '?'}</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(sw.switched_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                        </p>
+                        {sw.switched_by_name && (
+                          <p className="text-sm text-muted-foreground">
+                            Por: {sw.switched_by_name}
+                          </p>
+                        )}
+                        {sw.reason && (
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Motivo: {sw.reason}
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-right text-sm text-muted-foreground">
+                        Pedido #{sw.order_id.slice(0, 8)}
+                      </div>
+                    </div>
+                  ))}
+                  {(!tableSwitches || tableSwitches.length === 0) && (
+                    <p className="text-center py-8 text-muted-foreground">
+                      Nenhuma troca de mesa registrada no período
                     </p>
                   )}
                 </div>
