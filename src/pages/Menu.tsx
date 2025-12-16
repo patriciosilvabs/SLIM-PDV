@@ -41,7 +41,7 @@ export default function Menu() {
   const { data: combos } = useCombos();
   const { data: comboItems } = useComboItems();
   const { createProduct, updateProduct, deleteProduct, updateSortOrder: updateProductSortOrder } = useProductMutations();
-  const { createCategory, updateSortOrder: updateCategorySortOrder } = useCategoryMutations();
+  const { createCategory, updateCategory, deleteCategory, updateSortOrder: updateCategorySortOrder } = useCategoryMutations();
   const { createExtra, updateExtra, deleteExtra } = useProductExtrasMutations();
   const { createVariation, updateVariation, deleteVariation } = useProductVariationsMutations();
   const { data: extraLinks } = useProductExtraLinks();
@@ -59,7 +59,9 @@ export default function Menu() {
 
   // Category dialog state
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
-  const [categoryForm, setCategoryForm] = useState({ name: '', description: '' });
+  const [editingCategory, setEditingCategory] = useState<any>(null);
+  const [categoryForm, setCategoryForm] = useState({ name: '', description: '', icon: '', is_active: true });
+  const [isCategorySortMode, setIsCategorySortMode] = useState(false);
 
   // Extras dialog state
   const [isExtrasDialogOpen, setIsExtrasDialogOpen] = useState(false);
@@ -127,9 +129,43 @@ export default function Menu() {
   };
 
   const handleSaveCategory = async () => {
-    await createCategory.mutateAsync({ ...categoryForm, icon: null, sort_order: 0, is_active: true });
-    setIsCategoryDialogOpen(false);
-    setCategoryForm({ name: '', description: '' });
+    const categoryData = {
+      name: categoryForm.name,
+      description: categoryForm.description || null,
+      icon: categoryForm.icon || null,
+      is_active: categoryForm.is_active,
+      sort_order: editingCategory?.sort_order ?? (categories?.length ?? 0)
+    };
+
+    if (editingCategory) {
+      await updateCategory.mutateAsync({ id: editingCategory.id, ...categoryData });
+    } else {
+      await createCategory.mutateAsync(categoryData);
+    }
+    setEditingCategory(null);
+    setCategoryForm({ name: '', description: '', icon: '', is_active: true });
+  };
+
+  const openEditCategory = (category: any) => {
+    setEditingCategory(category);
+    setCategoryForm({
+      name: category.name,
+      description: category.description || '',
+      icon: category.icon || '',
+      is_active: category.is_active ?? true
+    });
+  };
+
+  const handleCategoryDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !categories) return;
+
+    const oldIndex = categories.findIndex(c => c.id === active.id);
+    const newIndex = categories.findIndex(c => c.id === over.id);
+    
+    const reordered = arrayMove(categories, oldIndex, newIndex);
+    const updates = reordered.map((category, index) => ({ id: category.id, sort_order: index }));
+    updateCategorySortOrder.mutate(updates);
   };
 
   const handleSaveExtra = async () => {
@@ -305,18 +341,114 @@ export default function Menu() {
           </div>
           <div className="flex gap-2 flex-wrap">
             {/* Category Dialog */}
-            <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+            <Dialog open={isCategoryDialogOpen} onOpenChange={(open) => { setIsCategoryDialogOpen(open); if (!open) { setEditingCategory(null); setCategoryForm({ name: '', description: '', icon: '', is_active: true }); setIsCategorySortMode(false); } }}>
               <DialogTrigger asChild>
                 <Button variant="outline"><Plus className="h-4 w-4 mr-2" />Categoria</Button>
               </DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle>Nova Categoria</DialogTitle></DialogHeader>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader><DialogTitle>Gerenciar Categorias</DialogTitle></DialogHeader>
                 <div className="space-y-4 pt-4">
-                  <div className="space-y-2">
-                    <Label>Nome</Label>
-                    <Input value={categoryForm.name} onChange={(e) => setCategoryForm({...categoryForm, name: e.target.value})} />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label>Nome</Label>
+                      <Input placeholder="Ex: Pizzas" value={categoryForm.name} onChange={(e) => setCategoryForm({...categoryForm, name: e.target.value})} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Ícone (emoji)</Label>
+                      <Input placeholder="Ex: 🍕" value={categoryForm.icon} onChange={(e) => setCategoryForm({...categoryForm, icon: e.target.value})} className="w-full" />
+                    </div>
                   </div>
-                  <Button className="w-full" onClick={handleSaveCategory}>Salvar</Button>
+                  <div className="space-y-1">
+                    <Label>Descrição</Label>
+                    <Textarea 
+                      placeholder="Ex: Pizzas artesanais assadas em forno a lenha" 
+                      value={categoryForm.description} 
+                      onChange={(e) => setCategoryForm({...categoryForm, description: e.target.value})}
+                      className="resize-none"
+                      rows={2}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch checked={categoryForm.is_active} onCheckedChange={(checked) => setCategoryForm({...categoryForm, is_active: checked})} />
+                    <Label>Ativa</Label>
+                  </div>
+                  <Button onClick={handleSaveCategory} className="w-full" disabled={!categoryForm.name}>
+                    {editingCategory ? 'Atualizar' : 'Adicionar'} Categoria
+                  </Button>
+                  
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm text-muted-foreground">Categorias existentes</Label>
+                    <Button 
+                      variant={isCategorySortMode ? "default" : "outline"} 
+                      size="sm"
+                      onClick={() => setIsCategorySortMode(!isCategorySortMode)}
+                    >
+                      <GripVertical className="h-4 w-4 mr-1" />
+                      {isCategorySortMode ? 'Concluir' : 'Ordenar'}
+                    </Button>
+                  </div>
+                  
+                  <div className="border rounded-lg overflow-hidden">
+                    {isCategorySortMode && categories?.length ? (
+                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleCategoryDragEnd}>
+                        <SortableContext items={categories.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                          <div className="divide-y">
+                            {categories.map((category) => (
+                              <SortableItem key={category.id} id={category.id}>
+                                <div className="flex items-center gap-3 p-3 bg-background">
+                                  <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
+                                  <span className="text-lg">{category.icon || '📁'}</span>
+                                  <div className="flex-1">
+                                    <p className="font-medium">{category.name}</p>
+                                    {category.description && <p className="text-xs text-muted-foreground truncate">{category.description}</p>}
+                                  </div>
+                                  <span className={`px-2 py-1 rounded text-xs ${category.is_active ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
+                                    {category.is_active ? 'Ativa' : 'Inativa'}
+                                  </span>
+                                </div>
+                              </SortableItem>
+                            ))}
+                          </div>
+                        </SortableContext>
+                      </DndContext>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Categoria</TableHead>
+                            <TableHead>Descrição</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="w-20">Ações</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {categories?.map((category) => (
+                            <TableRow key={category.id}>
+                              <TableCell className="font-medium">
+                                <span className="mr-2">{category.icon || '📁'}</span>
+                                {category.name}
+                              </TableCell>
+                              <TableCell className="text-muted-foreground max-w-[150px] truncate">{category.description || '-'}</TableCell>
+                              <TableCell>
+                                <span className={`px-2 py-1 rounded text-xs ${category.is_active ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
+                                  {category.is_active ? 'Ativa' : 'Inativa'}
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex gap-1">
+                                  <Button variant="ghost" size="icon" onClick={() => openEditCategory(category)}><Edit className="h-4 w-4" /></Button>
+                                  <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteCategory.mutate(category.id)}><Trash2 className="h-4 w-4" /></Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {!categories?.length && (
+                            <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">Nenhuma categoria cadastrada</TableCell></TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </div>
                 </div>
               </DialogContent>
             </Dialog>
