@@ -11,6 +11,7 @@ export interface Product {
   image_url: string | null;
   is_available: boolean;
   preparation_time: number;
+  sort_order: number | null;
   created_at: string;
   updated_at: string;
   category?: { name: string };
@@ -23,6 +24,7 @@ export function useProducts() {
       const { data, error } = await supabase
         .from('products')
         .select('*, category:categories(name)')
+        .order('sort_order', { ascending: true })
         .order('name');
       
       if (error) throw error;
@@ -94,5 +96,24 @@ export function useProductMutations() {
     },
   });
 
-  return { createProduct, updateProduct, deleteProduct };
+  const updateSortOrder = useMutation({
+    mutationFn: async (items: Array<{ id: string; sort_order: number }>) => {
+      for (const item of items) {
+        const { error } = await supabase
+          .from('products')
+          .update({ sort_order: item.sort_order })
+          .eq('id', item.id);
+        
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Erro ao reordenar', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  return { createProduct, updateProduct, deleteProduct, updateSortOrder };
 }
