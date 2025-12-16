@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,11 +51,34 @@ export default function OrderManagement() {
   const { data: orders = [], isLoading, refetch } = useOrders();
   const { updateOrder } = useOrderMutations();
   const queryClient = useQueryClient();
+  const previousOrdersRef = useRef<Order[]>([]);
+  const handledStatusChangesRef = useRef<Set<string>>(new Set());
 
   // Filter only takeaway and delivery orders (not dine_in)
   const filteredOrders = orders.filter(
     order => order.order_type === 'takeaway' || order.order_type === 'delivery'
   );
+
+  // Detect status changes from KDS (kitchen)
+  useEffect(() => {
+    if (previousOrdersRef.current.length > 0) {
+      orders.forEach(order => {
+        const prevOrder = previousOrdersRef.current.find(o => o.id === order.id);
+        if (prevOrder && prevOrder.status !== order.status) {
+          // Check if this change was made externally (e.g., by KDS)
+          const changeKey = `${order.id}-${order.status}`;
+          if (!handledStatusChangesRef.current.has(changeKey)) {
+            if (order.status === 'ready' && prevOrder.status === 'preparing') {
+              toast.success(`✅ Pedido #${order.id.slice(-4).toUpperCase()} pronto na cozinha!`, { duration: 5000 });
+            } else if (order.status === 'preparing' && prevOrder.status === 'pending') {
+              toast.info(`🍳 Pedido #${order.id.slice(-4).toUpperCase()} em preparo`);
+            }
+          }
+        }
+      });
+    }
+    previousOrdersRef.current = [...orders];
+  }, [orders]);
 
   // Group orders by status
   const getOrdersByStatus = (status: KanbanColumn) => {
@@ -82,6 +105,7 @@ export default function OrderManagement() {
 
   const handleStatusChange = async (orderId: string, newStatus: KanbanColumn) => {
     try {
+      handledStatusChangesRef.current.add(`${orderId}-${newStatus}`);
       await updateOrder.mutateAsync({ id: orderId, status: newStatus });
       toast.success(`Pedido movido para ${columns.find(c => c.id === newStatus)?.title}`);
     } catch (error) {

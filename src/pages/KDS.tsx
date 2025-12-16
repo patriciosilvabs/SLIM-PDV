@@ -18,8 +18,10 @@ export default function KDS() {
   const queryClient = useQueryClient();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const { playNewOrderSound, settings } = useAudioNotification();
   const notifiedOrdersRef = useRef<Set<string>>(new Set());
+  const previousOrdersRef = useRef<Order[]>([]);
 
   // Filter active orders (pending, preparing, ready)
   const activeOrders = orders.filter(
@@ -29,6 +31,15 @@ export default function KDS() {
   const pendingOrders = activeOrders.filter(o => o.status === 'pending');
   const preparingOrders = activeOrders.filter(o => o.status === 'preparing');
   const readyOrders = activeOrders.filter(o => o.status === 'ready');
+
+  // Real-time clock for fullscreen mode
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isFullscreen]);
 
   // Setup realtime subscription
   useEffect(() => {
@@ -55,22 +66,46 @@ export default function KDS() {
     };
   }, [queryClient]);
 
-  // Sound notification for new orders
+  // Sound notification for new orders + visual sync notifications
   useEffect(() => {
-    if (!soundEnabled || !settings.enabled) return;
+    // Detect status changes from other screens
+    if (previousOrdersRef.current.length > 0) {
+      orders.forEach(order => {
+        const prevOrder = previousOrdersRef.current.find(o => o.id === order.id);
+        if (prevOrder && prevOrder.status !== order.status) {
+          const statusLabels: Record<string, string> = {
+            pending: 'Novo',
+            preparing: 'Em Preparo',
+            ready: 'Pronto',
+            delivered: 'Entregue'
+          };
+          // Only notify if we didn't trigger this change ourselves
+          if (!notifiedOrdersRef.current.has(`${order.id}-${order.status}`)) {
+            toast.info(`Pedido #${order.id.slice(-4).toUpperCase()} → ${statusLabels[order.status] || order.status}`);
+          }
+        }
+      });
+    }
 
+    // Sound + visual for new pending orders
     const newPendingOrders = orders.filter(
       o => o.status === 'pending' && !notifiedOrdersRef.current.has(o.id)
     );
 
     if (newPendingOrders.length > 0) {
-      playNewOrderSound();
+      if (soundEnabled && settings.enabled) {
+        playNewOrderSound();
+      }
+      toast.success(`🔔 ${newPendingOrders.length} novo(s) pedido(s)!`, { duration: 4000 });
       newPendingOrders.forEach(o => notifiedOrdersRef.current.add(o.id));
     }
+
+    previousOrdersRef.current = [...orders];
   }, [orders, soundEnabled, settings.enabled, playNewOrderSound]);
 
   const handleStartPreparation = async (orderId: string) => {
     try {
+      notifiedOrdersRef.current.add(`${orderId}-preparing`);
       await updateOrder.mutateAsync({ id: orderId, status: 'preparing' });
       toast.success('Preparo iniciado!');
     } catch (error) {
@@ -80,6 +115,7 @@ export default function KDS() {
 
   const handleMarkReady = async (orderId: string) => {
     try {
+      notifiedOrdersRef.current.add(`${orderId}-ready`);
       await updateOrder.mutateAsync({ id: orderId, status: 'ready' });
       toast.success('Pedido marcado como pronto!');
     } catch (error) {
@@ -241,6 +277,19 @@ export default function KDS() {
             </p>
           </div>
         </div>
+        
+        {/* Real-time clock (fullscreen only) */}
+        {isFullscreen && (
+          <div className="text-center">
+            <div className="text-3xl font-mono font-bold tracking-wider">
+              {currentTime.toLocaleTimeString('pt-BR')}
+            </div>
+            <div className="text-sm text-muted-foreground capitalize">
+              {currentTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' })}
+            </div>
+          </div>
+        )}
+        
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
