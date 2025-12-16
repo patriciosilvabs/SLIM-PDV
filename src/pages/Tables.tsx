@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useQueryClient } from '@tanstack/react-query';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,14 +13,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { useTables, useTableMutations, Table, TableStatus } from '@/hooks/useTables';
-import { useOrders, useOrderMutations } from '@/hooks/useOrders';
+import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { useReservations, useReservationMutations, Reservation } from '@/hooks/useReservations';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAudioNotification } from '@/hooks/useAudioNotification';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
 import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, addDays, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -53,11 +57,17 @@ const timeSlots = [
 
 export default function Tables() {
   const isMobile = useIsMobile();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { playOrderReadySound, settings: audioSettings } = useAudioNotification();
   const { data: tables, isLoading } = useTables();
   const { data: orders } = useOrders(['pending', 'preparing', 'ready']);
   const { createTable, updateTable } = useTableMutations();
   const { createOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
+  
+  // Refs for tracking order status changes
+  const previousOrdersRef = useRef<Order[]>([]);
+  const notifiedReadyOrdersRef = useRef<Set<string>>(new Set());
   
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const { data: reservations } = useReservations(selectedDate);
@@ -81,6 +91,68 @@ export default function Tables() {
     party_size: 2,
     notes: '',
   });
+
+  // Realtime subscription for orders
+  useEffect(() => {
+    const channel = supabase
+      .channel('tables-orders-ready')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders' },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['orders'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
+  // Detect when table orders change to "ready" and play sound
+  useEffect(() => {
+    if (!orders || previousOrdersRef.current.length === 0) {
+      previousOrdersRef.current = orders || [];
+      return;
+    }
+
+    orders.forEach(order => {
+      // Only table orders (dine_in)
+      if (order.order_type !== 'dine_in') return;
+      
+      const prevOrder = previousOrdersRef.current.find(o => o.id === order.id);
+      
+      // If order existed before and changed to "ready"
+      if (
+        prevOrder && 
+        prevOrder.status !== 'ready' && 
+        order.status === 'ready' &&
+        !notifiedReadyOrdersRef.current.has(order.id)
+      ) {
+        // Play alert sound
+        if (audioSettings.enabled) {
+          playOrderReadySound();
+        }
+        
+        // Show toast with table info
+        const table = tables?.find(t => t.id === order.table_id);
+        const tableNumber = table?.number || '?';
+        toast.success(
+          `🔔 Mesa ${tableNumber} - Pedido Pronto!`,
+          { 
+            description: 'A cozinha finalizou o preparo',
+            duration: 6000 
+          }
+        );
+        
+        // Mark as notified to avoid repetition
+        notifiedReadyOrdersRef.current.add(order.id);
+      }
+    });
+
+    previousOrdersRef.current = orders;
+  }, [orders, tables, playOrderReadySound, audioSettings.enabled]);
 
   const getTableOrder = (tableId: string) => {
     return orders?.find(o => o.table_id === tableId && o.status !== 'delivered' && o.status !== 'cancelled');
