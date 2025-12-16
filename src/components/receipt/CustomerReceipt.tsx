@@ -1,5 +1,7 @@
 import { Order } from '@/hooks/useOrders';
 import { Payment } from '@/hooks/useCashRegister';
+import { usePrinterOptional } from '@/contexts/PrinterContext';
+import { CustomerReceiptData } from '@/utils/escpos';
 
 interface CustomerReceiptProps {
   order: Order;
@@ -17,7 +19,59 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
-export function printCustomerReceipt({
+// Convert props to ESC/POS CustomerReceiptData
+function propsToReceiptData(props: CustomerReceiptProps): CustomerReceiptData {
+  const { order, payments, discount, serviceCharge, splitBill, tableNumber, restaurantName, restaurantAddress, restaurantPhone } = props;
+  const subtotal = order.subtotal || 0;
+  const total = order.total || 0;
+  const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+  const change = totalPaid - total;
+
+  return {
+    restaurantName: restaurantName || 'Restaurante',
+    restaurantAddress,
+    restaurantPhone,
+    orderNumber: order.id,
+    orderType: order.order_type || 'dine_in',
+    tableNumber: tableNumber || order.table?.number,
+    customerName: order.customer_name,
+    items: order.order_items?.map(item => ({
+      quantity: item.quantity,
+      productName: item.product?.name || 'Item',
+      variation: item.variation?.name,
+      extras: item.extras?.map(e => ({
+        name: e.extra_name.includes(':') ? e.extra_name.split(': ').slice(1).join(': ') : e.extra_name,
+        price: e.price,
+      })),
+      notes: item.notes,
+      totalPrice: item.total_price,
+    })) || [],
+    subtotal,
+    discount: discount?.amount ? {
+      type: discount.type,
+      value: discount.value,
+      amount: discount.amount,
+    } : undefined,
+    serviceCharge: serviceCharge?.enabled && serviceCharge.amount > 0 ? {
+      percent: serviceCharge.percent,
+      amount: serviceCharge.amount,
+    } : undefined,
+    total,
+    payments: payments.map(p => ({
+      method: p.payment_method,
+      amount: Number(p.amount),
+    })),
+    change: change > 0 ? change : undefined,
+    splitBill: splitBill?.enabled && splitBill.count > 1 ? {
+      count: splitBill.count,
+      amountPerPerson: splitBill.amountPerPerson,
+    } : undefined,
+    createdAt: order.created_at,
+  };
+}
+
+// Fallback to browser print
+function printWithBrowser({
   order,
   payments,
   discount,
@@ -275,4 +329,24 @@ export function printCustomerReceipt({
       printWindow.close();
     }, 250);
   }
+}
+
+// Print function with QZ Tray support
+export async function printCustomerReceipt(
+  props: CustomerReceiptProps,
+  printer?: ReturnType<typeof usePrinterOptional>
+) {
+  // Try QZ Tray first
+  if (printer?.canPrintToCashier) {
+    try {
+      const receiptData = propsToReceiptData(props);
+      const success = await printer.printCustomerReceipt(receiptData);
+      if (success) return;
+    } catch (err) {
+      console.error('QZ Tray print failed, falling back to browser:', err);
+    }
+  }
+  
+  // Fallback to browser print
+  printWithBrowser(props);
 }

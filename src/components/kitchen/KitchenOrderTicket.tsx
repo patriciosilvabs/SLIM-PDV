@@ -1,5 +1,7 @@
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { usePrinterOptional } from '@/contexts/PrinterContext';
+import { KitchenTicketData } from '@/utils/escpos';
 
 interface OrderItem {
   id: string;
@@ -20,7 +22,8 @@ interface KitchenOrderProps {
   createdAt: string;
 }
 
-export function printKitchenOrderTicket(props: KitchenOrderProps) {
+// Fallback to browser print
+function printWithBrowser(props: KitchenOrderProps) {
   const { orderNumber, orderType, tableNumber, customerName, items, notes, createdAt } = props;
   
   const orderTypeLabels = {
@@ -144,6 +147,44 @@ export function printKitchenOrderTicket(props: KitchenOrderProps) {
   printWindow.document.close();
 }
 
+// Convert props to ESC/POS data format
+function propsToTicketData(props: KitchenOrderProps): KitchenTicketData {
+  return {
+    orderNumber: props.orderNumber,
+    orderType: props.orderType,
+    tableNumber: props.tableNumber,
+    customerName: props.customerName,
+    items: props.items.map(item => ({
+      quantity: item.quantity,
+      productName: item.product?.name || 'Produto',
+      variation: item.variation?.name,
+      extras: item.extras?.map(e => e.extra_name.split(': ').slice(1).join(': ') || e.extra_name),
+      notes: item.notes,
+    })),
+    notes: props.notes,
+    createdAt: props.createdAt,
+  };
+}
+
+export async function printKitchenOrderTicket(
+  props: KitchenOrderProps, 
+  printer?: ReturnType<typeof usePrinterOptional>
+) {
+  // Try QZ Tray first
+  if (printer?.canPrintToKitchen) {
+    try {
+      const ticketData = propsToTicketData(props);
+      const success = await printer.printKitchenTicket(ticketData);
+      if (success) return;
+    } catch (err) {
+      console.error('QZ Tray print failed, falling back to browser:', err);
+    }
+  }
+  
+  // Fallback to browser print
+  printWithBrowser(props);
+}
+
 export function KitchenOrderTicketButton({ 
   orderNumber, 
   orderType, 
@@ -154,8 +195,10 @@ export function KitchenOrderTicketButton({
   createdAt,
   className
 }: KitchenOrderProps & { className?: string }) {
+  const printer = usePrinterOptional();
+  
   const handlePrint = () => {
-    printKitchenOrderTicket({ orderNumber, orderType, tableNumber, customerName, items, notes, createdAt });
+    printKitchenOrderTicket({ orderNumber, orderType, tableNumber, customerName, items, notes, createdAt }, printer);
   };
 
   return (

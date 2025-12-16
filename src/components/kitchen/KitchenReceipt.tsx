@@ -2,6 +2,8 @@ import { forwardRef } from 'react';
 import { Order } from '@/hooks/useOrders';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { usePrinterOptional } from '@/contexts/PrinterContext';
+import { KitchenTicketData } from '@/utils/escpos';
 
 interface KitchenReceiptProps {
   order: Order;
@@ -100,8 +102,27 @@ KitchenReceipt.displayName = 'KitchenReceipt';
 
 export default KitchenReceipt;
 
-// Print function
-export function printKitchenReceipt(order: Order, paperWidth: '58mm' | '80mm' = '80mm') {
+// Convert Order to ESC/POS KitchenTicketData
+function orderToTicketData(order: Order): KitchenTicketData {
+  return {
+    orderNumber: order.id,
+    orderType: order.order_type || 'dine_in',
+    tableNumber: order.table?.number,
+    customerName: order.customer_name,
+    items: order.order_items?.map(item => ({
+      quantity: item.quantity,
+      productName: item.product?.name || 'Produto',
+      variation: item.variation?.name,
+      extras: item.extras?.map(e => e.extra_name.split(': ').slice(1).join(': ') || e.extra_name),
+      notes: item.notes,
+    })) || [],
+    notes: order.notes,
+    createdAt: order.created_at,
+  };
+}
+
+// Fallback to browser print
+function printWithBrowser(order: Order, paperWidth: '58mm' | '80mm' = '80mm') {
   const width = paperWidth === '58mm' ? '48mm' : '72mm';
   
   const printContent = `
@@ -246,4 +267,25 @@ export function printKitchenReceipt(order: Order, paperWidth: '58mm' | '80mm' = 
       printWindow.close();
     }, 250);
   }
+}
+
+// Print function with QZ Tray support
+export async function printKitchenReceipt(
+  order: Order, 
+  paperWidth: '58mm' | '80mm' = '80mm',
+  printer?: ReturnType<typeof usePrinterOptional>
+) {
+  // Try QZ Tray first
+  if (printer?.canPrintToKitchen) {
+    try {
+      const ticketData = orderToTicketData(order);
+      const success = await printer.printKitchenTicket(ticketData);
+      if (success) return;
+    } catch (err) {
+      console.error('QZ Tray print failed, falling back to browser:', err);
+    }
+  }
+  
+  // Fallback to browser print
+  printWithBrowser(order, paperWidth);
 }
