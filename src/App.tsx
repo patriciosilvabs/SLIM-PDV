@@ -20,6 +20,7 @@ import Customers from "./pages/Customers";
 import OrderManagement from "./pages/OrderManagement";
 import KDS from "./pages/KDS";
 import ClosingHistory from "./pages/ClosingHistory";
+import Performance from "./pages/Performance";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -49,6 +50,7 @@ const App = () => (
               <Route path="/order-management" element={<OrderManagement />} />
               <Route path="/kds" element={<KDS />} />
               <Route path="/closing-history" element={<ClosingHistory />} />
+              <Route path="/performance" element={<Performance />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

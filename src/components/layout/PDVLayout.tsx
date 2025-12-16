@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
-import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Pizza, Store, Users, Kanban, ChefHat, History } from 'lucide-react';
+import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Pizza, Store, Users, Kanban, ChefHat, History, Target } from 'lucide-react';
 
 interface NavItem {
   name: string;
@@ -30,6 +30,7 @@ const navigation: NavItem[] = [
   { name: 'Caixa', href: '/cash-register', icon: CreditCard, roles: ['admin', 'cashier'] },
   { name: 'Relatórios', href: '/reports', icon: BarChart3, roles: ['admin', 'cashier'] },
   { name: 'Histórico', href: '/closing-history', icon: History, roles: ['admin', 'cashier'] },
+  { name: 'Desempenho', href: '/performance', icon: Target, roles: ['admin', 'cashier'] },
   { name: 'Configurações', href: '/settings', icon: Settings, roles: ['admin'] },
 ];
 
