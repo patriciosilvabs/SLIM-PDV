@@ -81,12 +81,15 @@ export default function Menu() {
   const { createGroup, updateGroup, deleteGroup } = useComplementGroupsMutations();
   const { createOption, updateOption, deleteOption } = useComplementOptionsMutations();
   const { setGroupOptions } = useComplementGroupOptionsMutations();
-  const { setProductGroups } = useProductComplementGroupsMutations();
+  const { setProductGroups, setGroupsForProduct } = useProductComplementGroupsMutations();
   
   const [mainTab, setMainTab] = useState('products');
   const [search, setSearch] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [isCategorySortMode, setIsCategorySortMode] = useState(false);
+  
+  // Group counts state
+  const [groupCounts, setGroupCounts] = useState<Record<string, { options: number, products: number }>>({});
   
   // Product dialog state
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
@@ -98,6 +101,7 @@ export default function Menu() {
     label: 'none', internal_code: '', pdv_code: '', image_url: null
   });
   const [productLinkedExtras, setProductLinkedExtras] = useState<string[]>([]);
+  const [productLinkedGroupIds, setProductLinkedGroupIds] = useState<string[]>([]);
 
   // Category dialog state
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
@@ -125,6 +129,30 @@ export default function Menu() {
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+
+  // Fetch group counts
+  useEffect(() => {
+    const fetchCounts = async () => {
+      const [optionsResult, productsResult] = await Promise.all([
+        supabase.from('complement_group_options').select('group_id'),
+        supabase.from('product_complement_groups').select('group_id')
+      ]);
+      
+      const counts: Record<string, { options: number, products: number }> = {};
+      optionsResult.data?.forEach(o => {
+        counts[o.group_id] = counts[o.group_id] || { options: 0, products: 0 };
+        counts[o.group_id].options++;
+      });
+      productsResult.data?.forEach(p => {
+        counts[p.group_id] = counts[p.group_id] || { options: 0, products: 0 };
+        counts[p.group_id].products++;
+      });
+      setGroupCounts(counts);
+    };
+    if (complementGroups?.length) {
+      fetchCounts();
+    }
+  }, [complementGroups]);
 
   // Filter products by category and search
   const filteredProducts = products?.filter(p => {
@@ -170,11 +198,19 @@ export default function Menu() {
       sort_order: editingProduct?.sort_order ?? (products?.length ?? 0)
     };
 
+    let productId = editingProduct?.id;
     if (editingProduct) {
       await updateProduct.mutateAsync({ id: editingProduct.id, ...productData });
     } else {
-      await createProduct.mutateAsync(productData);
+      const result = await createProduct.mutateAsync(productData);
+      productId = result.id;
     }
+    
+    // Save linked groups
+    if (productId) {
+      await setGroupsForProduct.mutateAsync({ productId, groupIds: productLinkedGroupIds });
+    }
+    
     closeProductDialog();
   };
 
@@ -199,8 +235,7 @@ export default function Menu() {
 
   const handleSaveComplementGroup = async (
     groupData: Partial<ComplementGroup>, 
-    optionIds: string[], 
-    productIds: string[]
+    optionIds: string[]
   ) => {
     let groupId = editingGroup?.id;
     if (editingGroup) {
@@ -211,7 +246,6 @@ export default function Menu() {
     }
     if (groupId) {
       await setGroupOptions.mutateAsync({ groupId, optionIds });
-      await setProductGroups.mutateAsync({ groupId, productIds });
     }
     setIsGroupDialogOpen(false);
     setEditingGroup(null);
@@ -274,9 +308,10 @@ export default function Menu() {
       label: 'none', internal_code: '', pdv_code: '', image_url: null
     });
     setProductLinkedExtras([]);
+    setProductLinkedGroupIds([]);
   };
 
-  const openEditProduct = (product: any) => {
+  const openEditProduct = async (product: any) => {
     setEditingProduct(product);
     setProductForm({
       name: product.name,
@@ -293,6 +328,13 @@ export default function Menu() {
       pdv_code: product.pdv_code || '',
       image_url: product.image_url
     });
+    // Load linked groups
+    const { data: linkedGroups } = await supabase
+      .from('product_complement_groups')
+      .select('group_id')
+      .eq('product_id', product.id)
+      .order('sort_order');
+    setProductLinkedGroupIds(linkedGroups?.map(g => g.group_id) || []);
     setProductDialogTab('info');
     setIsProductDialogOpen(true);
   };
@@ -327,13 +369,11 @@ export default function Menu() {
   };
 
   const getGroupOptionCount = (groupId: string) => {
-    // This would require fetching from complement_group_options
-    return 0; // Placeholder - will be updated with actual data
+    return groupCounts[groupId]?.options || 0;
   };
 
   const getGroupProductCount = (groupId: string) => {
-    // This would require fetching from product_complement_groups
-    return 0; // Placeholder - will be updated with actual data
+    return groupCounts[groupId]?.products || 0;
   };
 
   const getOptionGroupCount = (optionId: string) => {
@@ -956,10 +996,52 @@ export default function Menu() {
 
               {/* Complements Tab */}
               <TabsContent value="complements" className="space-y-4 pt-4">
-                <div className="text-center py-8 text-muted-foreground">
-                  <Link2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Os complementos são gerenciados na aba "COMPLEMENTOS".</p>
-                  <p className="text-sm">Você pode vincular complementos específicos a este produto por lá.</p>
+                <div className="space-y-3">
+                  <Label className="text-base font-semibold">Grupos de Complementos</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Selecione os grupos de complementos disponíveis para este produto
+                  </p>
+                  <ScrollArea className="h-64 border rounded-lg p-3">
+                    <div className="space-y-2">
+                      {complementGroups?.map((group) => (
+                        <div
+                          key={group.id}
+                          className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent/50 cursor-pointer"
+                          onClick={() => {
+                            setProductLinkedGroupIds(prev => 
+                              prev.includes(group.id) 
+                                ? prev.filter(id => id !== group.id)
+                                : [...prev, group.id]
+                            );
+                          }}
+                        >
+                          <Checkbox checked={productLinkedGroupIds.includes(group.id)} />
+                          <div className="flex-1">
+                            <p className="font-medium">{group.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {group.selection_type === 'single' ? 'Apenas uma' : 
+                               group.selection_type === 'multiple' ? 'Múltiplas' : 'Com repetição'}
+                              {group.is_required && ' • Obrigatório'}
+                              {' • '}{getGroupOptionCount(group.id)} opção(ões)
+                            </p>
+                          </div>
+                          <Badge variant={group.is_active ? 'default' : 'secondary'}>
+                            {group.is_active ? 'Ativo' : 'Inativo'}
+                          </Badge>
+                        </div>
+                      ))}
+                      {!complementGroups?.length && (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          Nenhum grupo de complemento cadastrado. Crie grupos na aba "COMPLEMENTOS".
+                        </p>
+                      )}
+                    </div>
+                  </ScrollArea>
+                  {productLinkedGroupIds.length > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      {productLinkedGroupIds.length} grupo(s) selecionado(s)
+                    </p>
+                  )}
                 </div>
               </TabsContent>
 
@@ -1020,9 +1102,7 @@ export default function Menu() {
           onOpenChange={setIsGroupDialogOpen}
           group={editingGroup}
           options={complementOptions || []}
-          products={products || []}
           linkedOptionIds={groupLinkedOptionIds}
-          linkedProductIds={groupLinkedProductIds}
           onSave={handleSaveComplementGroup}
           isEditing={!!editingGroup}
         />
