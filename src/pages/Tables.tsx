@@ -23,7 +23,8 @@ import { useIdleTableSettings } from '@/hooks/useIdleTableSettings';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
-import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus, ArrowRightLeft, Edit, XCircle } from 'lucide-react';
+import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus, ArrowRightLeft, Edit, XCircle, Printer } from 'lucide-react';
+import { printKitchenOrderTicket } from '@/components/kitchen/KitchenOrderTicket';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
@@ -432,6 +433,14 @@ export default function Tables() {
     
     const order = getTableOrder(selectedTable.id);
     if (!order) return;
+
+    // BUG FIX: If order is ready or delivered, reset to initial status for KDS
+    if (order.status === 'ready' || order.status === 'delivered') {
+      await updateOrder.mutateAsync({
+        id: order.id,
+        status: getInitialOrderStatus()
+      });
+    }
 
     for (const item of items) {
       const orderItem = await addOrderItem.mutateAsync({
@@ -1040,6 +1049,34 @@ export default function Tables() {
                                 <Plus className="h-4 w-4 mr-2" />
                                 Adicionar Pedido
                               </Button>
+                              {selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
+                                <Button 
+                                  variant="outline" 
+                                  className="w-full"
+                                  onClick={() => {
+                                    if (!selectedOrder || !selectedTable) return;
+                                    printKitchenOrderTicket({
+                                      orderNumber: selectedOrder.id,
+                                      orderType: 'dine_in',
+                                      tableNumber: selectedTable.number,
+                                      customerName: selectedOrder.customer_name,
+                                      items: selectedOrder.order_items?.map((item: any) => ({
+                                        id: item.id,
+                                        quantity: item.quantity,
+                                        notes: item.notes,
+                                        product: item.product,
+                                        variation: item.variation,
+                                        extras: item.extras,
+                                      })) || [],
+                                      notes: selectedOrder.notes,
+                                      createdAt: selectedOrder.created_at || new Date().toISOString(),
+                                    });
+                                  }}
+                                >
+                                  <Printer className="h-4 w-4 mr-2" />
+                                  Imprimir Comanda
+                                </Button>
+                              )}
                               <Button 
                                 variant="outline" 
                                 className="w-full"
