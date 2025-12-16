@@ -6,6 +6,7 @@ export interface ProductExtra {
   id: string;
   name: string;
   price: number;
+  description: string | null;
   is_active: boolean | null;
   created_at: string | null;
 }
@@ -29,7 +30,7 @@ export function useProductExtrasMutations() {
   const queryClient = useQueryClient();
 
   const createExtra = useMutation({
-    mutationFn: async (extra: { name: string; price: number; is_active?: boolean }) => {
+    mutationFn: async (extra: { name: string; price: number; description?: string; is_active?: boolean }) => {
       const { data, error } = await supabase
         .from('product_extras')
         .insert(extra)
@@ -49,7 +50,7 @@ export function useProductExtrasMutations() {
   });
 
   const updateExtra = useMutation({
-    mutationFn: async ({ id, ...extra }: { id: string; name?: string; price?: number; is_active?: boolean }) => {
+    mutationFn: async ({ id, ...extra }: { id: string; name?: string; price?: number; description?: string; is_active?: boolean }) => {
       const { data, error } = await supabase
         .from('product_extras')
         .update(extra)

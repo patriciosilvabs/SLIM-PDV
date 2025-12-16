@@ -6,6 +6,7 @@ export interface ProductVariation {
   id: string;
   product_id: string;
   name: string;
+  description: string | null;
   price_modifier: number | null;
   is_active: boolean | null;
 }
@@ -34,7 +35,7 @@ export function useProductVariationsMutations() {
   const queryClient = useQueryClient();
 
   const createVariation = useMutation({
-    mutationFn: async (variation: { product_id: string; name: string; price_modifier?: number; is_active?: boolean }) => {
+    mutationFn: async (variation: { product_id: string; name: string; description?: string; price_modifier?: number; is_active?: boolean }) => {
       const { data, error } = await supabase
         .from('product_variations')
         .insert(variation)
@@ -54,7 +55,7 @@ export function useProductVariationsMutations() {
   });
 
   const updateVariation = useMutation({
-    mutationFn: async ({ id, ...variation }: { id: string; name?: string; price_modifier?: number; is_active?: boolean }) => {
+    mutationFn: async ({ id, ...variation }: { id: string; name?: string; description?: string; price_modifier?: number; is_active?: boolean }) => {
       const { data, error } = await supabase
         .from('product_variations')
         .update(variation)

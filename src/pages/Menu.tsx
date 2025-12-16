@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,11 +7,14 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import { useProducts, useProductMutations } from '@/hooks/useProducts';
 import { useCategories, useCategoryMutations } from '@/hooks/useCategories';
 import { useProductExtras, useProductExtrasMutations } from '@/hooks/useProductExtras';
 import { useProductVariations, useProductVariationsMutations } from '@/hooks/useProductVariations';
-import { Plus, Edit, Trash2, Search } from 'lucide-react';
+import { useProductExtraLinks, useProductExtraLinksMutations } from '@/hooks/useProductExtraLinks';
+import { Plus, Edit, Trash2, Search, Link2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 function formatCurrency(value: number) {
@@ -27,6 +30,8 @@ export default function Menu() {
   const { createCategory } = useCategoryMutations();
   const { createExtra, updateExtra, deleteExtra } = useProductExtrasMutations();
   const { createVariation, updateVariation, deleteVariation } = useProductVariationsMutations();
+  const { data: extraLinks } = useProductExtraLinks();
+  const { setLinkedProducts } = useProductExtraLinksMutations();
   
   const [search, setSearch] = useState('');
   
@@ -42,12 +47,13 @@ export default function Menu() {
   // Extras dialog state
   const [isExtrasDialogOpen, setIsExtrasDialogOpen] = useState(false);
   const [editingExtra, setEditingExtra] = useState<any>(null);
-  const [extraForm, setExtraForm] = useState({ name: '', price: 0, is_active: true });
+  const [extraForm, setExtraForm] = useState({ name: '', description: '', price: 0, is_active: true });
+  const [linkedProductIds, setLinkedProductIds] = useState<string[]>([]);
 
   // Variations dialog state
   const [isVariationsDialogOpen, setIsVariationsDialogOpen] = useState(false);
   const [editingVariation, setEditingVariation] = useState<any>(null);
-  const [variationForm, setVariationForm] = useState({ product_id: '', name: '', price_modifier: 0, is_active: true });
+  const [variationForm, setVariationForm] = useState({ product_id: '', name: '', description: '', price_modifier: 0, is_active: true });
 
   const filteredProducts = products?.filter(p => 
     p.name.toLowerCase().includes(search.toLowerCase())
@@ -81,23 +87,36 @@ export default function Menu() {
   };
 
   const handleSaveExtra = async () => {
+    let extraId = editingExtra?.id;
     if (editingExtra) {
       await updateExtra.mutateAsync({ id: editingExtra.id, ...extraForm });
     } else {
-      await createExtra.mutateAsync(extraForm);
+      const result = await createExtra.mutateAsync(extraForm);
+      extraId = result.id;
+    }
+    // Save linked products
+    if (extraId) {
+      await setLinkedProducts.mutateAsync({ extraId, productIds: linkedProductIds });
     }
     setEditingExtra(null);
-    setExtraForm({ name: '', price: 0, is_active: true });
+    setExtraForm({ name: '', description: '', price: 0, is_active: true });
+    setLinkedProductIds([]);
   };
 
   const handleSaveVariation = async () => {
     if (editingVariation) {
-      await updateVariation.mutateAsync({ id: editingVariation.id, name: variationForm.name, price_modifier: variationForm.price_modifier, is_active: variationForm.is_active });
+      await updateVariation.mutateAsync({ 
+        id: editingVariation.id, 
+        name: variationForm.name, 
+        description: variationForm.description,
+        price_modifier: variationForm.price_modifier, 
+        is_active: variationForm.is_active 
+      });
     } else {
       await createVariation.mutateAsync(variationForm);
     }
     setEditingVariation(null);
-    setVariationForm({ product_id: '', name: '', price_modifier: 0, is_active: true });
+    setVariationForm({ product_id: '', name: '', description: '', price_modifier: 0, is_active: true });
   };
 
   const openEditProduct = (product: any) => {
@@ -114,7 +133,10 @@ export default function Menu() {
 
   const openEditExtra = (extra: any) => {
     setEditingExtra(extra);
-    setExtraForm({ name: extra.name, price: extra.price, is_active: extra.is_active ?? true });
+    setExtraForm({ name: extra.name, description: extra.description || '', price: extra.price, is_active: extra.is_active ?? true });
+    // Load linked products for this extra
+    const linkedIds = extraLinks?.filter(link => link.extra_id === extra.id).map(link => link.product_id) || [];
+    setLinkedProductIds(linkedIds);
   };
 
   const openEditVariation = (variation: any) => {
@@ -122,9 +144,22 @@ export default function Menu() {
     setVariationForm({
       product_id: variation.product_id,
       name: variation.name,
+      description: variation.description || '',
       price_modifier: variation.price_modifier ?? 0,
       is_active: variation.is_active ?? true
     });
+  };
+
+  const getLinkedProductCount = (extraId: string) => {
+    return extraLinks?.filter(link => link.extra_id === extraId).length || 0;
+  };
+
+  const toggleLinkedProduct = (productId: string) => {
+    setLinkedProductIds(prev => 
+      prev.includes(productId) 
+        ? prev.filter(id => id !== productId)
+        : [...prev, productId]
+    );
   };
 
   return (
@@ -154,14 +189,14 @@ export default function Menu() {
             </Dialog>
 
             {/* Extras Dialog */}
-            <Dialog open={isExtrasDialogOpen} onOpenChange={(open) => { setIsExtrasDialogOpen(open); if (!open) { setEditingExtra(null); setExtraForm({ name: '', price: 0, is_active: true }); } }}>
+            <Dialog open={isExtrasDialogOpen} onOpenChange={(open) => { setIsExtrasDialogOpen(open); if (!open) { setEditingExtra(null); setExtraForm({ name: '', description: '', price: 0, is_active: true }); setLinkedProductIds([]); } }}>
               <DialogTrigger asChild>
                 <Button variant="outline"><Plus className="h-4 w-4 mr-2" />Complemento</Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader><DialogTitle>Gerenciar Complementos</DialogTitle></DialogHeader>
                 <div className="space-y-4 pt-4">
-                  <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-end">
+                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-end">
                     <div className="space-y-1">
                       <Label>Nome</Label>
                       <Input placeholder="Ex: Bacon extra" value={extraForm.name} onChange={(e) => setExtraForm({...extraForm, name: e.target.value})} />
@@ -174,15 +209,50 @@ export default function Menu() {
                       <Switch checked={extraForm.is_active} onCheckedChange={(checked) => setExtraForm({...extraForm, is_active: checked})} />
                       <Label className="text-xs">Ativo</Label>
                     </div>
-                    <Button onClick={handleSaveExtra}>{editingExtra ? 'Atualizar' : 'Adicionar'}</Button>
                   </div>
+                  
+                  <div className="space-y-1">
+                    <Label>Descrição</Label>
+                    <Textarea 
+                      placeholder="Ex: Fatias crocantes de bacon defumado" 
+                      value={extraForm.description} 
+                      onChange={(e) => setExtraForm({...extraForm, description: e.target.value})}
+                      className="resize-none"
+                      rows={2}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Link2 className="h-4 w-4" />
+                      Produtos vinculados
+                      <span className="text-xs text-muted-foreground font-normal">(deixe vazio = disponível para todos)</span>
+                    </Label>
+                    <div className="border rounded-lg p-3 max-h-32 overflow-y-auto grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {products?.map(product => (
+                        <div key={product.id} className="flex items-center gap-2">
+                          <Checkbox 
+                            id={`link-${product.id}`}
+                            checked={linkedProductIds.includes(product.id)}
+                            onCheckedChange={() => toggleLinkedProduct(product.id)}
+                          />
+                          <Label htmlFor={`link-${product.id}`} className="text-sm cursor-pointer">{product.name}</Label>
+                        </div>
+                      ))}
+                      {!products?.length && <p className="text-muted-foreground text-sm col-span-3">Nenhum produto cadastrado</p>}
+                    </div>
+                  </div>
+
+                  <Button onClick={handleSaveExtra} className="w-full">{editingExtra ? 'Atualizar' : 'Adicionar'}</Button>
                   
                   <div className="border rounded-lg max-h-64 overflow-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Nome</TableHead>
+                          <TableHead>Descrição</TableHead>
                           <TableHead>Preço</TableHead>
+                          <TableHead>Vínculos</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead className="w-20">Ações</TableHead>
                         </TableRow>
@@ -190,8 +260,16 @@ export default function Menu() {
                       <TableBody>
                         {extras?.map((extra) => (
                           <TableRow key={extra.id}>
-                            <TableCell>{extra.name}</TableCell>
+                            <TableCell className="font-medium">{extra.name}</TableCell>
+                            <TableCell className="text-muted-foreground max-w-[150px] truncate">{extra.description || '-'}</TableCell>
                             <TableCell>{formatCurrency(extra.price)}</TableCell>
+                            <TableCell>
+                              {getLinkedProductCount(extra.id) > 0 ? (
+                                <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">{getLinkedProductCount(extra.id)} produto(s)</span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">Todos</span>
+                              )}
+                            </TableCell>
                             <TableCell>
                               <span className={`px-2 py-1 rounded text-xs ${extra.is_active ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
                                 {extra.is_active ? 'Ativo' : 'Inativo'}
@@ -206,7 +284,7 @@ export default function Menu() {
                           </TableRow>
                         ))}
                         {!extras?.length && (
-                          <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">Nenhum complemento cadastrado</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum complemento cadastrado</TableCell></TableRow>
                         )}
                       </TableBody>
                     </Table>
@@ -216,14 +294,14 @@ export default function Menu() {
             </Dialog>
 
             {/* Variations Dialog */}
-            <Dialog open={isVariationsDialogOpen} onOpenChange={(open) => { setIsVariationsDialogOpen(open); if (!open) { setEditingVariation(null); setVariationForm({ product_id: '', name: '', price_modifier: 0, is_active: true }); } }}>
+            <Dialog open={isVariationsDialogOpen} onOpenChange={(open) => { setIsVariationsDialogOpen(open); if (!open) { setEditingVariation(null); setVariationForm({ product_id: '', name: '', description: '', price_modifier: 0, is_active: true }); } }}>
               <DialogTrigger asChild>
                 <Button variant="outline"><Plus className="h-4 w-4 mr-2" />Opções</Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader><DialogTitle>Gerenciar Opções (Variações)</DialogTitle></DialogHeader>
                 <div className="space-y-4 pt-4">
-                  <div className="grid grid-cols-[1fr_1fr_auto_auto_auto] gap-2 items-end">
+                  <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
                     <div className="space-y-1">
                       <Label>Produto</Label>
                       <Select value={variationForm.product_id} onValueChange={(v) => setVariationForm({...variationForm, product_id: v})}>
@@ -237,16 +315,30 @@ export default function Menu() {
                       <Label>Nome da opção</Label>
                       <Input placeholder="Ex: Grande, Média" value={variationForm.name} onChange={(e) => setVariationForm({...variationForm, name: e.target.value})} />
                     </div>
-                    <div className="space-y-1">
-                      <Label>+/- Preço</Label>
-                      <Input type="number" step="0.01" className="w-24" value={variationForm.price_modifier} onChange={(e) => setVariationForm({...variationForm, price_modifier: parseFloat(e.target.value) || 0})} />
+                    <div className="flex items-center gap-3 pb-1">
+                      <div className="space-y-1">
+                        <Label>+/- Preço</Label>
+                        <Input type="number" step="0.01" className="w-24" value={variationForm.price_modifier} onChange={(e) => setVariationForm({...variationForm, price_modifier: parseFloat(e.target.value) || 0})} />
+                      </div>
+                      <div className="flex items-center gap-2 mt-5">
+                        <Switch checked={variationForm.is_active} onCheckedChange={(checked) => setVariationForm({...variationForm, is_active: checked})} />
+                        <Label className="text-xs">Ativo</Label>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 pb-1">
-                      <Switch checked={variationForm.is_active} onCheckedChange={(checked) => setVariationForm({...variationForm, is_active: checked})} />
-                      <Label className="text-xs">Ativo</Label>
-                    </div>
-                    <Button onClick={handleSaveVariation} disabled={!variationForm.product_id}>{editingVariation ? 'Atualizar' : 'Adicionar'}</Button>
                   </div>
+                  
+                  <div className="space-y-1">
+                    <Label>Descrição</Label>
+                    <Textarea 
+                      placeholder="Ex: Tamanho grande, ideal para 3-4 pessoas" 
+                      value={variationForm.description} 
+                      onChange={(e) => setVariationForm({...variationForm, description: e.target.value})}
+                      className="resize-none"
+                      rows={2}
+                    />
+                  </div>
+
+                  <Button onClick={handleSaveVariation} disabled={!variationForm.product_id} className="w-full">{editingVariation ? 'Atualizar' : 'Adicionar'}</Button>
                   
                   <div className="border rounded-lg max-h-64 overflow-auto">
                     <Table>
@@ -254,6 +346,7 @@ export default function Menu() {
                         <TableRow>
                           <TableHead>Produto</TableHead>
                           <TableHead>Opção</TableHead>
+                          <TableHead>Descrição</TableHead>
                           <TableHead>Modificador</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead className="w-20">Ações</TableHead>
@@ -263,7 +356,8 @@ export default function Menu() {
                         {variations?.map((variation) => (
                           <TableRow key={variation.id}>
                             <TableCell>{products?.find(p => p.id === variation.product_id)?.name || '-'}</TableCell>
-                            <TableCell>{variation.name}</TableCell>
+                            <TableCell className="font-medium">{variation.name}</TableCell>
+                            <TableCell className="text-muted-foreground max-w-[150px] truncate">{variation.description || '-'}</TableCell>
                             <TableCell>{formatCurrency(variation.price_modifier ?? 0)}</TableCell>
                             <TableCell>
                               <span className={`px-2 py-1 rounded text-xs ${variation.is_active ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}>
@@ -279,7 +373,7 @@ export default function Menu() {
                           </TableRow>
                         ))}
                         {!variations?.length && (
-                          <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">Nenhuma opção cadastrada</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhuma opção cadastrada</TableCell></TableRow>
                         )}
                       </TableBody>
                     </Table>
