@@ -7,18 +7,24 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Switch } from '@/components/ui/switch';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 import { useProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
 import { useCombos } from '@/hooks/useCombos';
 import { useComboItems } from '@/hooks/useComboItems';
 import { useProductVariations } from '@/hooks/useProductVariations';
-import { useOrderMutations } from '@/hooks/useOrders';
+import { useOrderMutations, Order } from '@/hooks/useOrders';
 import { useToast } from '@/hooks/use-toast';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { useSearchCustomers, useCustomerMutations, Customer } from '@/hooks/useCustomers';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useOpenCashRegister, useCashRegisterMutations, PaymentMethod } from '@/hooks/useCashRegister';
 import { ProductDetailDialog, SelectedComplement } from '@/components/order/ProductDetailDialog';
+import { printCustomerReceipt } from '@/components/receipt/CustomerReceipt';
 import { 
   Package, 
   ShoppingCart, 
@@ -38,7 +44,14 @@ import {
   User,
   MapPin,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Tag,
+  Percent,
+  UserPlus,
+  Banknote,
+  CreditCard,
+  QrCode,
+  Printer
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -88,6 +101,8 @@ export default function Counter() {
   const { duplicateItems } = useOrderSettings();
   const { getInitialOrderStatus } = useKdsSettings();
   const { findOrCreateCustomer, updateCustomerStats } = useCustomerMutations();
+  const { data: openCashRegister } = useOpenCashRegister();
+  const { createPayment } = useCashRegisterMutations();
   const isMobile = useIsMobile();
 
   const [orderType, setOrderType] = useState<OrderType>('takeaway');
@@ -113,6 +128,17 @@ export default function Counter() {
   const customerSearchRef = useRef<HTMLDivElement>(null);
 
   const { data: searchedCustomers } = useSearchCustomers(customerSearch);
+  
+  // Payment modal state
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('cash');
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('percentage');
+  const [discountValue, setDiscountValue] = useState(0);
+  const [serviceChargeEnabled, setServiceChargeEnabled] = useState(false);
+  const [serviceChargePercent, setServiceChargePercent] = useState(10);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
   
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -183,6 +209,25 @@ export default function Counter() {
   }, [activeCombos, searchQuery]);
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.total_price, 0);
+
+  // Payment calculations
+  const discountAmount = useMemo(() => {
+    if (discountValue <= 0) return 0;
+    return discountType === 'percentage' 
+      ? (subtotal * discountValue / 100)
+      : discountValue;
+  }, [subtotal, discountType, discountValue]);
+
+  const afterDiscount = Math.max(0, subtotal - discountAmount);
+  
+  const serviceAmount = serviceChargeEnabled 
+    ? (afterDiscount * serviceChargePercent / 100)
+    : 0;
+
+  const finalTotal = afterDiscount + serviceAmount;
+
+  const paymentAmountNum = parseFloat(paymentAmount) || 0;
+  const changeAmount = Math.max(0, paymentAmountNum - finalTotal);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -342,13 +387,33 @@ export default function Counter() {
     setNotes('');
   };
 
-  const handleCreateOrder = async () => {
+  const resetPaymentModal = () => {
+    setPaymentModalOpen(false);
+    setSelectedPaymentMethod('cash');
+    setPaymentAmount('');
+    setDiscountType('percentage');
+    setDiscountValue(0);
+    setServiceChargeEnabled(false);
+    setServiceChargePercent(10);
+    setCreatedOrder(null);
+  };
+
+  const handleOpenPaymentModal = () => {
     if (orderItems.length === 0) {
       toast({ title: 'Adicione itens ao pedido', variant: 'destructive' });
       return;
     }
+    setPaymentAmount(finalTotal.toFixed(2));
+    setPaymentModalOpen(true);
+  };
 
-    setIsCreatingOrder(true);
+  const handleConfirmPayment = async (printReceipt: boolean = false) => {
+    if (paymentAmountNum < finalTotal) {
+      toast({ title: 'Valor insuficiente', variant: 'destructive' });
+      return;
+    }
+
+    setIsProcessingPayment(true);
     try {
       // Find or create customer if phone is provided
       let customerId: string | null = null;
@@ -361,11 +426,11 @@ export default function Counter() {
           });
           customerId = customer?.id || null;
         } catch (e) {
-          // Continue without customer if creation fails
           console.error('Failed to create/find customer:', e);
         }
       }
 
+      // Create order with final values
       const order = await createOrder.mutateAsync({
         order_type: orderType,
         customer_name: customerName || null,
@@ -373,10 +438,12 @@ export default function Counter() {
         customer_address: orderType === 'delivery' ? customerAddress || null : null,
         notes: notes || null,
         subtotal: subtotal,
-        total: subtotal,
-        status: getInitialOrderStatus(),
+        discount: discountAmount,
+        total: finalTotal,
+        status: 'delivered', // Order is paid immediately
       });
 
+      // Add order items
       for (const item of orderItems) {
         const orderItem = await addOrderItem.mutateAsync({
           order_id: order.id,
@@ -386,10 +453,9 @@ export default function Counter() {
           unit_price: item.unit_price,
           total_price: item.total_price,
           notes: item.notes || null,
-          status: getInitialOrderStatus(),
+          status: 'delivered',
         });
 
-        // Save complements/extras if present
         if (item.complements && item.complements.length > 0) {
           const extras = item.complements.map(c => ({
             order_item_id: orderItem.id,
@@ -401,23 +467,77 @@ export default function Counter() {
         }
       }
 
+      // Create payment
+      await createPayment.mutateAsync({
+        order_id: order.id,
+        payment_method: selectedPaymentMethod,
+        amount: finalTotal,
+        cash_register_id: openCashRegister?.id || null,
+      });
+
       // Update customer stats
       if (customerId) {
         try {
-          await updateCustomerStats.mutateAsync({ customerId, orderTotal: subtotal });
+          await updateCustomerStats.mutateAsync({ customerId, orderTotal: finalTotal });
         } catch (e) {
           console.error('Failed to update customer stats:', e);
         }
       }
 
-      toast({ title: 'Pedido criado com sucesso!' });
+      // Print receipt if requested
+      if (printReceipt) {
+        printCustomerReceipt({
+          order: {
+            ...order,
+            order_items: orderItems.map(item => ({
+              id: item.id,
+              order_id: order.id,
+              product_id: item.product_id,
+              quantity: item.quantity,
+              unit_price: item.unit_price,
+              total_price: item.total_price,
+              notes: item.notes || null,
+              product: { name: item.product_name },
+              variation: item.variation_name ? { name: item.variation_name } : undefined,
+              extras: item.complements?.map(c => ({
+                id: '',
+                order_item_id: item.id,
+                extra_name: `${c.group_name}: ${c.option_name}`,
+                price: c.price * c.quantity,
+                extra_id: null,
+              })) || [],
+            })) as any,
+          },
+          payments: [{
+            id: '',
+            order_id: order.id,
+            payment_method: selectedPaymentMethod,
+            amount: finalTotal,
+            cash_register_id: openCashRegister?.id || null,
+            received_by: null,
+            created_at: new Date().toISOString(),
+          }],
+          discount: discountAmount > 0 ? { type: discountType, value: discountValue, amount: discountAmount } : undefined,
+          serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
+        });
+      }
+
+      toast({ 
+        title: 'Pagamento registrado!', 
+        description: changeAmount > 0 ? `Troco: ${formatCurrency(changeAmount)}` : undefined 
+      });
+      
       clearOrder();
+      resetPaymentModal();
     } catch (error: any) {
-      toast({ title: 'Erro ao criar pedido', description: error.message, variant: 'destructive' });
+      toast({ title: 'Erro ao processar pagamento', description: error.message, variant: 'destructive' });
     } finally {
-      setIsCreatingOrder(false);
+      setIsProcessingPayment(false);
     }
   };
+
+  // Legacy function for backwards compatibility (now opens payment modal)
+  const handleCreateOrder = handleOpenPaymentModal;
 
   const getProductVariations = (productId: string) => {
     return variations?.filter(v => v.product_id === productId && v.is_active !== false) || [];
@@ -962,6 +1082,146 @@ export default function Counter() {
         duplicateItems={duplicateItems}
         channel={orderType === 'delivery' ? 'delivery' : 'counter'}
       />
+
+      {/* Payment Modal */}
+      <Dialog open={paymentModalOpen} onOpenChange={setPaymentModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pagamento</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Financial Summary */}
+            <div className="space-y-2 p-3 bg-muted/50 rounded-lg">
+              <div className="flex justify-between text-sm">
+                <span>Subtotal</span>
+                <span>{formatCurrency(subtotal)}</span>
+              </div>
+              
+              {/* Discount */}
+              <div className="space-y-2 pt-2 border-t">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm flex items-center gap-2">
+                    <Tag className="h-4 w-4" />
+                    Desconto
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <RadioGroup 
+                      value={discountType} 
+                      onValueChange={(v) => setDiscountType(v as 'percentage' | 'fixed')}
+                      className="flex gap-2"
+                    >
+                      <div className="flex items-center gap-1">
+                        <RadioGroupItem value="percentage" id="pct" className="h-3 w-3" />
+                        <Label htmlFor="pct" className="text-xs">%</Label>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <RadioGroupItem value="fixed" id="fix" className="h-3 w-3" />
+                        <Label htmlFor="fix" className="text-xs">R$</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+                </div>
+                <Input
+                  type="number"
+                  placeholder={discountType === 'percentage' ? '0%' : 'R$ 0,00'}
+                  value={discountValue || ''}
+                  onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+                  className="h-8"
+                />
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-sm text-destructive">
+                    <span>Desconto aplicado</span>
+                    <span>-{formatCurrency(discountAmount)}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Service Charge */}
+              <div className="flex items-center justify-between pt-2 border-t">
+                <span className="text-sm flex items-center gap-2">
+                  <Percent className="h-4 w-4" />
+                  Taxa de serviço ({serviceChargePercent}%)
+                </span>
+                <Switch checked={serviceChargeEnabled} onCheckedChange={setServiceChargeEnabled} />
+              </div>
+              {serviceChargeEnabled && (
+                <div className="flex justify-between text-sm text-green-600">
+                  <span>Taxa de serviço</span>
+                  <span>+{formatCurrency(serviceAmount)}</span>
+                </div>
+              )}
+
+              {/* Total */}
+              <div className="flex justify-between font-bold text-lg pt-2 border-t">
+                <span>TOTAL</span>
+                <span>{formatCurrency(finalTotal)}</span>
+              </div>
+            </div>
+
+            {/* Payment Method */}
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { method: 'cash' as PaymentMethod, icon: Banknote, label: 'Dinheiro' },
+                { method: 'credit_card' as PaymentMethod, icon: CreditCard, label: 'Crédito' },
+                { method: 'debit_card' as PaymentMethod, icon: CreditCard, label: 'Débito' },
+                { method: 'pix' as PaymentMethod, icon: QrCode, label: 'Pix' },
+              ].map(({ method, icon: Icon, label }) => (
+                <Button
+                  key={method}
+                  variant={selectedPaymentMethod === method ? 'default' : 'outline'}
+                  className="flex flex-col h-16 gap-1"
+                  onClick={() => setSelectedPaymentMethod(method)}
+                >
+                  <Icon className="h-5 w-5" />
+                  <span className="text-xs">{label}</span>
+                </Button>
+              ))}
+            </div>
+
+            {/* Payment Amount */}
+            {selectedPaymentMethod === 'cash' && (
+              <div className="space-y-2">
+                <Label>Valor recebido</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="text-lg font-bold"
+                />
+                {changeAmount > 0 && (
+                  <div className="flex justify-between p-2 bg-green-100 dark:bg-green-900/30 rounded text-green-700 dark:text-green-400 font-bold">
+                    <span>Troco</span>
+                    <span>{formatCurrency(changeAmount)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-2 pt-2">
+              <Button variant="outline" className="flex-1" onClick={() => setPaymentModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={() => handleConfirmPayment(true)}
+                disabled={isProcessingPayment || paymentAmountNum < finalTotal}
+              >
+                <Printer className="h-4 w-4" />
+              </Button>
+              <Button 
+                className="flex-1"
+                onClick={() => handleConfirmPayment(false)}
+                disabled={isProcessingPayment || paymentAmountNum < finalTotal}
+              >
+                {isProcessingPayment ? 'Processando...' : 'Confirmar'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </PDVLayout>
   );
 }
