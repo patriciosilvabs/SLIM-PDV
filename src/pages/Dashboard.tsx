@@ -1,19 +1,25 @@
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useDashboardStats, useTopProducts, useSalesChart } from '@/hooks/useDashboard';
+import { useMonthlyRevenue } from '@/hooks/useMonthlyRevenue';
 import { useOrders } from '@/hooks/useOrders';
-import { DollarSign, ShoppingBag, Users, Package, AlertTriangle, TrendingUp } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { DollarSign, ShoppingBag, Users, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
 export default function Dashboard() {
-  const { data: stats, isLoading: statsLoading } = useDashboardStats();
+  const { data: stats } = useDashboardStats();
   const { data: topProducts } = useTopProducts(7);
   const { data: salesChart } = useSalesChart(7);
   const { data: recentOrders } = useOrders(['pending', 'preparing']);
+  const { data: monthlyRevenue } = useMonthlyRevenue(6);
+
+  // Calculate current month totals and variation
+  const currentMonthData = monthlyRevenue?.[monthlyRevenue.length - 1];
+  const monthVariation = currentMonthData?.variation || 0;
 
   return (
     <PDVLayout>
@@ -109,6 +115,63 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Monthly Revenue Comparison */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">Faturamento Mensal Comparativo</CardTitle>
+              {currentMonthData && (
+                <div className={`flex items-center gap-1 px-2 py-1 rounded text-sm font-medium ${
+                  monthVariation >= 0 
+                    ? 'bg-accent/10 text-accent' 
+                    : 'bg-destructive/10 text-destructive'
+                }`}>
+                  {monthVariation >= 0 ? (
+                    <TrendingUp className="h-4 w-4" />
+                  ) : (
+                    <TrendingDown className="h-4 w-4" />
+                  )}
+                  {monthVariation.toFixed(1)}% vs ano anterior
+                </div>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyRevenue || []}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis 
+                    dataKey="month" 
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                    tickFormatter={(value) => value.charAt(0).toUpperCase() + value.slice(1)}
+                  />
+                  <YAxis 
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                    tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+                  />
+                  <Tooltip 
+                    formatter={(value: number, name: string) => [
+                      formatCurrency(value),
+                      name === 'currentYear' ? 'Ano Atual' : 'Ano Anterior'
+                    ]}
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                  />
+                  <Legend 
+                    formatter={(value) => value === 'currentYear' ? 'Ano Atual' : 'Ano Anterior'}
+                  />
+                  <Bar dataKey="currentYear" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="lastYear" fill="hsl(var(--muted-foreground))" opacity={0.5} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Charts and Lists */}
         <div className="grid lg:grid-cols-2 gap-6">
