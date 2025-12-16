@@ -1,90 +1,108 @@
-import { useOfflineSupport } from '@/hooks/useOfflineSupport';
-import { Wifi, WifiOff, RefreshCw, AlertCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Wifi, WifiOff, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
+} from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useState } from "react";
+import { SyncProgressDialog } from "./SyncProgressDialog";
+import { useOfflineSyncContext } from "@/contexts/OfflineSyncContext";
 
 export function OfflineIndicator() {
-  const { isOnline, isSyncing, pendingOperations } = useOfflineSupport();
+  const { 
+    isOnline, 
+    isSyncing, 
+    pendingOperations, 
+    triggerSync,
+    clearQueue 
+  } = useOfflineSyncContext();
+  const [dialogOpen, setDialogOpen] = useState(false);
 
-  if (isOnline && pendingOperations.length === 0) {
-    return (
+  const getStatusConfig = () => {
+    if (!isOnline) {
+      return {
+        icon: WifiOff,
+        label: "Offline",
+        description: "Sem conexão com a internet. Operações serão salvas localmente.",
+        variant: "destructive" as const,
+        iconClass: "text-destructive"
+      };
+    }
+    
+    if (isSyncing) {
+      return {
+        icon: RefreshCw,
+        label: "Sincronizando...",
+        description: "Enviando operações pendentes para o servidor.",
+        variant: "secondary" as const,
+        iconClass: "text-primary animate-spin"
+      };
+    }
+    
+    if (pendingOperations.length > 0) {
+      return {
+        icon: AlertCircle,
+        label: "Pendente",
+        description: `${pendingOperations.length} operação(ões) aguardando sincronização.`,
+        variant: "secondary" as const,
+        iconClass: "text-yellow-500"
+      };
+    }
+    
+    return {
+      icon: CheckCircle2,
+      label: "Online",
+      description: "Conectado e sincronizado.",
+      variant: "outline" as const,
+      iconClass: "text-green-500"
+    };
+  };
+
+  const config = getStatusConfig();
+  const Icon = config.icon;
+
+  return (
+    <>
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/50">
-              <Wifi className="h-4 w-4 text-accent-foreground" />
-              <span className="text-xs text-accent-foreground hidden sm:inline">Online</span>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Conexão estável</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  if (!isOnline) {
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-destructive/20">
-              <WifiOff className="h-4 w-4 text-destructive" />
-              <span className="text-xs text-destructive hidden sm:inline">Offline</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-2 h-9"
+              onClick={() => pendingOperations.length > 0 && setDialogOpen(true)}
+            >
+              <Icon className={`h-4 w-4 ${config.iconClass}`} />
+              <span className="hidden sm:inline text-xs">{config.label}</span>
               {pendingOperations.length > 0 && (
-                <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">
+                <Badge variant={config.variant} className="h-5 px-1.5 text-xs">
                   {pendingOperations.length}
                 </Badge>
               )}
-            </div>
+            </Button>
           </TooltipTrigger>
-          <TooltipContent>
-            <p>Sem conexão com internet</p>
-            {pendingOperations.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {pendingOperations.length} operação(ões) pendente(s)
+          <TooltipContent side="bottom">
+            <p>{config.description}</p>
+            {pendingOperations.length > 0 && isOnline && !isSyncing && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Clique para ver detalhes
               </p>
             )}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
-    );
-  }
 
-  // Online but has pending operations
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-warning/20">
-            {isSyncing ? (
-              <RefreshCw className="h-4 w-4 text-warning animate-spin" />
-            ) : (
-              <AlertCircle className="h-4 w-4 text-warning" />
-            )}
-            <span className="text-xs text-warning hidden sm:inline">
-              {isSyncing ? 'Sincronizando...' : 'Pendente'}
-            </span>
-            <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-warning text-warning">
-              {pendingOperations.length}
-            </Badge>
-          </div>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>{isSyncing ? 'Sincronizando dados...' : 'Operações pendentes'}</p>
-          <p className="text-xs text-muted-foreground">
-            {pendingOperations.length} operação(ões) aguardando sync
-          </p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+      <SyncProgressDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        pendingOperations={pendingOperations}
+        isSyncing={isSyncing}
+        onSync={triggerSync}
+        onClear={clearQueue}
+      />
+    </>
   );
 }

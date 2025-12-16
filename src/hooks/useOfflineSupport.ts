@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
-interface OfflineOperation {
+export interface OfflineOperation {
   id: string;
   action: 'create' | 'update' | 'delete';
   table: string;
