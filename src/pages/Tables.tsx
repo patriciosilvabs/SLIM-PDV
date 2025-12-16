@@ -22,7 +22,7 @@ import { useIdleTableSettings } from '@/hooks/useIdleTableSettings';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
-import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus } from 'lucide-react';
+import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus, ArrowRightLeft } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
@@ -147,6 +147,10 @@ export default function Tables() {
   const [splitCount, setSplitCount] = useState(2);
   const [splitMode, setSplitMode] = useState<'equal' | 'custom'>('equal');
   const [customSplits, setCustomSplits] = useState<number[]>([]);
+
+  // Switch table states
+  const [isSwitchTableDialogOpen, setIsSwitchTableDialogOpen] = useState(false);
+  const [isSwitchingTable, setIsSwitchingTable] = useState(false);
 
   // Realtime subscription for orders
   useEffect(() => {
@@ -444,6 +448,44 @@ export default function Tables() {
         }));
         await addOrderItemExtras.mutateAsync(extras);
       }
+    }
+  };
+
+  // Switch table function
+  const handleSwitchTable = async (newTableId: string) => {
+    if (!selectedTable || !selectedOrder) return;
+    
+    setIsSwitchingTable(true);
+    try {
+      const newTable = tables?.find(t => t.id === newTableId);
+      if (!newTable) throw new Error('Mesa não encontrada');
+      
+      // 1. Update order with new table
+      await updateOrder.mutateAsync({
+        id: selectedOrder.id,
+        table_id: newTableId
+      });
+      
+      // 2. Free the old table
+      await updateTable.mutateAsync({
+        id: selectedTable.id,
+        status: 'available'
+      });
+      
+      // 3. Occupy the new table
+      await updateTable.mutateAsync({
+        id: newTableId,
+        status: 'occupied'
+      });
+      
+      toast.success(`Mesa trocada: ${selectedTable.number} → ${newTable.number}`);
+      setIsSwitchTableDialogOpen(false);
+      setSelectedTable({ ...newTable, status: 'occupied' });
+    } catch (error: any) {
+      console.error('Error switching table:', error);
+      toast.error('Erro ao trocar mesa');
+    } finally {
+      setIsSwitchingTable(false);
     }
   };
 
@@ -858,6 +900,14 @@ export default function Tables() {
                               >
                                 <Plus className="h-4 w-4 mr-2" />
                                 Adicionar Pedido
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                className="w-full"
+                                onClick={() => setIsSwitchTableDialogOpen(true)}
+                              >
+                                <ArrowRightLeft className="h-4 w-4 mr-2" />
+                                Trocar Mesa
                               </Button>
                               <Button variant="outline" className="w-full" onClick={handleStartClosing}>
                                 <Receipt className="h-4 w-4 mr-2" />
@@ -1732,6 +1782,65 @@ export default function Tables() {
               {createPayment.isPending ? 'Finalizando...' : 'Confirmar'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Switch Table Dialog */}
+      <Dialog open={isSwitchTableDialogOpen} onOpenChange={setIsSwitchTableDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowRightLeft className="h-5 w-5" />
+              Trocar Mesa
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            {selectedTable && (
+              <div className="p-3 bg-muted/50 rounded-lg">
+                <p className="text-sm text-muted-foreground">Mesa atual</p>
+                <p className="text-lg font-bold">Mesa {selectedTable.number}</p>
+                {selectedTable.capacity && (
+                  <p className="text-sm text-muted-foreground">{selectedTable.capacity} lugares</p>
+                )}
+              </div>
+            )}
+            
+            <div>
+              <Label className="text-sm mb-2 block">Selecione a nova mesa:</Label>
+              <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-[300px] overflow-y-auto p-1">
+                {tables
+                  ?.filter(t => t.id !== selectedTable?.id && t.status === 'available')
+                  .map(table => (
+                    <Button
+                      key={table.id}
+                      variant="outline"
+                      className="h-16 flex flex-col items-center justify-center gap-1 hover:bg-primary hover:text-primary-foreground"
+                      onClick={() => handleSwitchTable(table.id)}
+                      disabled={isSwitchingTable}
+                    >
+                      <span className="text-lg font-bold">{table.number}</span>
+                      <span className="text-xs opacity-70">{table.capacity}p</span>
+                    </Button>
+                  ))}
+              </div>
+              {tables?.filter(t => t.id !== selectedTable?.id && t.status === 'available').length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>Nenhuma mesa disponível</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => setIsSwitchTableDialogOpen(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </PDVLayout>

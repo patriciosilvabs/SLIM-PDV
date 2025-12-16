@@ -15,7 +15,7 @@ import { PushNotificationSettings } from '@/components/PushNotificationSettings'
 import { ScheduledAnnouncementsSettings } from '@/components/ScheduledAnnouncementsSettings';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Users, Shield, Plus, X, Crown, Sparkles, AlertTriangle, UtensilsCrossed, Edit, Trash2, ShoppingCart, ChefHat } from 'lucide-react';
+import { Users, Shield, Plus, X, Crown, Sparkles, AlertTriangle, UtensilsCrossed, Edit, Trash2, ShoppingCart, ChefHat, UserPlus, Eye, EyeOff } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { useTableWaitSettings } from '@/hooks/useTableWaitSettings';
@@ -80,6 +80,17 @@ export default function Settings() {
   const [editingTable, setEditingTable] = useState<any>(null);
   const [tableForm, setTableForm] = useState({ number: 0, capacity: 4 });
   const [isTableDialogOpen, setIsTableDialogOpen] = useState(false);
+
+  // User creation state
+  const [isCreateUserDialogOpen, setIsCreateUserDialogOpen] = useState(false);
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [newUserForm, setNewUserForm] = useState({
+    email: '',
+    name: '',
+    password: '',
+    role: 'waiter' as AppRole,
+  });
 
   // Check if current user can bootstrap (no admins exist)
   const canBootstrap = !checkingAdmins && hasAdmins === false && user?.id;
@@ -246,7 +257,58 @@ export default function Settings() {
     }
   };
 
-  // Show bootstrap UI if no admins exist
+  // Create new user
+  const handleCreateUser = async () => {
+    if (!newUserForm.email || !newUserForm.name || !newUserForm.password || !newUserForm.role) {
+      toast({
+        title: 'Preencha todos os campos',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (newUserForm.password.length < 6) {
+      toast({
+        title: 'Senha muito curta',
+        description: 'A senha deve ter pelo menos 6 caracteres',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsCreatingUser(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: {
+          email: newUserForm.email,
+          name: newUserForm.name.toUpperCase(),
+          password: newUserForm.password,
+          role: newUserForm.role
+        }
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      toast({ 
+        title: 'Usuário criado com sucesso!',
+        description: `${newUserForm.name} foi adicionado como ${roleLabels[newUserForm.role]}`
+      });
+      
+      setIsCreateUserDialogOpen(false);
+      setNewUserForm({ email: '', name: '', password: '', role: 'waiter' });
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ['all-users'] });
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao criar usuário',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setIsCreatingUser(false);
+    }
+  };
   if (canBootstrap) {
     return (
       <PDVLayout>
@@ -670,10 +732,16 @@ export default function Settings() {
           {/* Users Table */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Usuários do Sistema
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Usuários do Sistema
+                </CardTitle>
+                <Button onClick={() => setIsCreateUserDialogOpen(true)}>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Novo Usuário
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -743,6 +811,94 @@ export default function Settings() {
               )}
             </CardContent>
           </Card>
+
+          {/* Create User Dialog */}
+          <Dialog open={isCreateUserDialogOpen} onOpenChange={setIsCreateUserDialogOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <UserPlus className="h-5 w-5" />
+                  Novo Usuário
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-4">
+                <div className="space-y-2">
+                  <Label>E-mail *</Label>
+                  <Input
+                    type="email"
+                    placeholder="usuario@email.com"
+                    value={newUserForm.email}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Nome *</Label>
+                  <Input
+                    placeholder="NOME DO FUNCIONÁRIO"
+                    value={newUserForm.name}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, name: e.target.value.toUpperCase() })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Senha temporária *</Label>
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Mínimo 6 caracteres"
+                      value={newUserForm.password}
+                      onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full px-3"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Cargo *</Label>
+                  <Select 
+                    value={newUserForm.role} 
+                    onValueChange={(v) => setNewUserForm({ ...newUserForm, role: v as AppRole })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o cargo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(roleLabels) as AppRole[]).map((role) => (
+                        <SelectItem key={role} value={role}>
+                          {roleLabels[role]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  O usuário receberá acesso de acordo com o cargo selecionado.
+                </p>
+                <div className="flex gap-3 pt-4">
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => setIsCreateUserDialogOpen(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button 
+                    className="flex-1"
+                    onClick={handleCreateUser}
+                    disabled={isCreatingUser || !newUserForm.email || !newUserForm.name || !newUserForm.password}
+                  >
+                    {isCreatingUser ? 'Criando...' : 'Criar Usuário'}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </RequireRole>
     </PDVLayout>
