@@ -100,7 +100,7 @@ export default function Counter() {
   const { data: variations } = useProductVariations();
   const { createOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
   const { toast } = useToast();
-  const { duplicateItems, autoPrintKitchenTicket, autoPrintCustomerReceipt } = useOrderSettings();
+  const { duplicateItems, autoPrintKitchenTicket, autoPrintCustomerReceipt, duplicateKitchenTicket } = useOrderSettings();
   const { getInitialOrderStatus } = useKdsSettings();
   const printer = usePrinterOptional();
   const { findOrCreateCustomer, updateCustomerStats } = useCustomerMutations();
@@ -506,7 +506,13 @@ export default function Counter() {
           };
           
           await printer.printKitchenTicket(ticketData);
-          toast({ title: '🖨️ Comanda impressa automaticamente' });
+          
+          // Print duplicate for waiter if enabled
+          if (duplicateKitchenTicket) {
+            await printer.printKitchenTicket(ticketData);
+          }
+          
+          toast({ title: duplicateKitchenTicket ? '🖨️ Comandas impressas (2x)' : '🖨️ Comanda impressa automaticamente' });
         } catch (err) {
           console.error('Auto print failed:', err);
         }
@@ -514,7 +520,7 @@ export default function Counter() {
 
       // Print receipt if requested OR if auto-print is enabled
       if (printReceipt || (autoPrintCustomerReceipt && printer?.canPrintToCashier)) {
-        printCustomerReceipt({
+        await printCustomerReceipt({
           order: {
             ...order,
             order_items: orderItems.map(item => ({
@@ -547,7 +553,7 @@ export default function Counter() {
           }],
           discount: discountAmount > 0 ? { type: discountType, value: discountValue, amount: discountAmount } : undefined,
           serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
-        });
+        }, printer);
         
         if (!printReceipt && autoPrintCustomerReceipt) {
           toast({ title: '🖨️ Recibo impresso automaticamente' });

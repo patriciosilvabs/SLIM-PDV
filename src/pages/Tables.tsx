@@ -97,7 +97,7 @@ export default function Tables() {
   const { settings: idleTableSettings } = useIdleTableSettings();
   const { playOrderReadySound, playTableWaitAlertSound, playIdleTableAlertSound, settings: audioSettings } = useAudioNotification();
   const { getInitialOrderStatus } = useKdsSettings();
-  const { autoPrintKitchenTicket, autoPrintCustomerReceipt } = useOrderSettings();
+  const { autoPrintKitchenTicket, autoPrintCustomerReceipt, duplicateKitchenTicket } = useOrderSettings();
   const printer = usePrinterOptional();
   const { data: tables, isLoading } = useTables();
   const { data: orders } = useOrders(['pending', 'preparing', 'ready']);
@@ -494,7 +494,13 @@ export default function Tables() {
         };
         
         await printer.printKitchenTicket(ticketData);
-        toast.success('🖨️ Comanda impressa automaticamente');
+        
+        // Print duplicate for waiter if enabled
+        if (duplicateKitchenTicket) {
+          await printer.printKitchenTicket(ticketData);
+        }
+        
+        toast.success(duplicateKitchenTicket ? '🖨️ Comandas impressas (2x)' : '🖨️ Comanda impressa automaticamente');
       } catch (err) {
         console.error('Auto print failed:', err);
       }
@@ -733,14 +739,14 @@ export default function Tables() {
     // Auto-print bill summary when clicking "Fechar Conta"
     if (order && printer?.canPrintToCashier) {
       try {
-        printCustomerReceipt({
+        await printCustomerReceipt({
           order,
           payments: [],
           discount: discountAmount > 0 ? { type: discountType, value: discountValue, amount: discountAmount } : undefined,
           serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
           splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
           tableNumber: selectedTable.number,
-        });
+        }, printer);
         toast.success('Resumo da conta impresso');
       } catch (err) {
         console.error('Auto print bill summary failed:', err);
@@ -823,7 +829,7 @@ export default function Tables() {
       // Auto-print customer receipt if enabled
       if (autoPrintCustomerReceipt && printer?.canPrintToCashier) {
         try {
-          printCustomerReceipt({
+          await printCustomerReceipt({
             order: selectedOrder,
             payments: registeredPayments.map(p => ({
               id: '',
@@ -838,7 +844,7 @@ export default function Tables() {
             serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
             splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
             tableNumber: selectedTable.number,
-          });
+          }, printer);
           toast.success('Recibo impresso automaticamente');
         } catch (err) {
           console.error('Auto print receipt failed:', err);

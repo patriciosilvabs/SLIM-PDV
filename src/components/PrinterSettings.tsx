@@ -24,7 +24,10 @@ import {
   ChefHat,
   CreditCard,
   Zap,
-  Store
+  Store,
+  MapPin,
+  Phone,
+  Copy
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -45,7 +48,13 @@ export function PrinterSettings() {
     leftMargin,
     updateLeftMargin,
     restaurantName,
-    updateRestaurantName
+    updateRestaurantName,
+    restaurantAddress,
+    updateRestaurantAddress,
+    restaurantPhone,
+    updateRestaurantPhone,
+    duplicateKitchenTicket,
+    toggleDuplicateKitchenTicket
   } = useOrderSettings();
   const [testingPrinter, setTestingPrinter] = useState<string | null>(null);
   const [testingFont, setTestingFont] = useState<'kitchen' | 'receipt' | null>(null);
@@ -266,8 +275,34 @@ export function PrinterSettings() {
                 onChange={(e) => updateRestaurantName(e.target.value)}
                 placeholder="Nome que aparecerá nas impressões"
               />
+            </div>
+
+            {/* Restaurant Address */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
+                Endereço do Restaurante
+              </Label>
+              <Input
+                value={restaurantAddress}
+                onChange={(e) => updateRestaurantAddress(e.target.value)}
+                placeholder="Rua, número - Bairro, Cidade"
+              />
+            </div>
+
+            {/* Restaurant Phone */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Phone className="w-4 h-4" />
+                Telefone do Restaurante
+              </Label>
+              <Input
+                value={restaurantPhone}
+                onChange={(e) => updateRestaurantPhone(e.target.value)}
+                placeholder="(XX) XXXXX-XXXX"
+              />
               <p className="text-xs text-muted-foreground">
-                Este nome aparecerá no cabeçalho dos recibos e comandas
+                Estes dados aparecerão no cabeçalho dos recibos
               </p>
             </div>
 
@@ -325,6 +360,51 @@ export function PrinterSettings() {
                   <SelectItem value="12">Grande (12)</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Visual Preview of Margins/Spacing */}
+            <div className="space-y-2 p-4 rounded-lg border bg-muted/30">
+              <Label className="text-sm font-medium">Preview de Margens e Espaçamento</Label>
+              <div 
+                className="bg-white dark:bg-black border-2 border-dashed rounded overflow-hidden"
+                style={{ width: printerCtx.config.paperWidth === '58mm' ? '200px' : '280px' }}
+              >
+                <div 
+                  className="font-mono text-xs text-black dark:text-white"
+                  style={{ 
+                    paddingLeft: `${leftMargin * 4}px`,
+                    paddingTop: '8px',
+                    paddingBottom: '8px'
+                  }}
+                >
+                  {/* Visual margin indicator */}
+                  {leftMargin > 0 && (
+                    <div 
+                      className="absolute left-0 top-0 bottom-0 bg-primary/20"
+                      style={{ width: `${leftMargin * 4}px` }}
+                    />
+                  )}
+                  <div style={{ lineHeight: `${1.2 + (lineSpacing / 32)}em` }}>
+                    <div className="font-bold text-center">{restaurantName || 'RESTAURANTE'}</div>
+                    {restaurantAddress && <div className="text-center text-[10px]">{restaurantAddress}</div>}
+                    {restaurantPhone && <div className="text-center text-[10px]">Tel: {restaurantPhone}</div>}
+                    <div className="text-center my-1">─────────────</div>
+                    <div>PEDIDO #123</div>
+                    <div>Mesa: 05</div>
+                    <div className="my-1">─────────────</div>
+                    <div>1x Pizza Grande</div>
+                    <div className="pl-2 text-muted-foreground">- Calabresa</div>
+                    <div>2x Refrigerante</div>
+                    <div className="my-1">─────────────</div>
+                    <div className="font-bold">TOTAL: R$ 65,00</div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-4 text-xs text-muted-foreground mt-2">
+                <span>Margem: {leftMargin === 0 ? 'Nenhuma' : `${leftMargin} unidades`}</span>
+                <span>•</span>
+                <span>Espaçamento: {lineSpacing === 0 ? 'Normal' : `+${lineSpacing}`}</span>
+              </div>
             </div>
 
             {/* Kitchen Printer */}
@@ -560,6 +640,26 @@ export function PrinterSettings() {
                   disabled={!printerCtx.canPrintToKitchen}
                 />
               </div>
+              
+              {/* Duplicate Kitchen Ticket Option */}
+              {autoPrintKitchenTicket && (
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30 ml-4">
+                  <div className="space-y-0.5">
+                    <p className="font-medium text-sm flex items-center gap-2">
+                      <Copy className="w-4 h-4" />
+                      Imprimir comanda duplicada
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Uma cópia para a cozinha, outra para o garçom
+                    </p>
+                  </div>
+                  <Switch 
+                    checked={duplicateKitchenTicket}
+                    onCheckedChange={toggleDuplicateKitchenTicket}
+                    disabled={!printerCtx.canPrintToKitchen}
+                  />
+                </div>
+              )}
               
               {!printerCtx.canPrintToKitchen && autoPrintKitchenTicket && (
                 <p className="text-xs text-amber-600">
