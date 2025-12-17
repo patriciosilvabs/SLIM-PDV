@@ -23,12 +23,20 @@ declare global {
       };
       security: {
         setCertificatePromise: (promise: (resolve: (cert: string) => void, reject: () => void) => void) => void;
-        setSignaturePromise: (promise: (resolve: (sig: string) => void, reject: () => void) => void) => void;
+        setSignaturePromise: (promise: (toSign: string) => (resolve: (sig: string) => void, reject: (err: Error) => void) => void) => void;
         setSignatureAlgorithm: (algorithm: string) => void;
       };
     };
   }
 }
+
+// QZ Tray Certificate - Replace with your generated certificate content
+const QZ_CERTIFICATE = `-----BEGIN CERTIFICATE-----
+PASTE_YOUR_CERTIFICATE_HERE
+-----END CERTIFICATE-----`;
+
+// Edge function URL for signing
+const QZ_SIGN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/qz-sign`;
 
 export interface PrinterConfig {
   kitchenPrinter: string | null;
@@ -109,16 +117,49 @@ export function useQzTray() {
     setError(null);
 
     try {
-      // Configure QZ security (unsigned for local development)
-      window.qz.security.setCertificatePromise((resolve) => {
-        // For unsigned requests (development)
-        resolve('');
+      // Configure QZ security with certificate
+      window.qz.security.setCertificatePromise((resolve, reject) => {
+        if (QZ_CERTIFICATE.includes('PASTE_YOUR_CERTIFICATE_HERE')) {
+          // Fallback to unsigned if certificate not configured
+          console.warn('QZ Certificate not configured, using unsigned mode');
+          resolve('');
+        } else {
+          resolve(QZ_CERTIFICATE);
+        }
       });
       
-      window.qz.security.setSignaturePromise(() => {
-        return (resolve: (sig: string) => void) => {
-          // For unsigned requests (development)
-          resolve('');
+      // Set signature algorithm
+      window.qz.security.setSignatureAlgorithm('SHA512');
+      
+      // Configure signature promise to call Edge Function
+      window.qz.security.setSignaturePromise((toSign: string) => {
+        return async (resolve: (sig: string) => void, reject: (err: Error) => void) => {
+          if (QZ_CERTIFICATE.includes('PASTE_YOUR_CERTIFICATE_HERE')) {
+            // Unsigned mode
+            resolve('');
+            return;
+          }
+          
+          try {
+            const response = await fetch(QZ_SIGN_URL, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ data: toSign }),
+            });
+            
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || 'Failed to sign');
+            }
+            
+            const { signature } = await response.json();
+            resolve(signature);
+          } catch (err: any) {
+            console.error('Error signing QZ request:', err);
+            reject(err);
+          }
         };
       });
 
