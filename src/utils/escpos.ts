@@ -98,6 +98,21 @@ export function formatCurrency(value: number): string {
   }).format(value);
 }
 
+// Font size type
+export type PrintFontSize = 'normal' | 'large' | 'extra_large';
+
+// Get font size command based on setting
+export function getFontSizeCommand(fontSize: PrintFontSize): string {
+  switch (fontSize) {
+    case 'large':
+      return TEXT_DOUBLE_HEIGHT;
+    case 'extra_large':
+      return TEXT_DOUBLE_SIZE;
+    default:
+      return TEXT_NORMAL;
+  }
+}
+
 // Build kitchen ticket
 export interface KitchenTicketData {
   orderNumber: string;
@@ -115,9 +130,10 @@ export interface KitchenTicketData {
   createdAt: string;
 }
 
-export function buildKitchenTicket(data: KitchenTicketData, paperWidth: '58mm' | '80mm' = '80mm'): string {
+export function buildKitchenTicket(data: KitchenTicketData, paperWidth: '58mm' | '80mm' = '80mm', fontSize: PrintFontSize = 'normal'): string {
   const width = paperWidth === '58mm' ? 32 : 48;
   let ticket = '';
+  const fontCmd = getFontSizeCommand(fontSize);
 
   // Initialize
   ticket += INIT;
@@ -125,6 +141,7 @@ export function buildKitchenTicket(data: KitchenTicketData, paperWidth: '58mm' |
   // Header
   ticket += ALIGN_CENTER;
   ticket += TEXT_BOLD;
+  ticket += fontCmd;
   ticket += 'COZINHA' + LF;
   ticket += TEXT_DOUBLE_SIZE;
   
@@ -136,7 +153,7 @@ export function buildKitchenTicket(data: KitchenTicketData, paperWidth: '58mm' |
     ticket += 'DELIVERY' + LF;
   }
 
-  ticket += TEXT_NORMAL;
+  ticket += fontCmd;
   ticket += TEXT_BOLD;
   ticket += `Pedido #${data.orderNumber.slice(-6).toUpperCase()}` + LF;
   ticket += TEXT_BOLD_OFF;
@@ -145,16 +162,20 @@ export function buildKitchenTicket(data: KitchenTicketData, paperWidth: '58mm' |
     ticket += data.customerName + LF;
   }
 
+  ticket += TEXT_NORMAL;
   ticket += DASHED_LINE(width);
 
   // Date/time
   ticket += ALIGN_LEFT;
+  ticket += fontCmd;
   const date = new Date(data.createdAt);
   ticket += `${date.toLocaleDateString('pt-BR')} ${date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` + LF;
+  ticket += TEXT_NORMAL;
   ticket += DASHED_LINE(width);
 
   // Items
   for (const item of data.items) {
+    ticket += fontCmd;
     ticket += TEXT_BOLD;
     ticket += `${item.quantity}x ${item.productName}` + LF;
     ticket += TEXT_BOLD_OFF;
@@ -180,7 +201,9 @@ export function buildKitchenTicket(data: KitchenTicketData, paperWidth: '58mm' |
 
   // General notes
   if (data.notes) {
+    ticket += TEXT_NORMAL;
     ticket += DASHED_LINE(width);
+    ticket += fontCmd;
     ticket += TEXT_BOLD;
     ticket += 'OBSERVACOES GERAIS:' + LF;
     ticket += TEXT_BOLD_OFF;
@@ -191,6 +214,7 @@ export function buildKitchenTicket(data: KitchenTicketData, paperWidth: '58mm' |
   }
 
   // Footer
+  ticket += TEXT_NORMAL;
   ticket += DASHED_LINE(width);
   ticket += ALIGN_CENTER;
   ticket += `Impresso: ${new Date().toLocaleString('pt-BR')}` + LF;
@@ -229,9 +253,10 @@ export interface CustomerReceiptData {
   createdAt: string;
 }
 
-export function buildCustomerReceipt(data: CustomerReceiptData, paperWidth: '58mm' | '80mm' = '80mm'): string {
+export function buildCustomerReceipt(data: CustomerReceiptData, paperWidth: '58mm' | '80mm' = '80mm', fontSize: PrintFontSize = 'normal'): string {
   const width = paperWidth === '58mm' ? 32 : 48;
   let receipt = '';
+  const fontCmd = getFontSizeCommand(fontSize);
 
   // Initialize
   receipt += INIT;
@@ -240,7 +265,7 @@ export function buildCustomerReceipt(data: CustomerReceiptData, paperWidth: '58m
   receipt += ALIGN_CENTER;
   receipt += TEXT_DOUBLE_SIZE;
   receipt += data.restaurantName + LF;
-  receipt += TEXT_NORMAL;
+  receipt += fontCmd;
   
   if (data.restaurantAddress) {
     receipt += data.restaurantAddress + LF;
@@ -249,10 +274,12 @@ export function buildCustomerReceipt(data: CustomerReceiptData, paperWidth: '58m
     receipt += `Tel: ${data.restaurantPhone}` + LF;
   }
 
+  receipt += TEXT_NORMAL;
   receipt += DASHED_LINE(width);
 
   // Order info
   receipt += ALIGN_LEFT;
+  receipt += fontCmd;
   receipt += `Pedido: #${data.orderNumber.slice(-8).toUpperCase()}` + LF;
   
   const orderTypeLabel = data.orderType === 'dine_in' 
@@ -263,15 +290,19 @@ export function buildCustomerReceipt(data: CustomerReceiptData, paperWidth: '58m
   receipt += orderTypeLabel + (data.customerName ? ` - ${data.customerName}` : '') + LF;
   receipt += new Date(data.createdAt).toLocaleString('pt-BR') + LF;
 
+  receipt += TEXT_NORMAL;
   receipt += DASHED_LINE(width);
 
   // Items header
+  receipt += fontCmd;
   receipt += TEXT_BOLD;
   receipt += 'ITENS' + LF;
   receipt += TEXT_BOLD_OFF;
+  receipt += TEXT_NORMAL;
   receipt += SEPARATOR_LINE(width);
 
   // Items
+  receipt += fontCmd;
   for (const item of data.items) {
     const itemName = `${item.quantity}x ${item.productName}${item.variation ? ` (${item.variation})` : ''}`;
     const itemPrice = formatCurrency(item.totalPrice);
@@ -295,7 +326,9 @@ export function buildCustomerReceipt(data: CustomerReceiptData, paperWidth: '58m
   }
 
   // Totals
+  receipt += TEXT_NORMAL;
   receipt += DASHED_LINE(width);
+  receipt += fontCmd;
   receipt += formatLine('Subtotal', formatCurrency(data.subtotal), width);
 
   if (data.discount && data.discount.amount > 0) {
@@ -309,15 +342,18 @@ export function buildCustomerReceipt(data: CustomerReceiptData, paperWidth: '58m
     receipt += formatLine(`Taxa serviço (${data.serviceCharge.percent}%)`, `+${formatCurrency(data.serviceCharge.amount)}`, width);
   }
 
+  receipt += TEXT_NORMAL;
   receipt += SEPARATOR_LINE(width);
   receipt += TEXT_BOLD;
   receipt += TEXT_DOUBLE_HEIGHT;
   receipt += formatLine('TOTAL', formatCurrency(data.total), width);
-  receipt += TEXT_NORMAL;
+  receipt += fontCmd;
 
   // Payments
   if (data.payments.length > 0) {
+    receipt += TEXT_NORMAL;
     receipt += DASHED_LINE(width);
+    receipt += fontCmd;
     receipt += TEXT_BOLD;
     receipt += 'PAGAMENTO' + LF;
     receipt += TEXT_BOLD_OFF;
@@ -338,19 +374,23 @@ export function buildCustomerReceipt(data: CustomerReceiptData, paperWidth: '58m
 
   // Split bill
   if (data.splitBill && data.splitBill.count > 1) {
+    receipt += TEXT_NORMAL;
     receipt += DASHED_LINE(width);
     receipt += ALIGN_CENTER;
+    receipt += fontCmd;
     receipt += TEXT_BOLD;
     receipt += `DIVISAO (${data.splitBill.count} pessoas)` + LF;
     receipt += TEXT_DOUBLE_HEIGHT;
     receipt += `${formatCurrency(data.splitBill.amountPerPerson)} por pessoa` + LF;
-    receipt += TEXT_NORMAL;
+    receipt += fontCmd;
     receipt += ALIGN_LEFT;
   }
 
   // Footer
+  receipt += TEXT_NORMAL;
   receipt += DASHED_LINE(width);
   receipt += ALIGN_CENTER;
+  receipt += fontCmd;
   receipt += TEXT_BOLD;
   receipt += 'Obrigado pela preferencia!' + LF;
   receipt += TEXT_BOLD_OFF;

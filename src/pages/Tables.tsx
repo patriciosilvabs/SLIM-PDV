@@ -1369,6 +1369,34 @@ export default function Tables() {
                           )}
                         </div>
 
+                        {/* Print Bill Button */}
+                        <Button 
+                          variant="outline" 
+                          className="w-full"
+                          onClick={() => {
+                            if (!selectedOrder || !selectedTable) return;
+                            printCustomerReceipt({
+                              order: selectedOrder,
+                              payments: registeredPayments.map(p => ({
+                                id: '',
+                                order_id: selectedOrder.id,
+                                payment_method: p.method,
+                                amount: p.amount,
+                                cash_register_id: openCashRegister?.id || null,
+                                received_by: null,
+                                created_at: new Date().toISOString(),
+                              })),
+                              discount: discountAmount > 0 ? { type: discountType, value: discountValue, amount: discountAmount } : undefined,
+                              serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
+                              splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
+                              tableNumber: selectedTable.number,
+                            });
+                          }}
+                        >
+                          <Printer className="h-4 w-4 mr-2" />
+                          Imprimir Conta
+                        </Button>
+
                         {/* Payment Status */}
                         <div className="grid grid-cols-2 gap-3 p-3 bg-muted/50 rounded-lg">
                           <div className="text-center">
