@@ -8,8 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { usePrinter } from '@/contexts/PrinterContext';
 import { useOrderSettings, PrintFontSize } from '@/hooks/useOrderSettings';
+import { usePrintSectors, usePrintSectorMutations, PrintSector } from '@/hooks/usePrintSectors';
 import { buildFontSizeTestPrint } from '@/utils/escpos';
 import {
   Printer, 
@@ -32,13 +34,19 @@ import {
   FileText,
   Settings2,
   MessageSquare,
-  QrCode
+  QrCode,
+  Flame,
+  Plus,
+  Edit,
+  Trash2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export function PrinterSettings() {
   const printerCtx = usePrinter();
   const { toast } = useToast();
+  const { data: printSectors } = usePrintSectors();
+  const { createSector, updateSector, deleteSector } = usePrintSectorMutations();
   const { 
     autoPrintKitchenTicket, 
     toggleAutoPrintKitchenTicket,
@@ -91,6 +99,11 @@ export function PrinterSettings() {
   } = useOrderSettings();
   const [testingPrinter, setTestingPrinter] = useState<string | null>(null);
   const [testingFont, setTestingFont] = useState<'kitchen' | 'receipt' | null>(null);
+  
+  // Sector dialog state
+  const [sectorDialogOpen, setSectorDialogOpen] = useState(false);
+  const [editingSector, setEditingSector] = useState<PrintSector | null>(null);
+  const [sectorForm, setSectorForm] = useState({ name: '', description: '', printer_name: '', color: '#EF4444' });
 
   const handleConnect = async () => {
     const success = await printerCtx.connect();
@@ -917,6 +930,40 @@ export function PrinterSettings() {
           </div>
         )}
 
+        {/* Print Sectors */}
+        {printerCtx.isConnected && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-base font-semibold flex items-center gap-2">
+                <Flame className="w-4 h-4" />
+                Setores de Impressão
+              </Label>
+              <Button size="sm" onClick={() => { setEditingSector(null); setSectorForm({ name: '', description: '', printer_name: '', color: '#EF4444' }); setSectorDialogOpen(true); }}>
+                <Plus className="w-4 h-4 mr-1" /> Novo Setor
+              </Button>
+            </div>
+            <p className="text-sm text-muted-foreground">Configure setores de produção com impressoras dedicadas (Churrasqueira, Bar, Chapa, etc.)</p>
+            <div className="rounded-lg border divide-y">
+              {printSectors?.map((sector) => (
+                <div key={sector.id} className="flex items-center justify-between p-3">
+                  <div className="flex items-center gap-3">
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: sector.color }} />
+                    <div>
+                      <div className="font-medium">{sector.name}</div>
+                      <div className="text-xs text-muted-foreground">{sector.printer_name || 'Sem impressora'}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => { setEditingSector(sector); setSectorForm({ name: sector.name, description: sector.description || '', printer_name: sector.printer_name || '', color: sector.color }); setSectorDialogOpen(true); }}><Edit className="w-4 h-4" /></Button>
+                    <Button variant="ghost" size="sm" onClick={() => deleteSector.mutate(sector.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                  </div>
+                </div>
+              ))}
+              {(!printSectors || printSectors.length === 0) && <div className="p-4 text-center text-muted-foreground text-sm">Nenhum setor configurado</div>}
+            </div>
+          </div>
+        )}
+
         {/* Available Printers List */}
         {printerCtx.isConnected && printerCtx.printers.length > 0 && (
           <div className="space-y-2">
@@ -928,17 +975,8 @@ export function PrinterSettings() {
                     <Printer className="w-4 h-4 text-muted-foreground" />
                     <span className="text-sm">{p}</span>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleTestPrint(p)}
-                    disabled={testingPrinter === p}
-                  >
-                    {testingPrinter === p ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      'Testar'
-                    )}
+                  <Button variant="ghost" size="sm" onClick={() => handleTestPrint(p)} disabled={testingPrinter === p}>
+                    {testingPrinter === p ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Testar'}
                   </Button>
                 </div>
               ))}
@@ -946,6 +984,36 @@ export function PrinterSettings() {
           </div>
         )}
       </CardContent>
+
+      {/* Sector Dialog */}
+      <Dialog open={sectorDialogOpen} onOpenChange={setSectorDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editingSector ? 'Editar' : 'Novo'} Setor</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2"><Label>Nome *</Label><Input value={sectorForm.name} onChange={(e) => setSectorForm({...sectorForm, name: e.target.value})} placeholder="Ex: Churrasqueira" /></div>
+            <div className="space-y-2"><Label>Descrição</Label><Input value={sectorForm.description} onChange={(e) => setSectorForm({...sectorForm, description: e.target.value})} placeholder="Ex: Carnes grelhadas" /></div>
+            <div className="space-y-2"><Label>Impressora</Label>
+              <Select value={sectorForm.printer_name} onValueChange={(v) => setSectorForm({...sectorForm, printer_name: v})}>
+                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectContent>{printerCtx.printers.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2"><Label>Cor</Label><Input type="color" value={sectorForm.color} onChange={(e) => setSectorForm({...sectorForm, color: e.target.value})} className="h-10 w-20" /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSectorDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={async () => {
+              if (!sectorForm.name) return;
+              if (editingSector) {
+                await updateSector.mutateAsync({ id: editingSector.id, name: sectorForm.name, description: sectorForm.description || null, printer_name: sectorForm.printer_name || null, color: sectorForm.color });
+              } else {
+                await createSector.mutateAsync({ name: sectorForm.name, description: sectorForm.description || null, printer_name: sectorForm.printer_name || null, color: sectorForm.color, is_active: true, sort_order: 0, icon: 'Flame' });
+              }
+              setSectorDialogOpen(false);
+            }}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

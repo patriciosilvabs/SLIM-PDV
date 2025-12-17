@@ -9,6 +9,17 @@ import {
   PrintFontSize
 } from '@/utils/escpos';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
+import { PrintSector } from '@/hooks/usePrintSectors';
+
+// Interface for items with sector info for sector-based printing
+export interface SectorPrintItem {
+  quantity: number;
+  productName: string;
+  variation?: string | null;
+  extras?: string[];
+  notes?: string | null;
+  print_sector_id?: string | null;
+}
 
 interface PrinterContextValue {
   // Connection state
@@ -30,6 +41,12 @@ interface PrinterContextValue {
   
   // High-level print methods
   printKitchenTicket: (data: KitchenTicketData) => Promise<boolean>;
+  printKitchenTicketsBySector: (
+    items: SectorPrintItem[],
+    orderInfo: Omit<KitchenTicketData, 'items'>,
+    sectors: PrintSector[],
+    duplicate?: boolean
+  ) => Promise<boolean>;
   printCustomerReceipt: (data: CustomerReceiptData) => Promise<boolean>;
   openCashDrawer: () => Promise<boolean>;
   testPrint: (printerName: string) => Promise<boolean>;
@@ -67,6 +84,92 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       return true;
     } catch (err) {
       console.error('Failed to print kitchen ticket:', err);
+      return false;
+    }
+  };
+
+  // Print kitchen tickets grouped by sector
+  const printKitchenTicketsBySector = async (
+    items: SectorPrintItem[],
+    orderInfo: Omit<KitchenTicketData, 'items'>,
+    sectors: PrintSector[],
+    duplicate: boolean = false
+  ): Promise<boolean> => {
+    try {
+      const currentKitchenFontSize = (localStorage.getItem('pdv_kitchen_font_size') as PrintFontSize) || 'normal';
+      const currentLineSpacing = parseInt(localStorage.getItem('pdv_line_spacing') || '0');
+      const currentLeftMargin = parseInt(localStorage.getItem('pdv_left_margin') || '0');
+
+      // Group items by sector
+      const itemsBySector: Record<string, SectorPrintItem[]> = {};
+      const defaultSectorId = '_default';
+
+      for (const item of items) {
+        const sectorId = item.print_sector_id || defaultSectorId;
+        if (!itemsBySector[sectorId]) {
+          itemsBySector[sectorId] = [];
+        }
+        itemsBySector[sectorId].push(item);
+      }
+
+      // Print to each sector's printer
+      for (const [sectorId, sectorItems] of Object.entries(itemsBySector)) {
+        let printerName: string | null = null;
+        let sectorName: string | undefined = undefined;
+
+        if (sectorId === defaultSectorId) {
+          // Use default kitchen printer
+          printerName = qz.config.kitchenPrinter;
+          sectorName = undefined; // Will show "COZINHA" default
+        } else {
+          // Find sector and its printer
+          const sector = sectors.find(s => s.id === sectorId);
+          if (sector) {
+            printerName = sector.printer_name || qz.config.kitchenPrinter;
+            sectorName = sector.name;
+          } else {
+            printerName = qz.config.kitchenPrinter;
+          }
+        }
+
+        if (!printerName) {
+          console.warn(`No printer for sector ${sectorId}, skipping`);
+          continue;
+        }
+
+        // Build ticket for this sector
+        const ticketData: KitchenTicketData = {
+          ...orderInfo,
+          sectorName,
+          items: sectorItems.map(item => ({
+            quantity: item.quantity,
+            productName: item.productName,
+            variation: item.variation,
+            extras: item.extras,
+            notes: item.notes,
+          })),
+        };
+
+        const printData = buildKitchenTicket(
+          ticketData, 
+          qz.config.paperWidth, 
+          currentKitchenFontSize, 
+          currentLineSpacing, 
+          currentLeftMargin
+        );
+
+        // Print to the sector's printer
+        await qz.print(printerName, printData);
+
+        // Print duplicate if enabled
+        if (duplicate) {
+          await qz.print(printerName, printData);
+        }
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Failed to print kitchen tickets by sector:', err);
       return false;
     }
   };
@@ -143,6 +246,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
     disconnect: qz.disconnect,
     refreshPrinters: qz.refreshPrinters,
     printKitchenTicket,
+    printKitchenTicketsBySector,
     printCustomerReceipt,
     openCashDrawer,
     testPrint: qz.testPrint,

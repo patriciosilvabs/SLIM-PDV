@@ -23,6 +23,9 @@ export interface Product {
   is_promotion: boolean | null;
   promotion_price: number | null;
   label: string | null;
+  // Print sector
+  print_sector_id: string | null;
+  print_sector?: { id: string; name: string; printer_name: string | null; icon: string; color: string } | null;
 }
 
 export function useProducts() {
@@ -31,7 +34,7 @@ export function useProducts() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('*, category:categories(name)')
+        .select('*, category:categories(name), print_sector:print_sectors(id, name, printer_name, icon, color)')
         .order('sort_order', { ascending: true })
         .order('name');
       
