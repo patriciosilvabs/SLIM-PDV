@@ -220,14 +220,14 @@ export function PrinterSettings() {
               </Label>
               <div className="flex gap-2">
                 <Select
-                  value={printer.config.kitchenPrinter || ''}
-                  onValueChange={(value) => printer.updateConfig({ kitchenPrinter: value || null })}
+                  value={printer.config.kitchenPrinter || '__none__'}
+                  onValueChange={(value) => printer.updateConfig({ kitchenPrinter: value === '__none__' ? null : value })}
                 >
                   <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Selecione uma impressora" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhuma</SelectItem>
+                    <SelectItem value="__none__">Nenhuma</SelectItem>
                     {printer.printers.map((p) => (
                       <SelectItem key={p} value={p}>{p}</SelectItem>
                     ))}
@@ -261,14 +261,14 @@ export function PrinterSettings() {
               </Label>
               <div className="flex gap-2">
                 <Select
-                  value={printer.config.cashierPrinter || ''}
-                  onValueChange={(value) => printer.updateConfig({ cashierPrinter: value || null })}
+                  value={printer.config.cashierPrinter || '__none__'}
+                  onValueChange={(value) => printer.updateConfig({ cashierPrinter: value === '__none__' ? null : value })}
                 >
                   <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Selecione uma impressora" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhuma</SelectItem>
+                    <SelectItem value="__none__">Nenhuma</SelectItem>
                     {printer.printers.map((p) => (
                       <SelectItem key={p} value={p}>{p}</SelectItem>
                     ))}
