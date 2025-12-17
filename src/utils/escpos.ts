@@ -247,6 +247,7 @@ export interface CustomerReceiptData {
   restaurantName: string;
   restaurantAddress?: string;
   restaurantPhone?: string;
+  restaurantCnpj?: string;
   orderNumber: string;
   orderType: 'dine_in' | 'takeaway' | 'delivery';
   tableNumber?: number;
@@ -267,6 +268,8 @@ export interface CustomerReceiptData {
   change?: number;
   splitBill?: { count: number; amountPerPerson: number };
   createdAt: string;
+  customMessage?: string;
+  qrCodeContent?: string;
 }
 
 export function buildCustomerReceipt(
@@ -304,6 +307,9 @@ export function buildCustomerReceipt(
   }
   if (data.restaurantPhone) {
     receipt += `Tel: ${data.restaurantPhone}` + LF;
+  }
+  if (data.restaurantCnpj) {
+    receipt += `CNPJ: ${data.restaurantCnpj}` + LF;
   }
 
   receipt += TEXT_NORMAL;
@@ -418,16 +424,33 @@ export function buildCustomerReceipt(
     receipt += ALIGN_LEFT;
   }
 
-  // Footer
+  // Footer with custom message
   receipt += TEXT_NORMAL;
   receipt += DASHED_LINE(width);
   receipt += ALIGN_CENTER;
   receipt += fontCmd;
   receipt += TEXT_BOLD;
-  receipt += 'Obrigado pela preferencia!' + LF;
+  
+  if (data.customMessage) {
+    const messageLines = wrapText(data.customMessage, width);
+    for (const line of messageLines) {
+      receipt += line + LF;
+    }
+  } else {
+    receipt += 'Obrigado pela preferencia!' + LF;
+    receipt += TEXT_BOLD_OFF;
+    receipt += 'Volte sempre!' + LF;
+  }
+  
   receipt += TEXT_BOLD_OFF;
-  receipt += 'Volte sempre!' + LF;
   receipt += LF;
+  
+  // QR Code if provided
+  if (data.qrCodeContent) {
+    receipt += buildQRCode(data.qrCodeContent);
+    receipt += LF;
+  }
+  
   receipt += new Date().toLocaleString('pt-BR') + LF;
 
   // Feed and cut
@@ -435,6 +458,31 @@ export function buildCustomerReceipt(
   receipt += PAPER_CUT_PARTIAL;
 
   return receipt;
+}
+
+// Build QR Code ESC/POS command
+export function buildQRCode(content: string): string {
+  let qr = '';
+  
+  // Select model 2
+  qr += GS + '(k' + '\x04\x00\x31\x41\x32\x00';
+  
+  // Set size (module size 5)
+  qr += GS + '(k' + '\x03\x00\x31\x43\x05';
+  
+  // Set error correction level L
+  qr += GS + '(k' + '\x03\x00\x31\x45\x30';
+  
+  // Store data
+  const len = content.length + 3;
+  const pL = len % 256;
+  const pH = Math.floor(len / 256);
+  qr += GS + '(k' + String.fromCharCode(pL) + String.fromCharCode(pH) + '\x31\x50\x30' + content;
+  
+  // Print QR code
+  qr += GS + '(k' + '\x03\x00\x31\x51\x30';
+  
+  return qr;
 }
 
 // Open cash drawer

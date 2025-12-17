@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -27,7 +28,11 @@ import {
   Store,
   MapPin,
   Phone,
-  Copy
+  Copy,
+  FileText,
+  Settings2,
+  MessageSquare,
+  QrCode
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -53,8 +58,36 @@ export function PrinterSettings() {
     updateRestaurantAddress,
     restaurantPhone,
     updateRestaurantPhone,
+    restaurantCnpj,
+    updateRestaurantCnpj,
     duplicateKitchenTicket,
-    toggleDuplicateKitchenTicket
+    toggleDuplicateKitchenTicket,
+    // General print settings
+    showItemNumber,
+    toggleShowItemNumber,
+    showComplementPrice,
+    toggleShowComplementPrice,
+    showComplementName,
+    toggleShowComplementName,
+    largeFontProduction,
+    toggleLargeFontProduction,
+    multiplyOptions,
+    toggleMultiplyOptions,
+    showLogo,
+    toggleShowLogo,
+    printCancellation,
+    togglePrintCancellation,
+    printRatingQr,
+    togglePrintRatingQr,
+    // Custom messages
+    printMessageStandard,
+    updatePrintMessageStandard,
+    printMessageTable,
+    updatePrintMessageTable,
+    printQrStandard,
+    updatePrintQrStandard,
+    printQrTable,
+    updatePrintQrTable
   } = useOrderSettings();
   const [testingPrinter, setTestingPrinter] = useState<string | null>(null);
   const [testingFont, setTestingFont] = useState<'kitchen' | 'receipt' | null>(null);
@@ -302,7 +335,23 @@ export function PrinterSettings() {
                 placeholder="(XX) XXXXX-XXXX"
               />
               <p className="text-xs text-muted-foreground">
-                Estes dados aparecerão no cabeçalho dos recibos
+                Telefone para contato
+              </p>
+            </div>
+
+            {/* Restaurant CNPJ */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                CNPJ/CPF do Restaurante
+              </Label>
+              <Input
+                value={restaurantCnpj}
+                onChange={(e) => updateRestaurantCnpj(e.target.value)}
+                placeholder="XX.XXX.XXX/XXXX-XX ou XXX.XXX.XXX-XX"
+              />
+              <p className="text-xs text-muted-foreground">
+                Estes dados aparecerão no cabeçalho dos recibos fiscais
               </p>
             </div>
 
@@ -686,6 +735,184 @@ export function PrinterSettings() {
                   ⚠️ Configure a impressora do caixa para ativar a impressão automática
                 </p>
               )}
+            </div>
+
+            {/* General Print Settings */}
+            <div className="space-y-4 pt-4 border-t">
+              <Label className="text-base font-medium flex items-center gap-2">
+                <Settings2 className="w-4 h-4" />
+                Configurações Gerais de Impressão
+              </Label>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                  <div className="space-y-0.5">
+                    <p className="font-medium text-sm">Mostrar número do item na impressão</p>
+                    <p className="text-xs text-muted-foreground">
+                      Exibe o número sequencial de cada item
+                    </p>
+                  </div>
+                  <Switch 
+                    checked={showItemNumber}
+                    onCheckedChange={toggleShowItemNumber}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                  <div className="space-y-0.5">
+                    <p className="font-medium text-sm">Mostrar preço dos complementos</p>
+                    <p className="text-xs text-muted-foreground">
+                      Exibe o valor de cada complemento na impressão
+                    </p>
+                  </div>
+                  <Switch 
+                    checked={showComplementPrice}
+                    onCheckedChange={toggleShowComplementPrice}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                  <div className="space-y-0.5">
+                    <p className="font-medium text-sm">Mostrar nome dos complementos</p>
+                    <p className="text-xs text-muted-foreground">
+                      Exibe o nome dos complementos na impressão
+                    </p>
+                  </div>
+                  <Switch 
+                    checked={showComplementName}
+                    onCheckedChange={toggleShowComplementName}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                  <div className="space-y-0.5">
+                    <p className="font-medium text-sm">Fonte maior na via de produção</p>
+                    <p className="text-xs text-muted-foreground">
+                      Usa fonte maior para os produtos na comanda da cozinha
+                    </p>
+                  </div>
+                  <Switch 
+                    checked={largeFontProduction}
+                    onCheckedChange={toggleLargeFontProduction}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                  <div className="space-y-0.5">
+                    <p className="font-medium text-sm">Multiplicar opções pela quantidade</p>
+                    <p className="text-xs text-muted-foreground">
+                      A quantidade de complementos será baseada na quantidade do produto
+                    </p>
+                  </div>
+                  <Switch 
+                    checked={multiplyOptions}
+                    onCheckedChange={toggleMultiplyOptions}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                  <div className="space-y-0.5">
+                    <p className="font-medium text-sm">Imprimir logo da empresa</p>
+                    <p className="text-xs text-muted-foreground">
+                      Exibe a logo no topo do recibo (requer configuração)
+                    </p>
+                  </div>
+                  <Switch 
+                    checked={showLogo}
+                    onCheckedChange={toggleShowLogo}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                  <div className="space-y-0.5">
+                    <p className="font-medium text-sm">Imprimir comprovante de cancelamento</p>
+                    <p className="text-xs text-muted-foreground">
+                      Imprime nota ao cancelar itens de um pedido
+                    </p>
+                  </div>
+                  <Switch 
+                    checked={printCancellation}
+                    onCheckedChange={togglePrintCancellation}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                  <div className="space-y-0.5">
+                    <p className="font-medium text-sm">Imprimir QR Code de avaliação</p>
+                    <p className="text-xs text-muted-foreground">
+                      QR Code para avaliar o pedido (nem todas as impressoras suportam)
+                    </p>
+                  </div>
+                  <Switch 
+                    checked={printRatingQr}
+                    onCheckedChange={togglePrintRatingQr}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Custom Messages */}
+            <div className="space-y-4 pt-4 border-t">
+              <Label className="text-base font-medium flex items-center gap-2">
+                <MessageSquare className="w-4 h-4" />
+                Mensagens Personalizadas
+              </Label>
+
+              <div className="space-y-4">
+                {/* Standard Message (delivery, takeaway) */}
+                <div className="space-y-2">
+                  <Label className="text-sm">Mensagem da Via Padrão (delivery, retirada e no local)</Label>
+                  <Textarea
+                    value={printMessageStandard}
+                    onChange={(e) => updatePrintMessageStandard(e.target.value)}
+                    placeholder="Obrigado pelo seu pedido!"
+                    rows={3}
+                    className="resize-none"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm flex items-center gap-2">
+                    <QrCode className="w-4 h-4" />
+                    QR Code da Via Padrão (opcional)
+                  </Label>
+                  <Input
+                    value={printQrStandard}
+                    onChange={(e) => updatePrintQrStandard(e.target.value)}
+                    placeholder="https://meu-restaurante.com/avaliacao"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    O QR Code pode direcionar para link de avaliação ou chave Pix
+                  </p>
+                </div>
+
+                {/* Table Message */}
+                <div className="space-y-2">
+                  <Label className="text-sm">Mensagem da Via de Fechamento de Mesa</Label>
+                  <Textarea
+                    value={printMessageTable}
+                    onChange={(e) => updatePrintMessageTable(e.target.value)}
+                    placeholder="Obrigado pela preferência!"
+                    rows={3}
+                    className="resize-none"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm flex items-center gap-2">
+                    <QrCode className="w-4 h-4" />
+                    QR Code da Via de Fechamento (opcional)
+                  </Label>
+                  <Input
+                    value={printQrTable}
+                    onChange={(e) => updatePrintQrTable(e.target.value)}
+                    placeholder="https://meu-restaurante.com/avaliacao"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    O QR Code pode direcionar para link de avaliação ou chave Pix para gorjeta
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         )}

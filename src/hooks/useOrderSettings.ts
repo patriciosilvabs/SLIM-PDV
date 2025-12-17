@@ -10,7 +10,24 @@ const LEFT_MARGIN_KEY = 'pdv_left_margin';
 const RESTAURANT_NAME_KEY = 'pdv_restaurant_name';
 const RESTAURANT_ADDRESS_KEY = 'pdv_restaurant_address';
 const RESTAURANT_PHONE_KEY = 'pdv_restaurant_phone';
+const RESTAURANT_CNPJ_KEY = 'pdv_restaurant_cnpj';
 const DUPLICATE_KITCHEN_TICKET_KEY = 'pdv_duplicate_kitchen_ticket';
+
+// General print settings keys
+const PRINT_SHOW_ITEM_NUMBER_KEY = 'pdv_print_show_item_number';
+const PRINT_SHOW_COMPLEMENT_PRICE_KEY = 'pdv_print_show_complement_price';
+const PRINT_SHOW_COMPLEMENT_NAME_KEY = 'pdv_print_show_complement_name';
+const PRINT_LARGE_FONT_PRODUCTION_KEY = 'pdv_print_large_font_production';
+const PRINT_MULTIPLY_OPTIONS_KEY = 'pdv_print_multiply_options';
+const PRINT_SHOW_LOGO_KEY = 'pdv_print_show_logo';
+const PRINT_CANCELLATION_KEY = 'pdv_print_cancellation';
+const PRINT_RATING_QR_KEY = 'pdv_print_rating_qr';
+
+// Custom message keys
+const PRINT_MESSAGE_STANDARD_KEY = 'pdv_print_message_standard';
+const PRINT_MESSAGE_TABLE_KEY = 'pdv_print_message_table';
+const PRINT_QR_STANDARD_KEY = 'pdv_print_qr_standard';
+const PRINT_QR_TABLE_KEY = 'pdv_print_qr_table';
 
 export type PrintFontSize = 'normal' | 'large' | 'extra_large';
 
@@ -65,9 +82,80 @@ export function useOrderSettings() {
     return localStorage.getItem(RESTAURANT_PHONE_KEY) || '';
   });
 
+  const [restaurantCnpj, setRestaurantCnpj] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem(RESTAURANT_CNPJ_KEY) || '';
+  });
+
   const [duplicateKitchenTicket, setDuplicateKitchenTicket] = useState(() => {
     if (typeof window === 'undefined') return false;
     return localStorage.getItem(DUPLICATE_KITCHEN_TICKET_KEY) === 'true';
+  });
+
+  // General print settings
+  const [showItemNumber, setShowItemNumber] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const val = localStorage.getItem(PRINT_SHOW_ITEM_NUMBER_KEY);
+    return val === null ? true : val === 'true';
+  });
+
+  const [showComplementPrice, setShowComplementPrice] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(PRINT_SHOW_COMPLEMENT_PRICE_KEY) === 'true';
+  });
+
+  const [showComplementName, setShowComplementName] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const val = localStorage.getItem(PRINT_SHOW_COMPLEMENT_NAME_KEY);
+    return val === null ? true : val === 'true';
+  });
+
+  const [largeFontProduction, setLargeFontProduction] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(PRINT_LARGE_FONT_PRODUCTION_KEY) === 'true';
+  });
+
+  const [multiplyOptions, setMultiplyOptions] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(PRINT_MULTIPLY_OPTIONS_KEY) === 'true';
+  });
+
+  const [showLogo, setShowLogo] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const val = localStorage.getItem(PRINT_SHOW_LOGO_KEY);
+    return val === null ? true : val === 'true';
+  });
+
+  const [printCancellation, setPrintCancellation] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const val = localStorage.getItem(PRINT_CANCELLATION_KEY);
+    return val === null ? true : val === 'true';
+  });
+
+  const [printRatingQr, setPrintRatingQr] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(PRINT_RATING_QR_KEY) === 'true';
+  });
+
+  // Custom messages
+  const [printMessageStandard, setPrintMessageStandard] = useState(() => {
+    if (typeof window === 'undefined') return 'Obrigado pelo seu pedido!';
+    return localStorage.getItem(PRINT_MESSAGE_STANDARD_KEY) || 'Obrigado pelo seu pedido!';
+  });
+
+  const [printMessageTable, setPrintMessageTable] = useState(() => {
+    if (typeof window === 'undefined') return 'Obrigado pela preferência!';
+    return localStorage.getItem(PRINT_MESSAGE_TABLE_KEY) || 'Obrigado pela preferência!';
+  });
+
+  const [printQrStandard, setPrintQrStandard] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem(PRINT_QR_STANDARD_KEY) || '';
+  });
+
+  const [printQrTable, setPrintQrTable] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem(PRINT_QR_TABLE_KEY) || '';
   });
 
   const toggleDuplicateItems = (value: boolean) => {
@@ -120,9 +208,76 @@ export function useOrderSettings() {
     setRestaurantPhone(value);
   };
 
+  const updateRestaurantCnpj = (value: string) => {
+    localStorage.setItem(RESTAURANT_CNPJ_KEY, value);
+    setRestaurantCnpj(value);
+  };
+
   const toggleDuplicateKitchenTicket = (value: boolean) => {
     localStorage.setItem(DUPLICATE_KITCHEN_TICKET_KEY, String(value));
     setDuplicateKitchenTicket(value);
+  };
+
+  // General print settings toggles
+  const toggleShowItemNumber = (value: boolean) => {
+    localStorage.setItem(PRINT_SHOW_ITEM_NUMBER_KEY, String(value));
+    setShowItemNumber(value);
+  };
+
+  const toggleShowComplementPrice = (value: boolean) => {
+    localStorage.setItem(PRINT_SHOW_COMPLEMENT_PRICE_KEY, String(value));
+    setShowComplementPrice(value);
+  };
+
+  const toggleShowComplementName = (value: boolean) => {
+    localStorage.setItem(PRINT_SHOW_COMPLEMENT_NAME_KEY, String(value));
+    setShowComplementName(value);
+  };
+
+  const toggleLargeFontProduction = (value: boolean) => {
+    localStorage.setItem(PRINT_LARGE_FONT_PRODUCTION_KEY, String(value));
+    setLargeFontProduction(value);
+  };
+
+  const toggleMultiplyOptions = (value: boolean) => {
+    localStorage.setItem(PRINT_MULTIPLY_OPTIONS_KEY, String(value));
+    setMultiplyOptions(value);
+  };
+
+  const toggleShowLogo = (value: boolean) => {
+    localStorage.setItem(PRINT_SHOW_LOGO_KEY, String(value));
+    setShowLogo(value);
+  };
+
+  const togglePrintCancellation = (value: boolean) => {
+    localStorage.setItem(PRINT_CANCELLATION_KEY, String(value));
+    setPrintCancellation(value);
+  };
+
+  const togglePrintRatingQr = (value: boolean) => {
+    localStorage.setItem(PRINT_RATING_QR_KEY, String(value));
+    setPrintRatingQr(value);
+  };
+
+  // Custom message updates
+  const updatePrintMessageStandard = (value: string) => {
+    localStorage.setItem(PRINT_MESSAGE_STANDARD_KEY, value);
+    setPrintMessageStandard(value);
+  };
+
+  const updatePrintMessageTable = (value: string) => {
+    localStorage.setItem(PRINT_MESSAGE_TABLE_KEY, value);
+    setPrintMessageTable(value);
+  };
+
+  const updatePrintQrStandard = (value: string) => {
+    localStorage.setItem(PRINT_QR_STANDARD_KEY, value);
+    setPrintQrStandard(value);
+  };
+
+  const updatePrintQrTable = (value: string) => {
+    localStorage.setItem(PRINT_QR_TABLE_KEY, value);
+    setPrintQrTable(value);
   };
 
   // Sync across tabs
@@ -158,8 +313,49 @@ export function useOrderSettings() {
       if (e.key === RESTAURANT_PHONE_KEY) {
         setRestaurantPhone(e.newValue || '');
       }
+      if (e.key === RESTAURANT_CNPJ_KEY) {
+        setRestaurantCnpj(e.newValue || '');
+      }
       if (e.key === DUPLICATE_KITCHEN_TICKET_KEY) {
         setDuplicateKitchenTicket(e.newValue === 'true');
+      }
+      // General print settings
+      if (e.key === PRINT_SHOW_ITEM_NUMBER_KEY) {
+        setShowItemNumber(e.newValue === 'true');
+      }
+      if (e.key === PRINT_SHOW_COMPLEMENT_PRICE_KEY) {
+        setShowComplementPrice(e.newValue === 'true');
+      }
+      if (e.key === PRINT_SHOW_COMPLEMENT_NAME_KEY) {
+        setShowComplementName(e.newValue === 'true');
+      }
+      if (e.key === PRINT_LARGE_FONT_PRODUCTION_KEY) {
+        setLargeFontProduction(e.newValue === 'true');
+      }
+      if (e.key === PRINT_MULTIPLY_OPTIONS_KEY) {
+        setMultiplyOptions(e.newValue === 'true');
+      }
+      if (e.key === PRINT_SHOW_LOGO_KEY) {
+        setShowLogo(e.newValue === 'true');
+      }
+      if (e.key === PRINT_CANCELLATION_KEY) {
+        setPrintCancellation(e.newValue === 'true');
+      }
+      if (e.key === PRINT_RATING_QR_KEY) {
+        setPrintRatingQr(e.newValue === 'true');
+      }
+      // Custom messages
+      if (e.key === PRINT_MESSAGE_STANDARD_KEY) {
+        setPrintMessageStandard(e.newValue || 'Obrigado pelo seu pedido!');
+      }
+      if (e.key === PRINT_MESSAGE_TABLE_KEY) {
+        setPrintMessageTable(e.newValue || 'Obrigado pela preferência!');
+      }
+      if (e.key === PRINT_QR_STANDARD_KEY) {
+        setPrintQrStandard(e.newValue || '');
+      }
+      if (e.key === PRINT_QR_TABLE_KEY) {
+        setPrintQrTable(e.newValue || '');
       }
     };
     window.addEventListener('storage', handleStorage);
@@ -187,7 +383,35 @@ export function useOrderSettings() {
     updateRestaurantAddress,
     restaurantPhone,
     updateRestaurantPhone,
+    restaurantCnpj,
+    updateRestaurantCnpj,
     duplicateKitchenTicket,
-    toggleDuplicateKitchenTicket
+    toggleDuplicateKitchenTicket,
+    // General print settings
+    showItemNumber,
+    toggleShowItemNumber,
+    showComplementPrice,
+    toggleShowComplementPrice,
+    showComplementName,
+    toggleShowComplementName,
+    largeFontProduction,
+    toggleLargeFontProduction,
+    multiplyOptions,
+    toggleMultiplyOptions,
+    showLogo,
+    toggleShowLogo,
+    printCancellation,
+    togglePrintCancellation,
+    printRatingQr,
+    togglePrintRatingQr,
+    // Custom messages
+    printMessageStandard,
+    updatePrintMessageStandard,
+    printMessageTable,
+    updatePrintMessageTable,
+    printQrStandard,
+    updatePrintQrStandard,
+    printQrTable,
+    updatePrintQrTable
   };
 }
