@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
-import logoTotal from '@/assets/logo-total.png';
+import logoSlim from '@/assets/logo-slim.png';
 import { z } from 'zod';
 
 const loginSchema = z.object({
@@ -224,7 +224,7 @@ export default function Auth() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted p-4">
       <Card className="w-full max-w-md shadow-2xl border-border/50">
         <CardHeader className="text-center py-6">
-          <img src={logoTotal} alt="TOTAL - Sistema PDV para Restaurante" className="mx-auto max-h-28 w-auto object-contain" />
+          <img src={logoSlim} alt="slim - Sistema para Restaurante" className="mx-auto max-h-28 w-auto object-contain" />
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="login" className="w-full">
