@@ -18,6 +18,7 @@ import { useReservations, useReservationMutations, Reservation } from '@/hooks/u
 import { useOpenCashRegister, useCashRegisterMutations, PaymentMethod } from '@/hooks/useCashRegister';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { useTableWaitSettings } from '@/hooks/useTableWaitSettings';
 import { useIdleTableSettings } from '@/hooks/useIdleTableSettings';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
@@ -92,9 +93,17 @@ export default function Tables() {
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { hasAnyRole } = useUserRole();
-  const canDeleteItems = hasAnyRole(['admin', 'cashier']);
-  const canReopenTable = hasAnyRole(['admin', 'cashier']);
+  const { hasAnyRole, isAdmin } = useUserRole();
+  const { hasPermission } = useUserPermissions();
+  
+  // Granular permission checks
+  const canDeleteItems = hasPermission('tables_cancel_items');
+  const canReopenTable = hasPermission('tables_reopen');
+  const canSwitchTable = hasPermission('tables_switch');
+  const canManagePayments = hasPermission('tables_manage_payments');
+  const canCloseBill = hasPermission('tables_close');
+  const canChangeFees = hasPermission('tables_change_fees');
+  
   const { settings: tableWaitSettings } = useTableWaitSettings();
   const { settings: idleTableSettings } = useIdleTableSettings();
   const { playOrderReadySound, playTableWaitAlertSound, playIdleTableAlertSound, settings: audioSettings } = useAudioNotification();
@@ -421,10 +430,24 @@ export default function Tables() {
     
     setIsReopening(true);
     try {
+      const newStatus = getInitialOrderStatus();
+      
+      // Record the reopen for audit trail
+      await supabase.from('order_reopens').insert({
+        order_id: closedOrderToReopen.id,
+        table_id: selectedTable.id,
+        previous_status: closedOrderToReopen.status,
+        new_status: newStatus,
+        reopened_by: user?.id,
+        order_type: closedOrderToReopen.order_type,
+        customer_name: closedOrderToReopen.customer_name,
+        total_value: closedOrderToReopen.total,
+      });
+      
       // Reopen the order (set status back to preparing)
       await updateOrder.mutateAsync({
         id: closedOrderToReopen.id,
-        status: getInitialOrderStatus(),
+        status: newStatus,
         updated_at: new Date().toISOString()
       });
       
@@ -439,7 +462,7 @@ export default function Tables() {
         for (const item of closedOrderToReopen.order_items) {
           await supabase
             .from('order_items')
-            .update({ status: getInitialOrderStatus() })
+            .update({ status: newStatus })
             .eq('id', item.id);
         }
       }
@@ -1255,16 +1278,18 @@ export default function Tables() {
                                   Imprimir Comanda
                                 </Button>
                               )}
-                              <Button 
-                                variant="outline" 
-                                className="w-full"
-                                onClick={() => setIsSwitchTableDialogOpen(true)}
-                              >
-                                <ArrowRightLeft className="h-4 w-4 mr-2" />
-                                Trocar Mesa
-                              </Button>
-                              {/* Only show Fechar Conta if there are items */}
-                              {selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
+                              {canSwitchTable && (
+                                <Button 
+                                  variant="outline" 
+                                  className="w-full"
+                                  onClick={() => setIsSwitchTableDialogOpen(true)}
+                                >
+                                  <ArrowRightLeft className="h-4 w-4 mr-2" />
+                                  Trocar Mesa
+                                </Button>
+                              )}
+                              {/* Only show Fechar Conta if there are items and permission */}
+                              {canCloseBill && selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
                                 <Button variant="outline" className="w-full" onClick={handleStartClosing}>
                                   <Receipt className="h-4 w-4 mr-2" />
                                   Fechar Conta
@@ -1944,7 +1969,7 @@ export default function Tables() {
                     <Plus className="h-4 w-4 mr-2" />
                     Adicionar Pedido
                   </Button>
-                  {selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
+                  {canCloseBill && selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
                     <Button variant="outline" className="w-full" onClick={handleStartClosing}>
                       <Receipt className="h-4 w-4 mr-2" />
                       Fechar Conta

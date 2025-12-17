@@ -549,6 +549,63 @@ export type Database = {
           },
         ]
       }
+      order_reopens: {
+        Row: {
+          customer_name: string | null
+          id: string
+          new_status: string
+          order_id: string
+          order_type: string | null
+          previous_status: string
+          reason: string | null
+          reopened_at: string
+          reopened_by: string | null
+          table_id: string | null
+          total_value: number | null
+        }
+        Insert: {
+          customer_name?: string | null
+          id?: string
+          new_status: string
+          order_id: string
+          order_type?: string | null
+          previous_status: string
+          reason?: string | null
+          reopened_at?: string
+          reopened_by?: string | null
+          table_id?: string | null
+          total_value?: number | null
+        }
+        Update: {
+          customer_name?: string | null
+          id?: string
+          new_status?: string
+          order_id?: string
+          order_type?: string | null
+          previous_status?: string
+          reason?: string | null
+          reopened_at?: string
+          reopened_by?: string | null
+          table_id?: string | null
+          total_value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_reopens_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_reopens_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           created_at: string | null

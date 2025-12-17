@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { PrinterStatusIndicator } from '@/components/PrinterStatusIndicator';
-import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Store, Users, Kanban, ChefHat, History, Target, UserCircle, Pizza } from 'lucide-react';
+import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Store, Users, Kanban, ChefHat, History, Target, UserCircle, Pizza, RotateCcw } from 'lucide-react';
 import logoTotal from '@/assets/logo-total.png';
 
 interface NavItem {
@@ -32,6 +32,7 @@ const navigation: NavItem[] = [
   { name: 'Caixa', href: '/cash-register', icon: CreditCard, roles: ['admin', 'cashier'] },
   { name: 'Relatórios', href: '/reports', icon: BarChart3, roles: ['admin', 'cashier'] },
   { name: 'Histórico', href: '/closing-history', icon: History, roles: ['admin', 'cashier'] },
+  { name: 'Reaberturas', href: '/reopen-history', icon: RotateCcw, roles: ['admin'] },
   { name: 'Desempenho', href: '/performance', icon: Target, roles: ['admin', 'cashier'] },
   { name: 'Configurações', href: '/settings', icon: Settings, roles: ['admin'] },
 ];
