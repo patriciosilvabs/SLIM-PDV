@@ -7,11 +7,11 @@ export interface PrintSector {
   name: string;
   description: string | null;
   printer_name: string | null;
-  is_active: boolean;
-  sort_order: number;
-  icon: string;
-  color: string;
-  created_at: string;
+  is_active: boolean | null;
+  sort_order: number | null;
+  icon: string | null;
+  color: string | null;
+  created_at: string | null;
 }
 
 export function usePrintSectors() {
