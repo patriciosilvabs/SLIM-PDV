@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { PrinterStatusIndicator } from '@/components/PrinterStatusIndicator';
-import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Pizza, Store, Users, Kanban, ChefHat, History, Target } from 'lucide-react';
+import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Pizza, Store, Users, Kanban, ChefHat, History, Target, UserCircle } from 'lucide-react';
 
 interface NavItem {
   name: string;
@@ -183,6 +183,15 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
             </div>
+            <Link to="/profile" onClick={() => setSidebarOpen(false)}>
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent mb-1"
+              >
+                <UserCircle className="h-4 w-4 mr-2" />
+                Meu Perfil
+              </Button>
+            </Link>
             <Button
               variant="ghost"
               className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"

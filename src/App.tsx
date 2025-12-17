@@ -12,6 +12,7 @@ import Dashboard from "./pages/Dashboard";
 import Tables from "./pages/Tables";
 import Orders from "./pages/Orders";
 import Menu from "./pages/Menu";
+import Profile from "./pages/Profile";
 import Stock from "./pages/Stock";
 import CashRegister from "./pages/CashRegister";
 import Reports from "./pages/Reports";
@@ -55,6 +56,7 @@ const App = () => (
                 <Route path="/kds" element={<KDS />} />
                 <Route path="/closing-history" element={<ClosingHistory />} />
                 <Route path="/performance" element={<Performance />} />
+                <Route path="/profile" element={<Profile />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
