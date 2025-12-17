@@ -30,6 +30,7 @@ export interface CartItem {
   notes?: string;
   complements: SelectedComplement[];
   combo_name?: string;
+  print_sector_id?: string | null;
 }
 
 interface AddOrderItemsModalProps {
@@ -97,6 +98,7 @@ export function AddOrderItemsModal({ open, onOpenChange, onSubmit, tableNumber }
           total_price: unitPrice,
           notes,
           complements,
+          print_sector_id: product.print_sector_id,
         });
       }
       setCartItems(prev => [...prev, ...newItems]);
@@ -110,6 +112,7 @@ export function AddOrderItemsModal({ open, onOpenChange, onSubmit, tableNumber }
         total_price: unitPrice * quantity,
         notes,
         complements,
+        print_sector_id: product.print_sector_id,
       };
       setCartItems(prev => [...prev, newItem]);
     }
@@ -143,6 +146,7 @@ export function AddOrderItemsModal({ open, onOpenChange, onSubmit, tableNumber }
           total_price: discountedPrice,
           complements: [],
           combo_name: combo.name,
+          print_sector_id: product.print_sector_id,
         }]);
       }
     });

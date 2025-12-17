@@ -25,8 +25,9 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useOpenCashRegister, useCashRegisterMutations, PaymentMethod } from '@/hooks/useCashRegister';
 import { ProductDetailDialog, SelectedComplement } from '@/components/order/ProductDetailDialog';
 import { printCustomerReceipt } from '@/components/receipt/CustomerReceipt';
-import { usePrinterOptional } from '@/contexts/PrinterContext';
+import { usePrinterOptional, SectorPrintItem } from '@/contexts/PrinterContext';
 import { KitchenTicketData } from '@/utils/escpos';
+import { usePrintSectors } from '@/hooks/usePrintSectors';
 import { 
   Package, 
   ShoppingCart, 
@@ -88,6 +89,7 @@ interface OrderItem {
   notes?: string;
   combo_name?: string;
   complements?: SelectedComplement[];
+  print_sector_id?: string | null;
 }
 
 type OrderType = 'takeaway' | 'delivery';
@@ -103,6 +105,7 @@ export default function Counter() {
   const { duplicateItems, autoPrintKitchenTicket, autoPrintCustomerReceipt, duplicateKitchenTicket } = useOrderSettings();
   const { getInitialOrderStatus } = useKdsSettings();
   const printer = usePrinterOptional();
+  const { data: printSectors } = usePrintSectors();
   const { findOrCreateCustomer, updateCustomerStats } = useCustomerMutations();
   const { data: openCashRegister } = useOpenCashRegister();
   const { createPayment } = useCashRegisterMutations();
@@ -300,6 +303,7 @@ export default function Counter() {
           total_price: unitPrice,
           notes: itemNotes || undefined,
           complements,
+          print_sector_id: product.print_sector_id,
         }]);
       }
     } else {
@@ -312,6 +316,7 @@ export default function Counter() {
         total_price: unitPrice * quantity,
         notes: itemNotes || undefined,
         complements,
+        print_sector_id: product.print_sector_id,
       }]);
     }
   };
@@ -361,6 +366,7 @@ export default function Counter() {
           unit_price: discountedPrice,
           total_price: discountedPrice,
           combo_name: combo.name,
+          print_sector_id: product.print_sector_id,
         }]);
       }
     });
@@ -490,29 +496,60 @@ export default function Counter() {
       // Auto-print kitchen ticket if enabled
       if (autoPrintKitchenTicket && printer?.canPrintToKitchen) {
         try {
-          const ticketData: KitchenTicketData = {
-            orderNumber: order.id.slice(0, 8).toUpperCase(),
-            orderType: orderType,
-            customerName: customerName || undefined,
-            items: orderItems.map(item => ({
+          // Check if we have active sectors with printers configured
+          const activeSectors = printSectors?.filter(s => s.is_active && s.printer_name) || [];
+          
+          if (activeSectors.length > 0) {
+            // Use sector-based printing
+            const sectorItems: SectorPrintItem[] = orderItems.map(item => ({
               quantity: item.quantity,
               productName: item.product_name,
               variation: item.variation_name,
               extras: item.complements?.map(c => c.option_name),
               notes: item.notes,
-            })),
-            notes: notes || undefined,
-            createdAt: new Date().toISOString(),
-          };
-          
-          await printer.printKitchenTicket(ticketData);
-          
-          // Print duplicate for waiter if enabled
-          if (duplicateKitchenTicket) {
+              print_sector_id: item.print_sector_id,
+            }));
+            
+            await printer.printKitchenTicketsBySector(
+              sectorItems,
+              {
+                orderNumber: order.id.slice(0, 8).toUpperCase(),
+                orderType: orderType,
+                customerName: customerName || undefined,
+                notes: notes || undefined,
+                createdAt: new Date().toISOString(),
+              },
+              activeSectors,
+              duplicateKitchenTicket
+            );
+            
+            toast({ title: '🖨️ Comandas impressas por setor' });
+          } else {
+            // Fallback: use default kitchen printer
+            const ticketData: KitchenTicketData = {
+              orderNumber: order.id.slice(0, 8).toUpperCase(),
+              orderType: orderType,
+              customerName: customerName || undefined,
+              items: orderItems.map(item => ({
+                quantity: item.quantity,
+                productName: item.product_name,
+                variation: item.variation_name,
+                extras: item.complements?.map(c => c.option_name),
+                notes: item.notes,
+              })),
+              notes: notes || undefined,
+              createdAt: new Date().toISOString(),
+            };
+            
             await printer.printKitchenTicket(ticketData);
+            
+            // Print duplicate for waiter if enabled
+            if (duplicateKitchenTicket) {
+              await printer.printKitchenTicket(ticketData);
+            }
+            
+            toast({ title: duplicateKitchenTicket ? '🖨️ Comandas impressas (2x)' : '🖨️ Comanda impressa automaticamente' });
           }
-          
-          toast({ title: duplicateKitchenTicket ? '🖨️ Comandas impressas (2x)' : '🖨️ Comanda impressa automaticamente' });
         } catch (err) {
           console.error('Auto print failed:', err);
         }

@@ -34,8 +34,9 @@ import { ptBR } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
-import { usePrinterOptional } from '@/contexts/PrinterContext';
+import { usePrinterOptional, SectorPrintItem } from '@/contexts/PrinterContext';
 import { KitchenTicketData } from '@/utils/escpos';
+import { usePrintSectors } from '@/hooks/usePrintSectors';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -99,6 +100,7 @@ export default function Tables() {
   const { getInitialOrderStatus } = useKdsSettings();
   const { autoPrintKitchenTicket, autoPrintCustomerReceipt, duplicateKitchenTicket } = useOrderSettings();
   const printer = usePrinterOptional();
+  const { data: printSectors } = usePrintSectors();
   const { data: tables, isLoading } = useTables();
   const { data: orders } = useOrders(['pending', 'preparing', 'ready']);
   const { createTable, updateTable } = useTableMutations();
@@ -477,30 +479,62 @@ export default function Tables() {
     // Auto-print kitchen ticket if enabled
     if (autoPrintKitchenTicket && printer?.canPrintToKitchen && selectedTable) {
       try {
-        const ticketData: KitchenTicketData = {
-          orderNumber: order.id.slice(0, 8).toUpperCase(),
-          orderType: 'dine_in',
-          tableNumber: selectedTable.number,
-          customerName: order.customer_name || undefined,
-          items: items.map(item => ({
+        // Check if we have active sectors with printers configured
+        const activeSectors = printSectors?.filter(s => s.is_active && s.printer_name) || [];
+        
+        if (activeSectors.length > 0) {
+          // Use sector-based printing
+          const sectorItems: SectorPrintItem[] = items.map(item => ({
             quantity: item.quantity,
             productName: item.product_name,
             variation: item.variation_name,
             extras: item.complements?.map(c => c.option_name),
             notes: item.notes,
-          })),
-          notes: order.notes || undefined,
-          createdAt: new Date().toISOString(),
-        };
-        
-        await printer.printKitchenTicket(ticketData);
-        
-        // Print duplicate for waiter if enabled
-        if (duplicateKitchenTicket) {
+            print_sector_id: item.print_sector_id,
+          }));
+          
+          await printer.printKitchenTicketsBySector(
+            sectorItems,
+            {
+              orderNumber: order.id.slice(0, 8).toUpperCase(),
+              orderType: 'dine_in',
+              tableNumber: selectedTable.number,
+              customerName: order.customer_name || undefined,
+              notes: order.notes || undefined,
+              createdAt: new Date().toISOString(),
+            },
+            activeSectors,
+            duplicateKitchenTicket
+          );
+          
+          toast.success('🖨️ Comandas impressas por setor');
+        } else {
+          // Fallback: use default kitchen printer
+          const ticketData: KitchenTicketData = {
+            orderNumber: order.id.slice(0, 8).toUpperCase(),
+            orderType: 'dine_in',
+            tableNumber: selectedTable.number,
+            customerName: order.customer_name || undefined,
+            items: items.map(item => ({
+              quantity: item.quantity,
+              productName: item.product_name,
+              variation: item.variation_name,
+              extras: item.complements?.map(c => c.option_name),
+              notes: item.notes,
+            })),
+            notes: order.notes || undefined,
+            createdAt: new Date().toISOString(),
+          };
+          
           await printer.printKitchenTicket(ticketData);
+          
+          // Print duplicate for waiter if enabled
+          if (duplicateKitchenTicket) {
+            await printer.printKitchenTicket(ticketData);
+          }
+          
+          toast.success(duplicateKitchenTicket ? '🖨️ Comandas impressas (2x)' : '🖨️ Comanda impressa automaticamente');
         }
-        
-        toast.success(duplicateKitchenTicket ? '🖨️ Comandas impressas (2x)' : '🖨️ Comanda impressa automaticamente');
       } catch (err) {
         console.error('Auto print failed:', err);
       }
