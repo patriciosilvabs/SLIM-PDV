@@ -7,6 +7,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useOrderReopens } from '@/hooks/useOrderReopens';
+import { useUserPermissions } from '@/hooks/useUserPermissions';
+import { AccessDenied } from '@/components/auth/AccessDenied';
 import { format, startOfDay, endOfDay, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CalendarIcon, RotateCcw, AlertTriangle, DollarSign, User } from 'lucide-react';
@@ -31,6 +33,11 @@ const orderTypeLabels: Record<string, string> = {
 };
 
 export default function ReopenHistory() {
+  const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
+  
+  if (!permissionsLoading && !hasPermission('reopen_history_view')) {
+    return <AccessDenied permission="reopen_history_view" />;
+  }
   const [startDate, setStartDate] = useState<Date>(subDays(new Date(), 7));
   const [endDate, setEndDate] = useState<Date>(new Date());
 

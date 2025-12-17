@@ -1384,6 +1384,30 @@ export type Database = {
         | "dashboard_view"
         | "performance_view"
         | "combos_manage"
+        | "reservations_view"
+        | "reservations_manage"
+        | "reservations_cancel"
+        | "cash_open"
+        | "cash_close"
+        | "cash_withdraw"
+        | "cash_supply"
+        | "settings_notifications"
+        | "settings_tables"
+        | "settings_announcements"
+        | "settings_kds"
+        | "settings_idle_tables"
+        | "print_kitchen_ticket"
+        | "print_customer_receipt"
+        | "print_reprint"
+        | "stock_add"
+        | "stock_adjust"
+        | "stock_view_movements"
+        | "orders_cancel"
+        | "orders_create"
+        | "orders_print"
+        | "closing_history_view"
+        | "closing_history_export"
+        | "reopen_history_view"
       stock_movement_type: "entry" | "exit" | "adjustment"
       table_status: "available" | "occupied" | "reserved" | "bill_requested"
     }
@@ -1558,6 +1582,30 @@ export const Constants = {
         "dashboard_view",
         "performance_view",
         "combos_manage",
+        "reservations_view",
+        "reservations_manage",
+        "reservations_cancel",
+        "cash_open",
+        "cash_close",
+        "cash_withdraw",
+        "cash_supply",
+        "settings_notifications",
+        "settings_tables",
+        "settings_announcements",
+        "settings_kds",
+        "settings_idle_tables",
+        "print_kitchen_ticket",
+        "print_customer_receipt",
+        "print_reprint",
+        "stock_add",
+        "stock_adjust",
+        "stock_view_movements",
+        "orders_cancel",
+        "orders_create",
+        "orders_print",
+        "closing_history_view",
+        "closing_history_export",
+        "reopen_history_view",
       ],
       stock_movement_type: ["entry", "exit", "adjustment"],
       table_status: ["available", "occupied", "reserved", "bill_requested"],
