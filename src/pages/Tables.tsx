@@ -183,6 +183,8 @@ export default function Tables() {
   const [isReopenDialogOpen, setIsReopenDialogOpen] = useState(false);
   const [closedOrderToReopen, setClosedOrderToReopen] = useState<Order | null>(null);
   const [isReopening, setIsReopening] = useState(false);
+  const [reopenReason, setReopenReason] = useState('');
+  const MIN_REASON_LENGTH = 10;
 
   // Realtime subscription for orders
   useEffect(() => {
@@ -442,7 +444,35 @@ export default function Tables() {
         order_type: closedOrderToReopen.order_type,
         customer_name: closedOrderToReopen.customer_name,
         total_value: closedOrderToReopen.total,
+        reason: reopenReason,
       });
+
+      // Send push notification to managers
+      try {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(`⚠️ Mesa ${selectedTable.number} reaberta`, {
+            body: `Por: ${user?.user_metadata?.name || user?.email}. Motivo: ${reopenReason}`,
+            tag: 'table-reopen',
+          });
+        }
+      } catch (e) {
+        console.error('Push notification error:', e);
+      }
+
+      // Try to send email notification (will fail silently if RESEND_API_KEY not configured)
+      try {
+        await supabase.functions.invoke('send-reopen-notification', {
+          body: {
+            orderId: closedOrderToReopen.id,
+            tableNumber: selectedTable.number,
+            userName: user?.user_metadata?.name || user?.email,
+            reason: reopenReason,
+            totalValue: closedOrderToReopen.total,
+          }
+        });
+      } catch (e) {
+        console.log('Email notification not sent (RESEND_API_KEY may not be configured)');
+      }
       
       // Reopen the order (set status back to preparing)
       await updateOrder.mutateAsync({
@@ -470,6 +500,7 @@ export default function Tables() {
       toast.success(`Mesa ${selectedTable.number} reaberta com sucesso!`);
       setIsReopenDialogOpen(false);
       setClosedOrderToReopen(null);
+      setReopenReason('');
       setSelectedTable({ ...selectedTable, status: 'occupied' });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
     } catch (error) {
@@ -2360,6 +2391,26 @@ export default function Tables() {
                     Ao reabrir a mesa, o pedido voltará para produção e você poderá adicionar ou remover itens.
                   </p>
                 </div>
+
+                <div className="space-y-2">
+                  <Label>Motivo da Reabertura *</Label>
+                  <Textarea
+                    value={reopenReason}
+                    onChange={(e) => setReopenReason(e.target.value)}
+                    placeholder="Descreva o motivo da reabertura (mín. 10 caracteres)"
+                    className={cn(
+                      reopenReason.length > 0 && reopenReason.length < MIN_REASON_LENGTH
+                        ? "border-destructive"
+                        : ""
+                    )}
+                  />
+                  <p className={cn(
+                    "text-xs",
+                    reopenReason.length < MIN_REASON_LENGTH ? "text-muted-foreground" : "text-accent"
+                  )}>
+                    {reopenReason.length}/{MIN_REASON_LENGTH} caracteres mínimos
+                  </p>
+                </div>
               </>
             )}
           </div>
@@ -2369,13 +2420,14 @@ export default function Tables() {
               onClick={() => {
                 setIsReopenDialogOpen(false);
                 setClosedOrderToReopen(null);
+                setReopenReason('');
               }}
             >
               Cancelar
             </Button>
             <Button 
               onClick={handleReopenClosedOrder}
-              disabled={isReopening}
+              disabled={isReopening || reopenReason.length < MIN_REASON_LENGTH}
             >
               {isReopening ? 'Reabrindo...' : 'Reabrir Mesa'}
             </Button>

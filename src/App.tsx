@@ -25,6 +25,7 @@ import KDS from "./pages/KDS";
 import ClosingHistory from "./pages/ClosingHistory";
 import Performance from "./pages/Performance";
 import ReopenHistory from "./pages/ReopenHistory";
+import AuditDashboard from "./pages/AuditDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -58,6 +59,7 @@ const App = () => (
                 <Route path="/closing-history" element={<ClosingHistory />} />
                 <Route path="/performance" element={<Performance />} />
                 <Route path="/reopen-history" element={<ReopenHistory />} />
+                <Route path="/audit-dashboard" element={<AuditDashboard />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
