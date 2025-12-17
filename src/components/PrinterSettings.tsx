@@ -960,14 +960,14 @@ export function PrinterSettings() {
                 return (
                   <div key={sector.id} className="flex items-center justify-between p-3">
                     <div className="flex items-center gap-3">
-                      <IconComponent className="w-5 h-5" style={{ color: sector.color }} />
+                      <IconComponent className="w-5 h-5" style={{ color: sector.color || '#EF4444' }} />
                       <div>
                         <div className="font-medium">{sector.name}</div>
                         <div className="text-xs text-muted-foreground">{sector.printer_name || 'Sem impressora'}</div>
                       </div>
                     </div>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => { setEditingSector(sector); setSectorForm({ name: sector.name, description: sector.description || '', printer_name: sector.printer_name || '', color: sector.color, icon: sector.icon || 'Flame' }); setSectorDialogOpen(true); }}><Edit className="w-4 h-4" /></Button>
+                      <Button variant="ghost" size="sm" onClick={() => { setEditingSector(sector); setSectorForm({ name: sector.name, description: sector.description || '', printer_name: sector.printer_name || '', color: sector.color || '#EF4444', icon: sector.icon || 'Flame' }); setSectorDialogOpen(true); }}><Edit className="w-4 h-4" /></Button>
                       <Button variant="ghost" size="sm" onClick={() => deleteSector.mutate(sector.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
                     </div>
                   </div>
