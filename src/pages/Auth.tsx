@@ -15,7 +15,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Pizza, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import logoTotal from '@/assets/logo-total.png';
 import { z } from 'zod';
 
 const loginSchema = z.object({
@@ -223,12 +224,10 @@ export default function Auth() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted p-4">
       <Card className="w-full max-w-md shadow-2xl border-border/50">
         <CardHeader className="text-center space-y-4">
-          <div className="mx-auto w-16 h-16 bg-primary rounded-2xl flex items-center justify-center shadow-lg">
-            <Pizza className="h-9 w-9 text-primary-foreground" />
-          </div>
+          <img src={logoTotal} alt="TOTAL" className="mx-auto h-20 w-auto" />
           <div>
-            <CardTitle className="text-2xl font-bold">PDV Pizzaria</CardTitle>
-            <CardDescription>Sistema de Ponto de Venda</CardDescription>
+            <CardTitle className="text-2xl font-bold" style={{ color: '#D35400' }}>TOTAL</CardTitle>
+            <CardDescription>Sistema PDV para Restaurante</CardDescription>
           </div>
         </CardHeader>
         <CardContent>
