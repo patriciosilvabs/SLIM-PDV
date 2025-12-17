@@ -233,6 +233,31 @@ export function PrinterSettings() {
               <p className="text-xs text-muted-foreground">
                 Ajusta o tamanho do texto nas impressões térmicas
               </p>
+
+              {/* Font Size Preview */}
+              <div className="mt-3 p-4 border-2 border-dashed rounded-lg bg-white dark:bg-black">
+                <div className="text-center text-xs text-muted-foreground mb-2">
+                  ═══ PREVIEW ═══
+                </div>
+                <div 
+                  className={`font-mono text-black dark:text-white text-center space-y-1 transition-all duration-200 ${
+                    printFontSize === 'normal' ? 'text-xs' :
+                    printFontSize === 'large' ? 'text-sm leading-relaxed' :
+                    'text-base font-semibold leading-loose'
+                  }`}
+                >
+                  <div className="font-bold">MINHA PIZZARIA</div>
+                  <div>─────────────────</div>
+                  <div>PEDIDO #123</div>
+                  <div>Mesa: 05</div>
+                  <div className="py-1"></div>
+                  <div className="text-left">1x Pizza Grande</div>
+                  <div className="text-left pl-2 text-muted-foreground">- Calabresa</div>
+                  <div className="text-left">2x Refrigerante</div>
+                  <div className="py-1"></div>
+                  <div className="font-bold">TOTAL: R$ 65,00</div>
+                </div>
+              </div>
             </div>
 
             {/* Kitchen Printer */}
