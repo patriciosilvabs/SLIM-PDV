@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useSalesReport, useProductsReport, usePeakHoursAnalysis, useCashRegisterHistory, DateRange, getDateRange } from '@/hooks/useReports';
 import { useEmployees } from '@/hooks/useEmployees';
 import { useTableSwitches } from '@/hooks/useTableSwitches';
+import { useUserPermissions } from '@/hooks/useUserPermissions';
+import { AccessDenied } from '@/components/auth/AccessDenied';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
@@ -52,11 +54,16 @@ const paymentMethodLabels: Record<string, string> = {
 };
 
 export default function Reports() {
+  const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const [activeTab, setActiveTab] = useState('sales');
   const [dateRange, setDateRange] = useState<DateRange>('today');
   const [customStart, setCustomStart] = useState<Date>();
   const [customEnd, setCustomEnd] = useState<Date>();
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
+
+  if (!permissionsLoading && !hasPermission('reports_view')) {
+    return <AccessDenied permission="reports_view" />;
+  }
 
   const { data: employees } = useEmployees();
   const employeeId = selectedEmployee === 'all' ? undefined : selectedEmployee;

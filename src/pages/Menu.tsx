@@ -21,6 +21,8 @@ import { useComplementOptions, useComplementOptionsMutations, ComplementOption }
 import { useComplementGroupOptions, useComplementGroupOptionsMutations } from '@/hooks/useComplementGroupOptions';
 import { useProductComplementGroups, useProductComplementGroupsMutations } from '@/hooks/useProductComplementGroups';
 import { usePrintSectors } from '@/hooks/usePrintSectors';
+import { useUserPermissions } from '@/hooks/useUserPermissions';
+import { AccessDenied } from '@/components/auth/AccessDenied';
 import { Plus, Edit, Trash2, Search, Link2, Package, GripVertical, MoreVertical, Star, Percent, Eye, EyeOff, Printer } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ImageUpload } from '@/components/ImageUpload';
@@ -69,6 +71,7 @@ const LABEL_OPTIONS = [
 ];
 
 export default function Menu() {
+  const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const { data: products } = useProducts();
   const { data: categories } = useCategories();
   const { data: variations } = useProductVariations();
@@ -85,6 +88,12 @@ export default function Menu() {
   const { createOption, updateOption, deleteOption } = useComplementOptionsMutations();
   const { setGroupOptions } = useComplementGroupOptionsMutations();
   const { setProductGroups, setGroupsForProduct } = useProductComplementGroupsMutations();
+  
+  const canManageMenu = hasPermission('menu_manage');
+  
+  if (!permissionsLoading && !hasPermission('menu_view')) {
+    return <AccessDenied permission="menu_view" />;
+  }
   
   const [mainTab, setMainTab] = useState('products');
   const [search, setSearch] = useState('');

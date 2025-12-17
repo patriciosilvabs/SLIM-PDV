@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
+import { useUserPermissions } from '@/hooks/useUserPermissions';
+import { AccessDenied } from '@/components/auth/AccessDenied';
 import { supabase } from '@/integrations/supabase/client';
 import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -38,8 +40,9 @@ const formatTimeDisplay = (minutes: number): string => {
 };
 
 export default function KDS() {
+  const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const { data: orders = [], isLoading, refetch } = useOrders();
-  const { updateOrder } = useOrderMutations();
+  const { updateOrder, updateOrderItem } = useOrderMutations();
   const queryClient = useQueryClient();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -58,6 +61,12 @@ export default function KDS() {
   const { settings: kdsSettings } = useKdsSettings();
   const notifiedOrdersRef = useRef<Set<string>>(new Set());
   const previousOrdersRef = useRef<Order[]>([]);
+  
+  const canChangeStatus = hasPermission('kds_change_status');
+
+  if (!permissionsLoading && !hasPermission('kds_view')) {
+    return <AccessDenied permission="kds_view" />;
+  }
   const lastMetricUpdateRef = useRef<string>('');
 
   // Calculate order counts for condition-based announcements
