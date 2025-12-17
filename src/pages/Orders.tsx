@@ -13,6 +13,7 @@ import { Trash2, Clock, ChefHat, CheckCircle, XCircle, Printer, Package, Tag } f
 import { cn } from '@/lib/utils';
 import { printKitchenReceipt } from '@/components/kitchen/KitchenReceipt';
 import { Badge } from '@/components/ui/badge';
+import { usePrinterOptional } from '@/contexts/PrinterContext';
 
 const statusConfig: Record<OrderStatus, { label: string; icon: any; color: string }> = {
   pending: { label: 'Pendente', icon: Clock, color: 'bg-warning text-warning-foreground' },
@@ -40,6 +41,7 @@ export default function Orders() {
   const { data: variations } = useProductVariations();
   const { updateOrder, addOrderItem, deleteOrderItem } = useOrderMutations();
   const { getInitialOrderStatus } = useKdsSettings();
+  const printer = usePrinterOptional();
 
   const displayedOrders = activeTab === 'active' 
     ? activeOrders 
@@ -256,7 +258,7 @@ export default function Orders() {
                     <Button 
                       variant="outline" 
                       className="w-full"
-                      onClick={() => printKitchenReceipt(selectedOrder)}
+                      onClick={() => printKitchenReceipt(selectedOrder, '80mm', printer)}
                     >
                       <Printer className="h-4 w-4 mr-2" />
                       Imprimir Comanda

@@ -5,8 +5,10 @@ import {
   buildCustomerReceipt, 
   buildCashDrawerCommand,
   KitchenTicketData,
-  CustomerReceiptData 
+  CustomerReceiptData,
+  PrintFontSize
 } from '@/utils/escpos';
+import { useOrderSettings } from '@/hooks/useOrderSettings';
 
 interface PrinterContextValue {
   // Connection state
@@ -45,6 +47,7 @@ const PrinterContext = createContext<PrinterContextValue | null>(null);
 
 export function PrinterProvider({ children }: { children: ReactNode }) {
   const qz = useQzTray();
+  const { printFontSize } = useOrderSettings();
 
   const printKitchenTicket = async (data: KitchenTicketData): Promise<boolean> => {
     if (!qz.config.kitchenPrinter) {
@@ -53,7 +56,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const ticketData = buildKitchenTicket(data, qz.config.paperWidth);
+      const ticketData = buildKitchenTicket(data, qz.config.paperWidth, printFontSize as PrintFontSize);
       await qz.printToKitchen(ticketData);
       return true;
     } catch (err) {
@@ -69,7 +72,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const receiptData = buildCustomerReceipt(data, qz.config.paperWidth);
+      const receiptData = buildCustomerReceipt(data, qz.config.paperWidth, printFontSize as PrintFontSize);
       await qz.printToCashier(receiptData);
       return true;
     } catch (err) {

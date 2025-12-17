@@ -7,8 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { usePrinter } from '@/contexts/PrinterContext';
-import { useOrderSettings } from '@/hooks/useOrderSettings';
-import { 
+import { useOrderSettings, PrintFontSize } from '@/hooks/useOrderSettings';
+import {
   Printer, 
   RefreshCw, 
   Check, 
@@ -32,7 +32,9 @@ export function PrinterSettings() {
     autoPrintKitchenTicket, 
     toggleAutoPrintKitchenTicket,
     autoPrintCustomerReceipt,
-    toggleAutoPrintCustomerReceipt
+    toggleAutoPrintCustomerReceipt,
+    printFontSize,
+    updatePrintFontSize
   } = useOrderSettings();
   const [testingPrinter, setTestingPrinter] = useState<string | null>(null);
 
@@ -210,6 +212,27 @@ export function PrinterSettings() {
                   <SelectItem value="80mm">80mm (bobina padrão)</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Font Size */}
+            <div className="space-y-2">
+              <Label>Tamanho da Fonte</Label>
+              <Select
+                value={printFontSize}
+                onValueChange={(value: PrintFontSize) => updatePrintFontSize(value)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="normal">Normal</SelectItem>
+                  <SelectItem value="large">Grande (altura 2x)</SelectItem>
+                  <SelectItem value="extra_large">Extra Grande (2x)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Ajusta o tamanho do texto nas impressões térmicas
+              </p>
             </div>
 
             {/* Kitchen Printer */}

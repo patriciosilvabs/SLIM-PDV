@@ -3,6 +3,9 @@ import { useState, useEffect } from 'react';
 const DUPLICATE_ITEMS_KEY = 'pdv_duplicate_items';
 const AUTO_PRINT_KITCHEN_KEY = 'pdv_auto_print_kitchen';
 const AUTO_PRINT_RECEIPT_KEY = 'pdv_auto_print_receipt';
+const PRINT_FONT_SIZE_KEY = 'pdv_print_font_size';
+
+export type PrintFontSize = 'normal' | 'large' | 'extra_large';
 
 export function useOrderSettings() {
   const [duplicateItems, setDuplicateItems] = useState(() => {
@@ -20,6 +23,11 @@ export function useOrderSettings() {
     return localStorage.getItem(AUTO_PRINT_RECEIPT_KEY) === 'true';
   });
 
+  const [printFontSize, setPrintFontSize] = useState<PrintFontSize>(() => {
+    if (typeof window === 'undefined') return 'normal';
+    return (localStorage.getItem(PRINT_FONT_SIZE_KEY) as PrintFontSize) || 'normal';
+  });
+
   const toggleDuplicateItems = (value: boolean) => {
     localStorage.setItem(DUPLICATE_ITEMS_KEY, String(value));
     setDuplicateItems(value);
@@ -35,6 +43,11 @@ export function useOrderSettings() {
     setAutoPrintCustomerReceipt(value);
   };
 
+  const updatePrintFontSize = (value: PrintFontSize) => {
+    localStorage.setItem(PRINT_FONT_SIZE_KEY, value);
+    setPrintFontSize(value);
+  };
+
   // Sync across tabs
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
@@ -47,6 +60,9 @@ export function useOrderSettings() {
       if (e.key === AUTO_PRINT_RECEIPT_KEY) {
         setAutoPrintCustomerReceipt(e.newValue === 'true');
       }
+      if (e.key === PRINT_FONT_SIZE_KEY) {
+        setPrintFontSize((e.newValue as PrintFontSize) || 'normal');
+      }
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
@@ -58,6 +74,8 @@ export function useOrderSettings() {
     autoPrintKitchenTicket,
     toggleAutoPrintKitchenTicket,
     autoPrintCustomerReceipt,
-    toggleAutoPrintCustomerReceipt
+    toggleAutoPrintCustomerReceipt,
+    printFontSize,
+    updatePrintFontSize
   };
 }
