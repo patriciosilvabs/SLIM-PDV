@@ -9,7 +9,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { PrinterStatusIndicator } from '@/components/PrinterStatusIndicator';
-import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Pizza, Store, Users, Kanban, ChefHat, History, Target, UserCircle } from 'lucide-react';
+import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Store, Users, Kanban, ChefHat, History, Target, UserCircle, Pizza } from 'lucide-react';
+import logoTotal from '@/assets/logo-total.png';
 
 interface NavItem {
   name: string;
@@ -93,10 +94,8 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
             {sidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </Button>
           <div className="flex items-center gap-3 ml-4">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <Pizza className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="text-sidebar-foreground font-semibold">PDV Pizzaria</span>
+            <img src={logoTotal} alt="TOTAL" className="w-8 h-8 object-contain" />
+            <span className="font-semibold" style={{ color: '#D35400' }}>TOTAL</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -117,12 +116,10 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
           {/* Logo */}
           <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg">
-                <Pizza className="h-6 w-6 text-primary-foreground" />
-              </div>
+              <img src={logoTotal} alt="TOTAL" className="w-10 h-10 object-contain" />
               <div>
-                <h1 className="text-sidebar-foreground font-bold text-lg">PDV Pizzaria</h1>
-                <p className="text-sidebar-foreground/60 text-xs">Ponto de Venda</p>
+                <h1 className="font-bold text-lg" style={{ color: '#D35400' }}>TOTAL</h1>
+                <p className="text-sidebar-foreground/60 text-xs">Sistema PDV</p>
               </div>
             </div>
           </div>

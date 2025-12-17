@@ -106,7 +106,9 @@ export function PrinterSettings() {
     printQrStandard,
     updatePrintQrStandard,
     printQrTable,
-    updatePrintQrTable
+    updatePrintQrTable,
+    asciiMode,
+    toggleAsciiMode
   } = useOrderSettings();
   const [testingPrinter, setTestingPrinter] = useState<string | null>(null);
   const [testingFont, setTestingFont] = useState<'kitchen' | 'receipt' | null>(null);
@@ -184,7 +186,8 @@ export function PrinterSettings() {
         type,
         restaurantName,
         lineSpacing,
-        leftMargin
+        leftMargin,
+        asciiMode
       );
       const printerName = type === 'kitchen' 
         ? printerCtx.config.kitchenPrinter 
@@ -435,7 +438,23 @@ export function PrinterSettings() {
               </Select>
             </div>
 
-            {/* Visual Preview of Margins/Spacing */}
+            {/* ASCII Mode Toggle */}
+            <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+              <div className="space-y-0.5">
+                <Label className="flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Modo ASCII (sem acentos)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Converte textos para ASCII simples. Útil para impressoras que não suportam caracteres acentuados.
+                </p>
+              </div>
+              <Switch
+                checked={asciiMode}
+                onCheckedChange={toggleAsciiMode}
+              />
+            </div>
+
             <div className="space-y-2 p-4 rounded-lg border bg-muted/30">
               <Label className="text-sm font-medium">Preview de Margens e Espaçamento</Label>
               <div 

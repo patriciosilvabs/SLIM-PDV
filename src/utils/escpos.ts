@@ -101,6 +101,27 @@ export function formatCurrency(value: number): string {
 // Font size type
 export type PrintFontSize = 'normal' | 'large' | 'extra_large';
 
+// ASCII conversion map for printers that don't support accented characters
+const ACCENT_MAP: Record<string, string> = {
+  'á': 'a', 'à': 'a', 'ã': 'a', 'â': 'a', 'ä': 'a',
+  'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+  'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
+  'ó': 'o', 'ò': 'o', 'õ': 'o', 'ô': 'o', 'ö': 'o',
+  'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
+  'ç': 'c', 'ñ': 'n',
+  'Á': 'A', 'À': 'A', 'Ã': 'A', 'Â': 'A', 'Ä': 'A',
+  'É': 'E', 'È': 'E', 'Ê': 'E', 'Ë': 'E',
+  'Í': 'I', 'Ì': 'I', 'Î': 'I', 'Ï': 'I',
+  'Ó': 'O', 'Ò': 'O', 'Õ': 'O', 'Ô': 'O', 'Ö': 'O',
+  'Ú': 'U', 'Ù': 'U', 'Û': 'U', 'Ü': 'U',
+  'Ç': 'C', 'Ñ': 'N',
+};
+
+// Convert accented characters to ASCII
+export function toAscii(text: string): string {
+  return text.split('').map(char => ACCENT_MAP[char] || char).join('');
+}
+
 // Get font size command based on setting
 export function getFontSizeCommand(fontSize: PrintFontSize): string {
   switch (fontSize) {
@@ -137,11 +158,13 @@ export function buildKitchenTicket(
   paperWidth: '58mm' | '80mm' = '80mm', 
   fontSize: PrintFontSize = 'normal',
   lineSpacing: number = 0,
-  leftMargin: number = 0
+  leftMargin: number = 0,
+  asciiMode: boolean = false
 ): string {
   const width = paperWidth === '58mm' ? 32 : 48;
   let ticket = '';
   const fontCmd = getFontSizeCommand(fontSize);
+  const processText = (text: string) => asciiMode ? toAscii(text) : text;
 
   // Initialize
   ticket += INIT;
@@ -160,13 +183,13 @@ export function buildKitchenTicket(
   ticket += ALIGN_CENTER;
   ticket += TEXT_BOLD;
   ticket += fontCmd;
-  ticket += (data.sectorName?.toUpperCase() || 'COZINHA') + LF;
+  ticket += processText(data.sectorName?.toUpperCase() || 'COZINHA') + LF;
   ticket += TEXT_DOUBLE_SIZE;
   
   if (data.orderType === 'dine_in' && data.tableNumber) {
     ticket += `MESA ${data.tableNumber}` + LF;
   } else if (data.orderType === 'takeaway') {
-    ticket += 'BALCÃO' + LF;
+    ticket += processText('BALCÃO') + LF;
   } else {
     ticket += 'DELIVERY' + LF;
   }
@@ -177,7 +200,7 @@ export function buildKitchenTicket(
   ticket += TEXT_BOLD_OFF;
   
   if (data.customerName) {
-    ticket += data.customerName + LF;
+    ticket += processText(data.customerName) + LF;
   }
 
   ticket += TEXT_NORMAL;
@@ -195,22 +218,22 @@ export function buildKitchenTicket(
   for (const item of data.items) {
     ticket += fontCmd;
     ticket += TEXT_BOLD;
-    ticket += `${item.quantity}x ${item.productName}` + LF;
+    ticket += `${item.quantity}x ${processText(item.productName)}` + LF;
     ticket += TEXT_BOLD_OFF;
 
     if (item.variation) {
-      ticket += `  > ${item.variation}` + LF;
+      ticket += `  > ${processText(item.variation)}` + LF;
     }
 
     if (item.extras && item.extras.length > 0) {
       for (const extra of item.extras) {
-        ticket += `  + ${extra}` + LF;
+        ticket += `  + ${processText(extra)}` + LF;
       }
     }
 
     if (item.notes) {
       ticket += TEXT_BOLD;
-      ticket += `  OBS: ${item.notes}` + LF;
+      ticket += `  OBS: ${processText(item.notes)}` + LF;
       ticket += TEXT_BOLD_OFF;
     }
 
@@ -223,9 +246,9 @@ export function buildKitchenTicket(
     ticket += DASHED_LINE(width);
     ticket += fontCmd;
     ticket += TEXT_BOLD;
-    ticket += 'OBSERVAÇÕES GERAIS:' + LF;
+    ticket += processText('OBSERVAÇÕES GERAIS:') + LF;
     ticket += TEXT_BOLD_OFF;
-    const wrappedNotes = wrapText(data.notes, width);
+    const wrappedNotes = wrapText(processText(data.notes), width);
     for (const line of wrappedNotes) {
       ticket += line + LF;
     }
@@ -279,11 +302,13 @@ export function buildCustomerReceipt(
   paperWidth: '58mm' | '80mm' = '80mm', 
   fontSize: PrintFontSize = 'normal',
   lineSpacing: number = 0,
-  leftMargin: number = 0
+  leftMargin: number = 0,
+  asciiMode: boolean = false
 ): string {
   const width = paperWidth === '58mm' ? 32 : 48;
   let receipt = '';
   const fontCmd = getFontSizeCommand(fontSize);
+  const processText = (text: string) => asciiMode ? toAscii(text) : text;
 
   // Initialize
   receipt += INIT;
@@ -301,11 +326,11 @@ export function buildCustomerReceipt(
   // Header
   receipt += ALIGN_CENTER;
   receipt += TEXT_DOUBLE_SIZE;
-  receipt += data.restaurantName + LF;
+  receipt += processText(data.restaurantName) + LF;
   receipt += fontCmd;
   
   if (data.restaurantAddress) {
-    receipt += data.restaurantAddress + LF;
+    receipt += processText(data.restaurantAddress) + LF;
   }
   if (data.restaurantPhone) {
     receipt += `Tel: ${data.restaurantPhone}` + LF;
@@ -327,7 +352,7 @@ export function buildCustomerReceipt(
     : data.orderType === 'takeaway' 
       ? 'Retirada' 
       : 'Delivery';
-  receipt += orderTypeLabel + (data.customerName ? ` - ${data.customerName}` : '') + LF;
+  receipt += processText(orderTypeLabel) + (data.customerName ? ` - ${processText(data.customerName)}` : '') + LF;
   receipt += new Date(data.createdAt).toLocaleString('pt-BR') + LF;
 
   receipt += TEXT_NORMAL;
@@ -344,7 +369,7 @@ export function buildCustomerReceipt(
   // Items
   receipt += fontCmd;
   for (const item of data.items) {
-    const itemName = `${item.quantity}x ${item.productName}${item.variation ? ` (${item.variation})` : ''}`;
+    const itemName = `${item.quantity}x ${processText(item.productName)}${item.variation ? ` (${processText(item.variation)})` : ''}`;
     const itemPrice = formatCurrency(item.totalPrice);
     
     if (itemName.length + itemPrice.length + 1 > width) {
@@ -356,12 +381,12 @@ export function buildCustomerReceipt(
 
     if (item.extras && item.extras.length > 0) {
       for (const extra of item.extras) {
-        receipt += `  + ${extra.name}` + LF;
+        receipt += `  + ${processText(extra.name)}` + LF;
       }
     }
 
     if (item.notes) {
-      receipt += `  Obs: ${item.notes}` + LF;
+      receipt += `  Obs: ${processText(item.notes)}` + LF;
     }
   }
 
@@ -379,7 +404,7 @@ export function buildCustomerReceipt(
   }
 
   if (data.serviceCharge && data.serviceCharge.amount > 0) {
-    receipt += formatLine(`Taxa de serviço (${data.serviceCharge.percent}%)`, `+${formatCurrency(data.serviceCharge.amount)}`, width);
+    receipt += formatLine(processText(`Taxa de serviço (${data.serviceCharge.percent}%)`), `+${formatCurrency(data.serviceCharge.amount)}`, width);
   }
 
   receipt += TEXT_NORMAL;
@@ -400,8 +425,8 @@ export function buildCustomerReceipt(
 
     for (const payment of data.payments) {
       const methodLabel = payment.method === 'cash' ? 'Dinheiro' :
-        payment.method === 'credit_card' ? 'Crédito' :
-        payment.method === 'debit_card' ? 'Débito' : 'Pix';
+        payment.method === 'credit_card' ? processText('Crédito') :
+        payment.method === 'debit_card' ? processText('Débito') : 'Pix';
       receipt += formatLine(methodLabel, formatCurrency(payment.amount), width);
     }
 
@@ -419,7 +444,7 @@ export function buildCustomerReceipt(
     receipt += ALIGN_CENTER;
     receipt += fontCmd;
     receipt += TEXT_BOLD;
-    receipt += `DIVISÃO (${data.splitBill.count} pessoas)` + LF;
+    receipt += processText(`DIVISÃO (${data.splitBill.count} pessoas)`) + LF;
     receipt += TEXT_DOUBLE_HEIGHT;
     receipt += `${formatCurrency(data.splitBill.amountPerPerson)} por pessoa` + LF;
     receipt += fontCmd;
@@ -434,12 +459,12 @@ export function buildCustomerReceipt(
   receipt += TEXT_BOLD;
   
   if (data.customMessage) {
-    const messageLines = wrapText(data.customMessage, width);
+    const messageLines = wrapText(processText(data.customMessage), width);
     for (const line of messageLines) {
       receipt += line + LF;
     }
   } else {
-    receipt += 'Obrigado pela preferência!' + LF;
+    receipt += processText('Obrigado pela preferência!') + LF;
     receipt += TEXT_BOLD_OFF;
     receipt += 'Volte sempre!' + LF;
   }
@@ -499,11 +524,13 @@ export function buildFontSizeTestPrint(
   type: 'kitchen' | 'receipt' = 'kitchen',
   restaurantName: string = 'MINHA PIZZARIA',
   lineSpacing: number = 0,
-  leftMargin: number = 0
+  leftMargin: number = 0,
+  asciiMode: boolean = false
 ): string {
   const width = paperWidth === '58mm' ? 32 : 48;
   let print = '';
   const fontCmd = getFontSizeCommand(fontSize);
+  const processText = (text: string) => asciiMode ? toAscii(text) : text;
 
   // Initialize
   print += INIT;
@@ -522,7 +549,7 @@ export function buildFontSizeTestPrint(
   print += ALIGN_CENTER;
   print += TEXT_BOLD;
   print += fontCmd;
-  print += restaurantName.toUpperCase() + LF;
+  print += processText(restaurantName.toUpperCase()) + LF;
   print += TEXT_NORMAL;
   print += DASHED_LINE(width);
 
