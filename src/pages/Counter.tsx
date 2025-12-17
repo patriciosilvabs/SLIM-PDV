@@ -497,7 +497,7 @@ export default function Counter() {
       if (autoPrintKitchenTicket && printer?.canPrintToKitchen) {
         try {
           // Check if we have active sectors with printers configured
-          const activeSectors = printSectors?.filter(s => s.is_active && s.printer_name) || [];
+          const activeSectors = (printSectors || []).filter(s => s?.is_active !== false && s?.printer_name);
           
           if (activeSectors.length > 0) {
             // Use sector-based printing
