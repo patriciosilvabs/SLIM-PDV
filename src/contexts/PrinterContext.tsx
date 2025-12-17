@@ -47,7 +47,7 @@ const PrinterContext = createContext<PrinterContextValue | null>(null);
 
 export function PrinterProvider({ children }: { children: ReactNode }) {
   const qz = useQzTray();
-  const { printFontSize } = useOrderSettings();
+  const { kitchenFontSize, receiptFontSize } = useOrderSettings();
 
   const printKitchenTicket = async (data: KitchenTicketData): Promise<boolean> => {
     if (!qz.config.kitchenPrinter) {
@@ -56,7 +56,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const ticketData = buildKitchenTicket(data, qz.config.paperWidth, printFontSize as PrintFontSize);
+      const ticketData = buildKitchenTicket(data, qz.config.paperWidth, kitchenFontSize as PrintFontSize);
       await qz.printToKitchen(ticketData);
       return true;
     } catch (err) {
@@ -72,7 +72,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const receiptData = buildCustomerReceipt(data, qz.config.paperWidth, printFontSize as PrintFontSize);
+      const receiptData = buildCustomerReceipt(data, qz.config.paperWidth, receiptFontSize as PrintFontSize);
       await qz.printToCashier(receiptData);
       return true;
     } catch (err) {

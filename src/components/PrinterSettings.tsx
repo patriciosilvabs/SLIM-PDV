@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { usePrinter } from '@/contexts/PrinterContext';
 import { useOrderSettings, PrintFontSize } from '@/hooks/useOrderSettings';
+import { buildFontSizeTestPrint } from '@/utils/escpos';
 import {
   Printer, 
   RefreshCw, 
@@ -26,20 +27,23 @@ import {
 import { useToast } from '@/hooks/use-toast';
 
 export function PrinterSettings() {
-  const printer = usePrinter();
+  const printerCtx = usePrinter();
   const { toast } = useToast();
   const { 
     autoPrintKitchenTicket, 
     toggleAutoPrintKitchenTicket,
     autoPrintCustomerReceipt,
     toggleAutoPrintCustomerReceipt,
-    printFontSize,
-    updatePrintFontSize
+    kitchenFontSize,
+    updateKitchenFontSize,
+    receiptFontSize,
+    updateReceiptFontSize
   } = useOrderSettings();
   const [testingPrinter, setTestingPrinter] = useState<string | null>(null);
+  const [testingFont, setTestingFont] = useState<'kitchen' | 'receipt' | null>(null);
 
   const handleConnect = async () => {
-    const success = await printer.connect();
+    const success = await printerCtx.connect();
     if (success) {
       toast({
         title: 'Conectado!',
@@ -48,14 +52,14 @@ export function PrinterSettings() {
     } else {
       toast({
         title: 'Erro ao conectar',
-        description: printer.error || 'Não foi possível conectar ao QZ Tray.',
+        description: printerCtx.error || 'Não foi possível conectar ao QZ Tray.',
         variant: 'destructive',
       });
     }
   };
 
   const handleDisconnect = async () => {
-    await printer.disconnect();
+    await printerCtx.disconnect();
     toast({
       title: 'Desconectado',
       description: 'QZ Tray desconectado.',
@@ -63,7 +67,7 @@ export function PrinterSettings() {
   };
 
   const handleRefreshPrinters = async () => {
-    const printers = await printer.refreshPrinters();
+    const printers = await printerCtx.refreshPrinters();
     if (printers.length > 0) {
       toast({
         title: 'Impressoras atualizadas',
@@ -81,7 +85,7 @@ export function PrinterSettings() {
   const handleTestPrint = async (printerName: string) => {
     setTestingPrinter(printerName);
     try {
-      await printer.testPrint(printerName);
+      await printerCtx.testPrint(printerName);
       toast({
         title: 'Teste enviado!',
         description: `Página de teste enviada para ${printerName}.`,
@@ -94,6 +98,45 @@ export function PrinterSettings() {
       });
     } finally {
       setTestingPrinter(null);
+    }
+  };
+
+  const handleTestFontPrint = async (type: 'kitchen' | 'receipt', fontSize: PrintFontSize) => {
+    setTestingFont(type);
+    try {
+      const printData = buildFontSizeTestPrint(printerCtx.config.paperWidth, fontSize, type);
+      const printerName = type === 'kitchen' 
+        ? printerCtx.config.kitchenPrinter 
+        : printerCtx.config.cashierPrinter;
+      
+      if (!printerName) {
+        throw new Error('Impressora não configurada');
+      }
+
+      await printerCtx.print(printerName, printData);
+      toast({
+        title: 'Teste enviado!',
+        description: `Teste de fonte enviado para ${printerName}.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Erro no teste',
+        description: err?.message || 'Falha ao enviar teste de fonte.',
+        variant: 'destructive',
+      });
+    } finally {
+      setTestingFont(null);
+    }
+  };
+
+  const getFontPreviewClass = (fontSize: PrintFontSize) => {
+    switch (fontSize) {
+      case 'normal':
+        return 'text-xs';
+      case 'large':
+        return 'text-sm leading-relaxed';
+      case 'extra_large':
+        return 'text-base font-semibold leading-loose';
     }
   };
 
@@ -112,7 +155,7 @@ export function PrinterSettings() {
         {/* Connection Status */}
         <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
           <div className="flex items-center gap-3">
-            {printer.isConnected ? (
+            {printerCtx.isConnected ? (
               <div className="p-2 rounded-full bg-green-500/20">
                 <Wifi className="w-5 h-5 text-green-500" />
               </div>
@@ -123,17 +166,17 @@ export function PrinterSettings() {
             )}
             <div>
               <div className="font-medium">
-                Status: {printer.isConnected ? 'Conectado' : 'Desconectado'}
+                Status: {printerCtx.isConnected ? 'Conectado' : 'Desconectado'}
               </div>
               <div className="text-sm text-muted-foreground">
-                {printer.isConnected 
-                  ? `${printer.printers.length} impressora(s) disponível(is)`
+                {printerCtx.isConnected 
+                  ? `${printerCtx.printers.length} impressora(s) disponível(is)`
                   : 'Clique em Conectar para iniciar'}
               </div>
             </div>
           </div>
           <div className="flex gap-2">
-            {printer.isConnected ? (
+            {printerCtx.isConnected ? (
               <>
                 <Button 
                   variant="outline" 
@@ -154,9 +197,9 @@ export function PrinterSettings() {
             ) : (
               <Button 
                 onClick={handleConnect}
-                disabled={printer.isConnecting}
+                disabled={printerCtx.isConnecting}
               >
-                {printer.isConnecting ? (
+                {printerCtx.isConnecting ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 ) : (
                   <Wifi className="w-4 h-4 mr-2" />
@@ -168,15 +211,15 @@ export function PrinterSettings() {
         </div>
 
         {/* Error Alert */}
-        {printer.error && (
+        {printerCtx.error && (
           <Alert variant="destructive">
             <AlertTriangle className="w-4 h-4" />
-            <AlertDescription>{printer.error}</AlertDescription>
+            <AlertDescription>{printerCtx.error}</AlertDescription>
           </Alert>
         )}
 
         {/* Download QZ Tray */}
-        {!printer.isConnected && (
+        {!printerCtx.isConnected && (
           <Alert>
             <Download className="w-4 h-4" />
             <AlertDescription className="flex items-center justify-between">
@@ -195,14 +238,14 @@ export function PrinterSettings() {
         )}
 
         {/* Printer Configuration */}
-        {printer.isConnected && (
+        {printerCtx.isConnected && (
           <div className="space-y-4">
             {/* Paper Width */}
             <div className="space-y-2">
               <Label>Largura do Papel</Label>
               <Select
-                value={printer.config.paperWidth}
-                onValueChange={(value: '58mm' | '80mm') => printer.updateConfig({ paperWidth: value })}
+                value={printerCtx.config.paperWidth}
+                onValueChange={(value: '58mm' | '80mm') => printerCtx.updateConfig({ paperWidth: value })}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue />
@@ -214,52 +257,6 @@ export function PrinterSettings() {
               </Select>
             </div>
 
-            {/* Font Size */}
-            <div className="space-y-2">
-              <Label>Tamanho da Fonte</Label>
-              <Select
-                value={printFontSize}
-                onValueChange={(value: PrintFontSize) => updatePrintFontSize(value)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="large">Grande (altura 2x)</SelectItem>
-                  <SelectItem value="extra_large">Extra Grande (2x)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Ajusta o tamanho do texto nas impressões térmicas
-              </p>
-
-              {/* Font Size Preview */}
-              <div className="mt-3 p-4 border-2 border-dashed rounded-lg bg-white dark:bg-black">
-                <div className="text-center text-xs text-muted-foreground mb-2">
-                  ═══ PREVIEW ═══
-                </div>
-                <div 
-                  className={`font-mono text-black dark:text-white text-center space-y-1 transition-all duration-200 ${
-                    printFontSize === 'normal' ? 'text-xs' :
-                    printFontSize === 'large' ? 'text-sm leading-relaxed' :
-                    'text-base font-semibold leading-loose'
-                  }`}
-                >
-                  <div className="font-bold">MINHA PIZZARIA</div>
-                  <div>─────────────────</div>
-                  <div>PEDIDO #123</div>
-                  <div>Mesa: 05</div>
-                  <div className="py-1"></div>
-                  <div className="text-left">1x Pizza Grande</div>
-                  <div className="text-left pl-2 text-muted-foreground">- Calabresa</div>
-                  <div className="text-left">2x Refrigerante</div>
-                  <div className="py-1"></div>
-                  <div className="font-bold">TOTAL: R$ 65,00</div>
-                </div>
-              </div>
-            </div>
-
             {/* Kitchen Printer */}
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
@@ -268,27 +265,27 @@ export function PrinterSettings() {
               </Label>
               <div className="flex gap-2">
                 <Select
-                  value={printer.config.kitchenPrinter || '__none__'}
-                  onValueChange={(value) => printer.updateConfig({ kitchenPrinter: value === '__none__' ? null : value })}
+                  value={printerCtx.config.kitchenPrinter || '__none__'}
+                  onValueChange={(value) => printerCtx.updateConfig({ kitchenPrinter: value === '__none__' ? null : value })}
                 >
                   <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Selecione uma impressora" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">Nenhuma</SelectItem>
-                    {printer.printers.map((p) => (
+                    {printerCtx.printers.map((p) => (
                       <SelectItem key={p} value={p}>{p}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {printer.config.kitchenPrinter && (
+                {printerCtx.config.kitchenPrinter && (
                   <Button
                     variant="outline"
                     size="icon"
-                    onClick={() => handleTestPrint(printer.config.kitchenPrinter!)}
-                    disabled={testingPrinter === printer.config.kitchenPrinter}
+                    onClick={() => handleTestPrint(printerCtx.config.kitchenPrinter!)}
+                    disabled={testingPrinter === printerCtx.config.kitchenPrinter}
                   >
-                    {testingPrinter === printer.config.kitchenPrinter ? (
+                    {testingPrinter === printerCtx.config.kitchenPrinter ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <TestTube className="w-4 h-4" />
@@ -299,6 +296,60 @@ export function PrinterSettings() {
               <p className="text-xs text-muted-foreground">
                 Usada para imprimir comandas na cozinha
               </p>
+
+              {/* Kitchen Font Size */}
+              {printerCtx.config.kitchenPrinter && (
+                <div className="mt-3 space-y-2">
+                  <Label className="text-sm">Tamanho da Fonte (Comanda)</Label>
+                  <Select
+                    value={kitchenFontSize}
+                    onValueChange={(value: PrintFontSize) => updateKitchenFontSize(value)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="normal">Normal</SelectItem>
+                      <SelectItem value="large">Grande (altura 2x)</SelectItem>
+                      <SelectItem value="extra_large">Extra Grande (2x)</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {/* Kitchen Font Preview */}
+                  <div className="mt-2 p-4 border-2 border-dashed rounded-lg bg-white dark:bg-black">
+                    <div className="text-center text-xs text-muted-foreground mb-2">
+                      ═══ PREVIEW COMANDA ═══
+                    </div>
+                    <div 
+                      className={`font-mono text-black dark:text-white text-center space-y-1 transition-all duration-200 ${getFontPreviewClass(kitchenFontSize)}`}
+                    >
+                      <div className="font-bold">COZINHA</div>
+                      <div>─────────────────</div>
+                      <div>PEDIDO #123 - Mesa 05</div>
+                      <div className="py-1"></div>
+                      <div className="text-left">1x Pizza Grande</div>
+                      <div className="text-left pl-2 text-muted-foreground">- Calabresa</div>
+                      <div className="text-left">2x Refrigerante</div>
+                    </div>
+                  </div>
+
+                  {/* Test Kitchen Font Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full mt-2"
+                    onClick={() => handleTestFontPrint('kitchen', kitchenFontSize)}
+                    disabled={!printerCtx.canPrintToKitchen || testingFont === 'kitchen'}
+                  >
+                    {testingFont === 'kitchen' ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Printer className="w-4 h-4 mr-2" />
+                    )}
+                    Testar Fonte na Impressora
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Cashier Printer */}
@@ -309,27 +360,27 @@ export function PrinterSettings() {
               </Label>
               <div className="flex gap-2">
                 <Select
-                  value={printer.config.cashierPrinter || '__none__'}
-                  onValueChange={(value) => printer.updateConfig({ cashierPrinter: value === '__none__' ? null : value })}
+                  value={printerCtx.config.cashierPrinter || '__none__'}
+                  onValueChange={(value) => printerCtx.updateConfig({ cashierPrinter: value === '__none__' ? null : value })}
                 >
                   <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Selecione uma impressora" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">Nenhuma</SelectItem>
-                    {printer.printers.map((p) => (
+                    {printerCtx.printers.map((p) => (
                       <SelectItem key={p} value={p}>{p}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {printer.config.cashierPrinter && (
+                {printerCtx.config.cashierPrinter && (
                   <Button
                     variant="outline"
                     size="icon"
-                    onClick={() => handleTestPrint(printer.config.cashierPrinter!)}
-                    disabled={testingPrinter === printer.config.cashierPrinter}
+                    onClick={() => handleTestPrint(printerCtx.config.cashierPrinter!)}
+                    disabled={testingPrinter === printerCtx.config.cashierPrinter}
                   >
-                    {testingPrinter === printer.config.cashierPrinter ? (
+                    {testingPrinter === printerCtx.config.cashierPrinter ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <TestTube className="w-4 h-4" />
@@ -340,20 +391,76 @@ export function PrinterSettings() {
               <p className="text-xs text-muted-foreground">
                 Usada para imprimir recibos do cliente e abrir gaveta
               </p>
+
+              {/* Receipt Font Size */}
+              {printerCtx.config.cashierPrinter && (
+                <div className="mt-3 space-y-2">
+                  <Label className="text-sm">Tamanho da Fonte (Recibo)</Label>
+                  <Select
+                    value={receiptFontSize}
+                    onValueChange={(value: PrintFontSize) => updateReceiptFontSize(value)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="normal">Normal</SelectItem>
+                      <SelectItem value="large">Grande (altura 2x)</SelectItem>
+                      <SelectItem value="extra_large">Extra Grande (2x)</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {/* Receipt Font Preview */}
+                  <div className="mt-2 p-4 border-2 border-dashed rounded-lg bg-white dark:bg-black">
+                    <div className="text-center text-xs text-muted-foreground mb-2">
+                      ═══ PREVIEW RECIBO ═══
+                    </div>
+                    <div 
+                      className={`font-mono text-black dark:text-white text-center space-y-1 transition-all duration-200 ${getFontPreviewClass(receiptFontSize)}`}
+                    >
+                      <div className="font-bold">MINHA PIZZARIA</div>
+                      <div>─────────────────</div>
+                      <div>PEDIDO #123 - Mesa 05</div>
+                      <div className="py-1"></div>
+                      <div className="text-left">1x Pizza Grande</div>
+                      <div className="text-left pl-2 text-muted-foreground">- Calabresa</div>
+                      <div className="text-left">2x Refrigerante</div>
+                      <div className="py-1"></div>
+                      <div className="font-bold">TOTAL: R$ 65,00</div>
+                    </div>
+                  </div>
+
+                  {/* Test Receipt Font Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full mt-2"
+                    onClick={() => handleTestFontPrint('receipt', receiptFontSize)}
+                    disabled={!printerCtx.canPrintToCashier || testingFont === 'receipt'}
+                  >
+                    {testingFont === 'receipt' ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Printer className="w-4 h-4 mr-2" />
+                    )}
+                    Testar Fonte na Impressora
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Configuration Summary */}
             <div className="flex gap-2 pt-2">
-              <Badge variant={printer.canPrintToKitchen ? 'default' : 'secondary'}>
-                {printer.canPrintToKitchen ? (
+              <Badge variant={printerCtx.canPrintToKitchen ? 'default' : 'secondary'}>
+                {printerCtx.canPrintToKitchen ? (
                   <Check className="w-3 h-3 mr-1" />
                 ) : (
                   <X className="w-3 h-3 mr-1" />
                 )}
                 Cozinha
               </Badge>
-              <Badge variant={printer.canPrintToCashier ? 'default' : 'secondary'}>
-                {printer.canPrintToCashier ? (
+              <Badge variant={printerCtx.canPrintToCashier ? 'default' : 'secondary'}>
+                {printerCtx.canPrintToCashier ? (
                   <Check className="w-3 h-3 mr-1" />
                 ) : (
                   <X className="w-3 h-3 mr-1" />
@@ -379,11 +486,11 @@ export function PrinterSettings() {
                 <Switch 
                   checked={autoPrintKitchenTicket}
                   onCheckedChange={toggleAutoPrintKitchenTicket}
-                  disabled={!printer.canPrintToKitchen}
+                  disabled={!printerCtx.canPrintToKitchen}
                 />
               </div>
               
-              {!printer.canPrintToKitchen && autoPrintKitchenTicket && (
+              {!printerCtx.canPrintToKitchen && autoPrintKitchenTicket && (
                 <p className="text-xs text-amber-600">
                   ⚠️ Configure a impressora da cozinha para ativar a impressão automática
                 </p>
@@ -399,11 +506,11 @@ export function PrinterSettings() {
                 <Switch 
                   checked={autoPrintCustomerReceipt}
                   onCheckedChange={toggleAutoPrintCustomerReceipt}
-                  disabled={!printer.canPrintToCashier}
+                  disabled={!printerCtx.canPrintToCashier}
                 />
               </div>
               
-              {!printer.canPrintToCashier && autoPrintCustomerReceipt && (
+              {!printerCtx.canPrintToCashier && autoPrintCustomerReceipt && (
                 <p className="text-xs text-amber-600">
                   ⚠️ Configure a impressora do caixa para ativar a impressão automática
                 </p>
@@ -413,11 +520,11 @@ export function PrinterSettings() {
         )}
 
         {/* Available Printers List */}
-        {printer.isConnected && printer.printers.length > 0 && (
+        {printerCtx.isConnected && printerCtx.printers.length > 0 && (
           <div className="space-y-2">
             <Label>Impressoras Disponíveis</Label>
             <div className="rounded-lg border divide-y">
-              {printer.printers.map((p) => (
+              {printerCtx.printers.map((p) => (
                 <div key={p} className="flex items-center justify-between p-3">
                   <div className="flex items-center gap-2">
                     <Printer className="w-4 h-4 text-muted-foreground" />
