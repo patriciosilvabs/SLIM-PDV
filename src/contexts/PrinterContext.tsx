@@ -47,7 +47,8 @@ const PrinterContext = createContext<PrinterContextValue | null>(null);
 
 export function PrinterProvider({ children }: { children: ReactNode }) {
   const qz = useQzTray();
-  const { kitchenFontSize, receiptFontSize } = useOrderSettings();
+  // We still use this for UI display, but read from localStorage at print time
+  useOrderSettings();
 
   const printKitchenTicket = async (data: KitchenTicketData): Promise<boolean> => {
     if (!qz.config.kitchenPrinter) {
@@ -56,7 +57,12 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const ticketData = buildKitchenTicket(data, qz.config.paperWidth, kitchenFontSize as PrintFontSize);
+      // Read from localStorage at print time to ensure latest value
+      const currentKitchenFontSize = (localStorage.getItem('pdv_kitchen_font_size') as PrintFontSize) || 'normal';
+      const currentLineSpacing = parseInt(localStorage.getItem('pdv_line_spacing') || '0');
+      const currentLeftMargin = parseInt(localStorage.getItem('pdv_left_margin') || '0');
+      
+      const ticketData = buildKitchenTicket(data, qz.config.paperWidth, currentKitchenFontSize, currentLineSpacing, currentLeftMargin);
       await qz.printToKitchen(ticketData);
       return true;
     } catch (err) {
@@ -72,7 +78,12 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const receiptData = buildCustomerReceipt(data, qz.config.paperWidth, receiptFontSize as PrintFontSize);
+      // Read from localStorage at print time to ensure latest value
+      const currentReceiptFontSize = (localStorage.getItem('pdv_receipt_font_size') as PrintFontSize) || 'normal';
+      const currentLineSpacing = parseInt(localStorage.getItem('pdv_line_spacing') || '0');
+      const currentLeftMargin = parseInt(localStorage.getItem('pdv_left_margin') || '0');
+      
+      const receiptData = buildCustomerReceipt(data, qz.config.paperWidth, currentReceiptFontSize, currentLineSpacing, currentLeftMargin);
       await qz.printToCashier(receiptData);
       return true;
     } catch (err) {

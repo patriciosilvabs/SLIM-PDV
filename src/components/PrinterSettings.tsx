@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -22,7 +23,8 @@ import {
   TestTube,
   ChefHat,
   CreditCard,
-  Zap
+  Zap,
+  Store
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -37,7 +39,13 @@ export function PrinterSettings() {
     kitchenFontSize,
     updateKitchenFontSize,
     receiptFontSize,
-    updateReceiptFontSize
+    updateReceiptFontSize,
+    lineSpacing,
+    updateLineSpacing,
+    leftMargin,
+    updateLeftMargin,
+    restaurantName,
+    updateRestaurantName
   } = useOrderSettings();
   const [testingPrinter, setTestingPrinter] = useState<string | null>(null);
   const [testingFont, setTestingFont] = useState<'kitchen' | 'receipt' | null>(null);
@@ -104,7 +112,14 @@ export function PrinterSettings() {
   const handleTestFontPrint = async (type: 'kitchen' | 'receipt', fontSize: PrintFontSize) => {
     setTestingFont(type);
     try {
-      const printData = buildFontSizeTestPrint(printerCtx.config.paperWidth, fontSize, type);
+      const printData = buildFontSizeTestPrint(
+        printerCtx.config.paperWidth, 
+        fontSize, 
+        type,
+        restaurantName,
+        lineSpacing,
+        leftMargin
+      );
       const printerName = type === 'kitchen' 
         ? printerCtx.config.kitchenPrinter 
         : printerCtx.config.cashierPrinter;
@@ -240,6 +255,22 @@ export function PrinterSettings() {
         {/* Printer Configuration */}
         {printerCtx.isConnected && (
           <div className="space-y-4">
+            {/* Restaurant Name */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Store className="w-4 h-4" />
+                Nome do Restaurante
+              </Label>
+              <Input
+                value={restaurantName}
+                onChange={(e) => updateRestaurantName(e.target.value)}
+                placeholder="Nome que aparecerá nas impressões"
+              />
+              <p className="text-xs text-muted-foreground">
+                Este nome aparecerá no cabeçalho dos recibos e comandas
+              </p>
+            </div>
+
             {/* Paper Width */}
             <div className="space-y-2">
               <Label>Largura do Papel</Label>
@@ -253,6 +284,45 @@ export function PrinterSettings() {
                 <SelectContent>
                   <SelectItem value="58mm">58mm (bobina pequena)</SelectItem>
                   <SelectItem value="80mm">80mm (bobina padrão)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Line Spacing */}
+            <div className="space-y-2">
+              <Label>Espaçamento entre Linhas (Vertical)</Label>
+              <Select
+                value={String(lineSpacing)}
+                onValueChange={(v) => updateLineSpacing(Number(v))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Normal (padrão)</SelectItem>
+                  <SelectItem value="8">Pequeno (+8)</SelectItem>
+                  <SelectItem value="16">Médio (+16)</SelectItem>
+                  <SelectItem value="24">Grande (+24)</SelectItem>
+                  <SelectItem value="32">Extra Grande (+32)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Left Margin */}
+            <div className="space-y-2">
+              <Label>Margem Esquerda (Horizontal)</Label>
+              <Select
+                value={String(leftMargin)}
+                onValueChange={(v) => updateLeftMargin(Number(v))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Sem margem (padrão)</SelectItem>
+                  <SelectItem value="4">Pequena (4)</SelectItem>
+                  <SelectItem value="8">Média (8)</SelectItem>
+                  <SelectItem value="12">Grande (12)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -323,9 +393,10 @@ export function PrinterSettings() {
                     <div 
                       className={`font-mono text-black dark:text-white text-center space-y-1 transition-all duration-200 ${getFontPreviewClass(kitchenFontSize)}`}
                     >
-                      <div className="font-bold">COZINHA</div>
+                      <div className="font-bold">{restaurantName.toUpperCase()}</div>
                       <div>─────────────────</div>
-                      <div>PEDIDO #123 - Mesa 05</div>
+                      <div>COZINHA - Mesa 05</div>
+                      <div>PEDIDO #123</div>
                       <div className="py-1"></div>
                       <div className="text-left">1x Pizza Grande</div>
                       <div className="text-left pl-2 text-muted-foreground">- Calabresa</div>
@@ -418,7 +489,7 @@ export function PrinterSettings() {
                     <div 
                       className={`font-mono text-black dark:text-white text-center space-y-1 transition-all duration-200 ${getFontPreviewClass(receiptFontSize)}`}
                     >
-                      <div className="font-bold">MINHA PIZZARIA</div>
+                      <div className="font-bold">{restaurantName.toUpperCase()}</div>
                       <div>─────────────────</div>
                       <div>PEDIDO #123 - Mesa 05</div>
                       <div className="py-1"></div>

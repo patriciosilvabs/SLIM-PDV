@@ -130,13 +130,29 @@ export interface KitchenTicketData {
   createdAt: string;
 }
 
-export function buildKitchenTicket(data: KitchenTicketData, paperWidth: '58mm' | '80mm' = '80mm', fontSize: PrintFontSize = 'normal'): string {
+export function buildKitchenTicket(
+  data: KitchenTicketData, 
+  paperWidth: '58mm' | '80mm' = '80mm', 
+  fontSize: PrintFontSize = 'normal',
+  lineSpacing: number = 0,
+  leftMargin: number = 0
+): string {
   const width = paperWidth === '58mm' ? 32 : 48;
   let ticket = '';
   const fontCmd = getFontSizeCommand(fontSize);
 
   // Initialize
   ticket += INIT;
+
+  // Apply line spacing if set
+  if (lineSpacing > 0) {
+    ticket += LINE_SPACING_SET(lineSpacing);
+  }
+
+  // Apply left margin if set
+  if (leftMargin > 0) {
+    ticket += GS + 'L' + String.fromCharCode(leftMargin) + '\x00';
+  }
 
   // Header
   ticket += ALIGN_CENTER;
@@ -253,13 +269,29 @@ export interface CustomerReceiptData {
   createdAt: string;
 }
 
-export function buildCustomerReceipt(data: CustomerReceiptData, paperWidth: '58mm' | '80mm' = '80mm', fontSize: PrintFontSize = 'normal'): string {
+export function buildCustomerReceipt(
+  data: CustomerReceiptData, 
+  paperWidth: '58mm' | '80mm' = '80mm', 
+  fontSize: PrintFontSize = 'normal',
+  lineSpacing: number = 0,
+  leftMargin: number = 0
+): string {
   const width = paperWidth === '58mm' ? 32 : 48;
   let receipt = '';
   const fontCmd = getFontSizeCommand(fontSize);
 
   // Initialize
   receipt += INIT;
+
+  // Apply line spacing if set
+  if (lineSpacing > 0) {
+    receipt += LINE_SPACING_SET(lineSpacing);
+  }
+
+  // Apply left margin if set
+  if (leftMargin > 0) {
+    receipt += GS + 'L' + String.fromCharCode(leftMargin) + '\x00';
+  }
 
   // Header
   receipt += ALIGN_CENTER;
@@ -414,7 +446,10 @@ export function buildCashDrawerCommand(): string {
 export function buildFontSizeTestPrint(
   paperWidth: '58mm' | '80mm' = '80mm', 
   fontSize: PrintFontSize = 'normal',
-  type: 'kitchen' | 'receipt' = 'kitchen'
+  type: 'kitchen' | 'receipt' = 'kitchen',
+  restaurantName: string = 'MINHA PIZZARIA',
+  lineSpacing: number = 0,
+  leftMargin: number = 0
 ): string {
   const width = paperWidth === '58mm' ? 32 : 48;
   let print = '';
@@ -423,11 +458,21 @@ export function buildFontSizeTestPrint(
   // Initialize
   print += INIT;
 
+  // Apply line spacing if set
+  if (lineSpacing > 0) {
+    print += LINE_SPACING_SET(lineSpacing);
+  }
+
+  // Apply left margin if set
+  if (leftMargin > 0) {
+    print += GS + 'L' + String.fromCharCode(leftMargin) + '\x00';
+  }
+
   // Header
   print += ALIGN_CENTER;
   print += TEXT_BOLD;
   print += fontCmd;
-  print += 'MINHA PIZZARIA' + LF;
+  print += restaurantName.toUpperCase() + LF;
   print += TEXT_NORMAL;
   print += DASHED_LINE(width);
 
