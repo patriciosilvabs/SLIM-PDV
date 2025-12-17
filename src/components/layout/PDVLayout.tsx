@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserRole, AppRole } from '@/hooks/useUserRole';
+import { useUserPermissions, PermissionCode } from '@/hooks/useUserPermissions';
 import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -17,25 +18,26 @@ interface NavItem {
   href: string;
   icon: any;
   roles: AppRole[];
+  permission?: PermissionCode;
 }
 
 const navigation: NavItem[] = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'cashier', 'waiter'] },
-  { name: 'Gestão de Pedidos', href: '/order-management', icon: Kanban, roles: ['admin', 'cashier'] },
-  { name: 'KDS', href: '/kds', icon: ChefHat, roles: ['admin', 'kitchen'] },
-  { name: 'Mesas', href: '/tables', icon: UtensilsCrossed, roles: ['admin', 'waiter'] },
-  { name: 'Balcão', href: '/counter', icon: Store, roles: ['admin', 'waiter', 'cashier'] },
-  { name: 'Pedidos', href: '/orders', icon: ShoppingBag, roles: ['admin', 'waiter', 'kitchen', 'cashier'] },
-  { name: 'Cardápio', href: '/menu', icon: Pizza, roles: ['admin', 'waiter', 'kitchen'] },
-  { name: 'Clientes', href: '/customers', icon: Users, roles: ['admin', 'cashier', 'waiter'] },
-  { name: 'Estoque', href: '/stock', icon: Package, roles: ['admin', 'kitchen'] },
-  { name: 'Caixa', href: '/cash-register', icon: CreditCard, roles: ['admin', 'cashier'] },
-  { name: 'Relatórios', href: '/reports', icon: BarChart3, roles: ['admin', 'cashier'] },
-  { name: 'Histórico', href: '/closing-history', icon: History, roles: ['admin', 'cashier'] },
-  { name: 'Reaberturas', href: '/reopen-history', icon: RotateCcw, roles: ['admin'] },
-  { name: 'Auditoria', href: '/audit-dashboard', icon: Shield, roles: ['admin'] },
-  { name: 'Desempenho', href: '/performance', icon: Target, roles: ['admin', 'cashier'] },
-  { name: 'Configurações', href: '/settings', icon: Settings, roles: ['admin'] },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'cashier', 'waiter'], permission: 'dashboard_view' },
+  { name: 'Gestão de Pedidos', href: '/order-management', icon: Kanban, roles: ['admin', 'cashier'], permission: 'orders_view' },
+  { name: 'KDS', href: '/kds', icon: ChefHat, roles: ['admin', 'kitchen'], permission: 'kds_view' },
+  { name: 'Mesas', href: '/tables', icon: UtensilsCrossed, roles: ['admin', 'waiter'], permission: 'tables_view' },
+  { name: 'Balcão', href: '/counter', icon: Store, roles: ['admin', 'waiter', 'cashier'], permission: 'counter_view' },
+  { name: 'Pedidos', href: '/orders', icon: ShoppingBag, roles: ['admin', 'waiter', 'kitchen', 'cashier'], permission: 'orders_view' },
+  { name: 'Cardápio', href: '/menu', icon: Pizza, roles: ['admin', 'waiter', 'kitchen'], permission: 'menu_view' },
+  { name: 'Clientes', href: '/customers', icon: Users, roles: ['admin', 'cashier', 'waiter'], permission: 'customers_view' },
+  { name: 'Estoque', href: '/stock', icon: Package, roles: ['admin', 'kitchen'], permission: 'stock_view' },
+  { name: 'Caixa', href: '/cash-register', icon: CreditCard, roles: ['admin', 'cashier'], permission: 'cash_register_view' },
+  { name: 'Relatórios', href: '/reports', icon: BarChart3, roles: ['admin', 'cashier'], permission: 'reports_view' },
+  { name: 'Histórico', href: '/closing-history', icon: History, roles: ['admin', 'cashier'], permission: 'cash_register_view' },
+  { name: 'Reaberturas', href: '/reopen-history', icon: RotateCcw, roles: ['admin'], permission: 'audit_view' },
+  { name: 'Auditoria', href: '/audit-dashboard', icon: Shield, roles: ['admin'], permission: 'audit_view' },
+  { name: 'Desempenho', href: '/performance', icon: Target, roles: ['admin', 'cashier'], permission: 'performance_view' },
+  { name: 'Configurações', href: '/settings', icon: Settings, roles: ['admin'], permission: 'settings_general' },
 ];
 
 const roleLabels: Record<AppRole, string> = {
@@ -55,11 +57,14 @@ const roleColors: Record<AppRole, string> = {
 export default function PDVLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, signOut } = useAuth();
   const { roles, isLoading: rolesLoading } = useUserRole();
+  const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Initialize realtime notifications
   useRealtimeNotifications();
+
+  if (loading || rolesLoading || permissionsLoading) {
 
   if (loading || rolesLoading) {
     return (
@@ -73,11 +78,22 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
     return <Navigate to="/auth" replace />;
   }
 
-  // Filter navigation based on user roles
+  // Filter navigation based on user roles AND permissions
   // If user has no roles, show all items (first user setup scenario)
   const filteredNavigation = roles.length === 0 
     ? navigation 
-    : navigation.filter(item => item.roles.some(role => roles.includes(role)));
+    : navigation.filter(item => {
+        // Check role first
+        const hasRole = item.roles.some(role => roles.includes(role));
+        if (!hasRole) return false;
+        
+        // Then check permission if defined
+        if (item.permission) {
+          return hasPermission(item.permission);
+        }
+        
+        return true;
+      });
 
   // Get primary role to display
   const primaryRole = roles[0] as AppRole | undefined;

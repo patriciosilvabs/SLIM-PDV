@@ -10,6 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuditEvents, useAuditStats, AuditEventType } from '@/hooks/useAuditEvents';
 import { useEmployees } from '@/hooks/useEmployees';
+import { useUserPermissions } from '@/hooks/useUserPermissions';
+import { AccessDenied } from '@/components/auth/AccessDenied';
 import { format, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { RotateCcw, ArrowRightLeft, XCircle, Shield, Clock, User, FileText, DollarSign, AlertTriangle } from 'lucide-react';
@@ -42,12 +44,17 @@ const eventTypeConfig: Record<AuditEventType, { label: string; icon: React.React
 };
 
 export default function AuditDashboard() {
+  const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedUser, setSelectedUser] = useState<string>('all');
 
   const { data: employees } = useEmployees();
+
+  if (!permissionsLoading && !hasPermission('audit_view')) {
+    return <AccessDenied permission="audit_view" />;
+  }
   
   const types = selectedType === 'all' ? undefined : [selectedType as AuditEventType];
   const userId = selectedUser === 'all' ? undefined : selectedUser;

@@ -1371,6 +1371,19 @@ export type Database = {
         | "cash_register_manage"
         | "menu_view"
         | "menu_manage"
+        | "kds_view"
+        | "kds_change_status"
+        | "counter_view"
+        | "counter_add_items"
+        | "counter_apply_discount"
+        | "counter_process_payment"
+        | "audit_view"
+        | "audit_export"
+        | "stock_view"
+        | "stock_manage"
+        | "dashboard_view"
+        | "performance_view"
+        | "combos_manage"
       stock_movement_type: "entry" | "exit" | "adjustment"
       table_status: "available" | "occupied" | "reserved" | "bill_requested"
     }
@@ -1532,6 +1545,19 @@ export const Constants = {
         "cash_register_manage",
         "menu_view",
         "menu_manage",
+        "kds_view",
+        "kds_change_status",
+        "counter_view",
+        "counter_add_items",
+        "counter_apply_discount",
+        "counter_process_payment",
+        "audit_view",
+        "audit_export",
+        "stock_view",
+        "stock_manage",
+        "dashboard_view",
+        "performance_view",
+        "combos_manage",
       ],
       stock_movement_type: ["entry", "exit", "adjustment"],
       table_status: ["available", "occupied", "reserved", "bill_requested"],

@@ -7,6 +7,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useUserPermissions } from '@/hooks/useUserPermissions';
+import { AccessDenied } from '@/components/auth/AccessDenied';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -115,6 +117,7 @@ const KPICard = ({ title, value, variation, format: formatType, icon, loading }:
 };
 
 export default function Performance() {
+  const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const [dateRange, setDateRange] = useState<DateRange>({
     start: startOfDay(new Date()),
     end: endOfDay(new Date()),
@@ -126,6 +129,10 @@ export default function Performance() {
   const [groupBy, setGroupBy] = useState<'hour' | 'day'>('hour');
   const [segmentBy, setSegmentBy] = useState<'payment' | 'orderType'>('payment');
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+  if (!permissionsLoading && !hasPermission('performance_view')) {
+    return <AccessDenied permission="performance_view" />;
+  }
 
   // Queries
   const { data: kpis, isLoading: kpisLoading } = usePerformanceKPIs(dateRange, filters);

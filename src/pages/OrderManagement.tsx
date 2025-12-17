@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
+import { useUserPermissions } from '@/hooks/useUserPermissions';
+import { AccessDenied } from '@/components/auth/AccessDenied';
 import { supabase } from '@/integrations/supabase/client';
 import { RefreshCw, Store, Truck, Clock, Package, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -56,11 +58,16 @@ const columns: KanbanColumnConfig[] = [
 ];
 
 export default function OrderManagement() {
+  const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const { data: orders = [], isLoading, refetch } = useOrders();
   const { updateOrder } = useOrderMutations();
   const queryClient = useQueryClient();
   const previousOrdersRef = useRef<Order[]>([]);
   const handledStatusChangesRef = useRef<Set<string>>(new Set());
+
+  if (!permissionsLoading && !hasPermission('orders_view')) {
+    return <AccessDenied permission="orders_view" />;
+  }
 
   // Filter only takeaway and delivery orders (not dine_in)
   const filteredOrders = orders.filter(

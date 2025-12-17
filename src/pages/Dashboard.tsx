@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useDashboardStats, useTopProducts, useSalesChart } from '@/hooks/useDashboard';
 import { useMonthlyRevenue } from '@/hooks/useMonthlyRevenue';
 import { useOrders } from '@/hooks/useOrders';
+import { useUserPermissions } from '@/hooks/useUserPermissions';
+import { AccessDenied } from '@/components/auth/AccessDenied';
 import { DollarSign, ShoppingBag, Users, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
@@ -11,6 +13,11 @@ function formatCurrency(value: number) {
 }
 
 export default function Dashboard() {
+  const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
+  
+  if (!permissionsLoading && !hasPermission('dashboard_view')) {
+    return <AccessDenied permission="dashboard_view" />;
+  }
   const { data: stats } = useDashboardStats();
   const { data: topProducts } = useTopProducts(7);
   const { data: salesChart } = useSalesChart(7);

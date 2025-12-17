@@ -37,7 +37,26 @@ export type PermissionCode =
   | 'cash_register_manage'
   // Menu
   | 'menu_view'
-  | 'menu_manage';
+  | 'menu_manage'
+  // KDS
+  | 'kds_view'
+  | 'kds_change_status'
+  // Counter/Balcão
+  | 'counter_view'
+  | 'counter_add_items'
+  | 'counter_apply_discount'
+  | 'counter_process_payment'
+  // Audit
+  | 'audit_view'
+  | 'audit_export'
+  // Stock
+  | 'stock_view'
+  | 'stock_manage'
+  // Dashboard
+  | 'dashboard_view'
+  | 'performance_view'
+  // Combos
+  | 'combos_manage';
 
 export interface UserPermission {
   id: string;
@@ -113,6 +132,44 @@ export const PERMISSION_GROUPS = {
     permissions: [
       { code: 'menu_view' as PermissionCode, label: 'Visualizar cardápio' },
       { code: 'menu_manage' as PermissionCode, label: 'Gerenciar cardápio' },
+      { code: 'combos_manage' as PermissionCode, label: 'Gerenciar combos' },
+    ],
+  },
+  kds: {
+    label: 'KDS (Cozinha)',
+    permissions: [
+      { code: 'kds_view' as PermissionCode, label: 'Acessar tela do KDS' },
+      { code: 'kds_change_status' as PermissionCode, label: 'Alterar status de pedidos' },
+    ],
+  },
+  counter: {
+    label: 'Balcão/Takeaway',
+    permissions: [
+      { code: 'counter_view' as PermissionCode, label: 'Acessar tela do balcão' },
+      { code: 'counter_add_items' as PermissionCode, label: 'Adicionar itens' },
+      { code: 'counter_apply_discount' as PermissionCode, label: 'Aplicar descontos' },
+      { code: 'counter_process_payment' as PermissionCode, label: 'Processar pagamentos' },
+    ],
+  },
+  audit: {
+    label: 'Auditoria',
+    permissions: [
+      { code: 'audit_view' as PermissionCode, label: 'Visualizar auditoria' },
+      { code: 'audit_export' as PermissionCode, label: 'Exportar auditoria' },
+    ],
+  },
+  stock: {
+    label: 'Estoque',
+    permissions: [
+      { code: 'stock_view' as PermissionCode, label: 'Visualizar estoque' },
+      { code: 'stock_manage' as PermissionCode, label: 'Gerenciar estoque' },
+    ],
+  },
+  dashboard: {
+    label: 'Dashboard & Performance',
+    permissions: [
+      { code: 'dashboard_view' as PermissionCode, label: 'Acessar dashboard' },
+      { code: 'performance_view' as PermissionCode, label: 'Acessar análise de performance' },
     ],
   },
 };

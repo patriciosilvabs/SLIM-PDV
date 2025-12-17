@@ -23,6 +23,8 @@ import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { useSearchCustomers, useCustomerMutations, Customer } from '@/hooks/useCustomers';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useOpenCashRegister, useCashRegisterMutations, PaymentMethod } from '@/hooks/useCashRegister';
+import { useUserPermissions } from '@/hooks/useUserPermissions';
+import { AccessDenied } from '@/components/auth/AccessDenied';
 import { ProductDetailDialog, SelectedComplement } from '@/components/order/ProductDetailDialog';
 import { printCustomerReceipt } from '@/components/receipt/CustomerReceipt';
 import { usePrinterOptional, SectorPrintItem } from '@/contexts/PrinterContext';
@@ -95,6 +97,7 @@ interface OrderItem {
 type OrderType = 'takeaway' | 'delivery';
 
 export default function Counter() {
+  const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const { data: products } = useProducts();
   const { data: categories } = useCategories();
   const { data: combos } = useCombos();
@@ -106,6 +109,18 @@ export default function Counter() {
   const { getInitialOrderStatus } = useKdsSettings();
   const printer = usePrinterOptional();
   const { data: printSectors } = usePrintSectors();
+  const { findOrCreateCustomer, updateCustomerStats } = useCustomerMutations();
+  const { data: openCashRegister } = useOpenCashRegister();
+  const { createPayment } = useCashRegisterMutations();
+  const isMobile = useIsMobile();
+  
+  const canAddItems = hasPermission('counter_add_items');
+  const canApplyDiscount = hasPermission('counter_apply_discount');
+  const canProcessPayment = hasPermission('counter_process_payment');
+
+  if (!permissionsLoading && !hasPermission('counter_view')) {
+    return <AccessDenied permission="counter_view" />;
+  }
   const { findOrCreateCustomer, updateCustomerStats } = useCustomerMutations();
   const { data: openCashRegister } = useOpenCashRegister();
   const { createPayment } = useCashRegisterMutations();

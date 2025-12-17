@@ -14,6 +14,8 @@ import { useAllProductsWithIngredients, useProductIngredientMutations } from '@/
 import { useProducts } from '@/hooks/useProducts';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useUserPermissions } from '@/hooks/useUserPermissions';
+import { AccessDenied } from '@/components/auth/AccessDenied';
 import { 
   Plus, 
   Package, 
@@ -44,12 +46,19 @@ function getStockStatus(current: number, min: number): 'critical' | 'low' | 'nor
 }
 
 export default function Stock() {
+  const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const [activeTab, setActiveTab] = useState('ingredients');
   const [isNewIngredientOpen, setIsNewIngredientOpen] = useState(false);
   const [isMovementOpen, setIsMovementOpen] = useState(false);
   const [isTechSheetOpen, setIsTechSheetOpen] = useState(false);
   const [selectedIngredient, setSelectedIngredient] = useState<Ingredient | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
+  
+  const canManageStock = hasPermission('stock_manage');
+
+  if (!permissionsLoading && !hasPermission('stock_view')) {
+    return <AccessDenied permission="stock_view" />;
+  }
 
   // Form states
   const [newIngredient, setNewIngredient] = useState({
