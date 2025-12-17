@@ -69,8 +69,8 @@ export function useOrderSettings() {
   });
 
   const [restaurantName, setRestaurantName] = useState(() => {
-    if (typeof window === 'undefined') return 'Minha Pizzaria';
-    return localStorage.getItem(RESTAURANT_NAME_KEY) || 'Minha Pizzaria';
+    if (typeof window === 'undefined') return 'TOTAL';
+    return localStorage.getItem(RESTAURANT_NAME_KEY) || 'TOTAL';
   });
 
   const [restaurantAddress, setRestaurantAddress] = useState(() => {
@@ -316,7 +316,7 @@ export function useOrderSettings() {
         setLeftMargin(parseInt(e.newValue || '0'));
       }
       if (e.key === RESTAURANT_NAME_KEY) {
-        setRestaurantName(e.newValue || 'Minha Pizzaria');
+        setRestaurantName(e.newValue || 'TOTAL');
       }
       if (e.key === RESTAURANT_ADDRESS_KEY) {
         setRestaurantAddress(e.newValue || '');

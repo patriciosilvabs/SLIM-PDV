@@ -223,12 +223,8 @@ export default function Auth() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted p-4">
       <Card className="w-full max-w-md shadow-2xl border-border/50">
-        <CardHeader className="text-center space-y-4">
-          <img src={logoTotal} alt="TOTAL" className="mx-auto h-20 w-auto" />
-          <div>
-            <CardTitle className="text-2xl font-bold" style={{ color: '#D35400' }}>TOTAL</CardTitle>
-            <CardDescription>Sistema PDV para Restaurante</CardDescription>
-          </div>
+        <CardHeader className="text-center py-6">
+          <img src={logoTotal} alt="TOTAL - Sistema PDV para Restaurante" className="mx-auto h-28 w-auto" />
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="login" className="w-full">
