@@ -1,0 +1,277 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { useUserRole } from './useUserRole';
+
+export type PermissionCode =
+  // Orders
+  | 'orders_view'
+  | 'orders_edit'
+  // Tables
+  | 'tables_view'
+  | 'tables_switch'
+  | 'tables_move_items'
+  | 'tables_reprint_items'
+  | 'tables_cancel_items'
+  | 'tables_cancel_order'
+  | 'tables_manage_payments'
+  | 'tables_reopen'
+  | 'tables_close'
+  | 'tables_change_fees'
+  | 'tables_order_as_other'
+  // Delivery
+  | 'delivery_view'
+  | 'delivery_manage'
+  // Customers
+  | 'customers_view'
+  | 'customers_manage'
+  // Settings
+  | 'settings_general'
+  | 'settings_print'
+  | 'settings_users'
+  // Reports
+  | 'reports_view'
+  | 'reports_export'
+  // Cash Register
+  | 'cash_register_view'
+  | 'cash_register_manage'
+  // Menu
+  | 'menu_view'
+  | 'menu_manage';
+
+export interface UserPermission {
+  id: string;
+  user_id: string;
+  permission: PermissionCode;
+  granted: boolean;
+  created_at: string;
+  granted_by: string | null;
+}
+
+export const PERMISSION_GROUPS = {
+  orders: {
+    label: 'Gestão de Pedidos',
+    permissions: [
+      { code: 'orders_view' as PermissionCode, label: 'Visualizar pedidos' },
+      { code: 'orders_edit' as PermissionCode, label: 'Editar pedidos' },
+    ],
+  },
+  tables: {
+    label: 'Mesas/Comandas',
+    permissions: [
+      { code: 'tables_view' as PermissionCode, label: 'Visualizar mesas' },
+      { code: 'tables_switch' as PermissionCode, label: 'Trocar mesas' },
+      { code: 'tables_move_items' as PermissionCode, label: 'Mover itens da mesa/comanda' },
+      { code: 'tables_reprint_items' as PermissionCode, label: 'Reimprimir itens da mesa/comanda' },
+      { code: 'tables_cancel_items' as PermissionCode, label: 'Cancelar itens' },
+      { code: 'tables_cancel_order' as PermissionCode, label: 'Cancelar pedido' },
+      { code: 'tables_manage_payments' as PermissionCode, label: 'Adicionar e remover pagamentos' },
+      { code: 'tables_reopen' as PermissionCode, label: 'Reabrir mesa/comanda' },
+      { code: 'tables_close' as PermissionCode, label: 'Fechar mesa/comanda' },
+      { code: 'tables_change_fees' as PermissionCode, label: 'Alterar taxas e descontos' },
+      { code: 'tables_order_as_other' as PermissionCode, label: 'Lançar pedidos como outro garçom' },
+    ],
+  },
+  delivery: {
+    label: 'Delivery',
+    permissions: [
+      { code: 'delivery_view' as PermissionCode, label: 'Visualizar delivery' },
+      { code: 'delivery_manage' as PermissionCode, label: 'Gerenciar delivery' },
+    ],
+  },
+  customers: {
+    label: 'Clientes',
+    permissions: [
+      { code: 'customers_view' as PermissionCode, label: 'Visualizar clientes' },
+      { code: 'customers_manage' as PermissionCode, label: 'Gerenciar clientes' },
+    ],
+  },
+  settings: {
+    label: 'Configurações',
+    permissions: [
+      { code: 'settings_general' as PermissionCode, label: 'Configurações gerais' },
+      { code: 'settings_print' as PermissionCode, label: 'Configurações de impressão' },
+      { code: 'settings_users' as PermissionCode, label: 'Gerenciar usuários' },
+    ],
+  },
+  reports: {
+    label: 'Relatórios',
+    permissions: [
+      { code: 'reports_view' as PermissionCode, label: 'Visualizar relatórios' },
+      { code: 'reports_export' as PermissionCode, label: 'Exportar relatórios' },
+    ],
+  },
+  cash_register: {
+    label: 'Caixa',
+    permissions: [
+      { code: 'cash_register_view' as PermissionCode, label: 'Visualizar caixa' },
+      { code: 'cash_register_manage' as PermissionCode, label: 'Gerenciar caixa' },
+    ],
+  },
+  menu: {
+    label: 'Cardápio',
+    permissions: [
+      { code: 'menu_view' as PermissionCode, label: 'Visualizar cardápio' },
+      { code: 'menu_manage' as PermissionCode, label: 'Gerenciar cardápio' },
+    ],
+  },
+};
+
+export function useUserPermissions() {
+  const { user } = useAuth();
+  const { isAdmin } = useUserRole();
+  
+  const query = useQuery({
+    queryKey: ['user-permissions', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from('user_permissions')
+        .select('*')
+        .eq('user_id', user.id);
+      
+      if (error) throw error;
+      return (data || []) as UserPermission[];
+    },
+    enabled: !!user?.id,
+  });
+
+  // Admin has all permissions
+  const hasPermission = (code: PermissionCode): boolean => {
+    if (isAdmin) return true;
+    return query.data?.some(p => p.permission === code && p.granted) ?? false;
+  };
+
+  const hasAnyPermission = (codes: PermissionCode[]): boolean => {
+    return codes.some(code => hasPermission(code));
+  };
+
+  return { 
+    ...query, 
+    permissions: query.data || [],
+    hasPermission, 
+    hasAnyPermission 
+  };
+}
+
+// Hook to get permissions for a specific user (admin use)
+export function useUserPermissionsById(userId: string | null) {
+  const query = useQuery({
+    queryKey: ['user-permissions', userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      const { data, error } = await supabase
+        .from('user_permissions')
+        .select('*')
+        .eq('user_id', userId);
+      
+      if (error) throw error;
+      return (data || []) as UserPermission[];
+    },
+    enabled: !!userId,
+  });
+
+  return query;
+}
+
+// Hook for permission mutations (admin use)
+export function useUserPermissionMutations() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  const setPermission = useMutation({
+    mutationFn: async ({ userId, permission, granted }: { userId: string; permission: PermissionCode; granted: boolean }) => {
+      if (granted) {
+        // Upsert permission
+        const { error } = await supabase
+          .from('user_permissions')
+          .upsert({
+            user_id: userId,
+            permission,
+            granted: true,
+            granted_by: user?.id,
+          }, { onConflict: 'user_id,permission' });
+        
+        if (error) throw error;
+      } else {
+        // Remove permission
+        const { error } = await supabase
+          .from('user_permissions')
+          .delete()
+          .eq('user_id', userId)
+          .eq('permission', permission);
+        
+        if (error) throw error;
+      }
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['user-permissions', variables.userId] });
+    },
+  });
+
+  const setMultiplePermissions = useMutation({
+    mutationFn: async ({ userId, permissions }: { userId: string; permissions: { permission: PermissionCode; granted: boolean }[] }) => {
+      // Delete all existing permissions for user
+      await supabase
+        .from('user_permissions')
+        .delete()
+        .eq('user_id', userId);
+
+      // Insert only granted permissions
+      const grantedPermissions = permissions.filter(p => p.granted);
+      if (grantedPermissions.length > 0) {
+        const { error } = await supabase
+          .from('user_permissions')
+          .insert(grantedPermissions.map(p => ({
+            user_id: userId,
+            permission: p.permission,
+            granted: true,
+            granted_by: user?.id,
+          })));
+        
+        if (error) throw error;
+      }
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['user-permissions', variables.userId] });
+    },
+  });
+
+  const copyPermissions = useMutation({
+    mutationFn: async ({ fromUserId, toUserId }: { fromUserId: string; toUserId: string }) => {
+      // Get source user permissions
+      const { data: sourcePermissions, error: fetchError } = await supabase
+        .from('user_permissions')
+        .select('permission')
+        .eq('user_id', fromUserId)
+        .eq('granted', true);
+      
+      if (fetchError) throw fetchError;
+      
+      // Delete target user permissions
+      await supabase
+        .from('user_permissions')
+        .delete()
+        .eq('user_id', toUserId);
+
+      // Copy permissions
+      if (sourcePermissions && sourcePermissions.length > 0) {
+        const { error } = await supabase
+          .from('user_permissions')
+          .insert(sourcePermissions.map(p => ({
+            user_id: toUserId,
+            permission: p.permission,
+            granted: true,
+            granted_by: user?.id,
+          })));
+        
+        if (error) throw error;
+      }
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['user-permissions', variables.toUserId] });
+    },
+  });
+
+  return { setPermission, setMultiplePermissions, copyPermissions };
+}

@@ -16,7 +16,8 @@ import { ScheduledAnnouncementsSettings } from '@/components/ScheduledAnnounceme
 import { PrinterSettings } from '@/components/PrinterSettings';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Users, Shield, Plus, X, Crown, Sparkles, AlertTriangle, UtensilsCrossed, Edit, Trash2, ShoppingCart, ChefHat, UserPlus, Eye, EyeOff } from 'lucide-react';
+import { Users, Shield, Plus, X, Crown, Sparkles, AlertTriangle, UtensilsCrossed, Edit, Trash2, ShoppingCart, ChefHat, UserPlus, Eye, EyeOff, Key } from 'lucide-react';
+import { UserPermissionsDialog } from '@/components/settings/UserPermissionsDialog';
 import { Switch } from '@/components/ui/switch';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { useTableWaitSettings } from '@/hooks/useTableWaitSettings';
@@ -100,6 +101,9 @@ export default function Settings() {
   const [editUserName, setEditUserName] = useState('');
   const [isSavingUser, setIsSavingUser] = useState(false);
 
+  // Permissions dialog state
+  const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
+  const [userForPermissions, setUserForPermissions] = useState<UserWithRoles | null>(null);
   // Check if current user can bootstrap (no admins exist)
   const canBootstrap = !checkingAdmins && hasAdmins === false && user?.id;
 
@@ -841,8 +845,21 @@ export default function Settings() {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleOpenEditUser(user)}
+                              title="Editar nome"
                             >
                               <Edit className="h-4 w-4" />
+                            </Button>
+                            {/* Permissions button */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setUserForPermissions(user);
+                                setIsPermissionsDialogOpen(true);
+                              }}
+                              title="Gerenciar permissões"
+                            >
+                              <Key className="h-4 w-4" />
                             </Button>
                             {/* Role removal with confirmation */}
                             {user.user_roles.map((ur) => (
@@ -1006,6 +1023,14 @@ export default function Settings() {
               </div>
             </DialogContent>
           </Dialog>
+
+          {/* User Permissions Dialog */}
+          <UserPermissionsDialog
+            open={isPermissionsDialogOpen}
+            onOpenChange={setIsPermissionsDialogOpen}
+            user={userForPermissions}
+            allUsers={users || []}
+          />
         </div>
       </RequireRole>
     </PDVLayout>

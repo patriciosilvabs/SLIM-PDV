@@ -23,7 +23,7 @@ import { useIdleTableSettings } from '@/hooks/useIdleTableSettings';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
-import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus, ArrowRightLeft, Edit, XCircle, Printer } from 'lucide-react';
+import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus, ArrowRightLeft, Edit, XCircle, Printer, RotateCcw } from 'lucide-react';
 import { printKitchenOrderTicket } from '@/components/kitchen/KitchenOrderTicket';
 import { printCustomerReceipt } from '@/components/receipt/CustomerReceipt';
 import { Switch } from '@/components/ui/switch';
@@ -94,6 +94,7 @@ export default function Tables() {
   const { user } = useAuth();
   const { hasAnyRole } = useUserRole();
   const canDeleteItems = hasAnyRole(['admin', 'cashier']);
+  const canReopenTable = hasAnyRole(['admin', 'cashier']);
   const { settings: tableWaitSettings } = useTableWaitSettings();
   const { settings: idleTableSettings } = useIdleTableSettings();
   const { playOrderReadySound, playTableWaitAlertSound, playIdleTableAlertSound, settings: audioSettings } = useAudioNotification();
@@ -103,6 +104,7 @@ export default function Tables() {
   const { data: printSectors } = usePrintSectors();
   const { data: tables, isLoading } = useTables();
   const { data: orders } = useOrders(['pending', 'preparing', 'ready']);
+  const { data: allOrders } = useOrders(['pending', 'preparing', 'ready', 'delivered', 'cancelled']);
   const { createTable, updateTable } = useTableMutations();
   const { createOrder, updateOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
   
@@ -167,6 +169,11 @@ export default function Tables() {
   // Customer name editing states
   const [isEditingCustomerName, setIsEditingCustomerName] = useState(false);
   const [editedCustomerName, setEditedCustomerName] = useState('');
+
+  // Reopen table states
+  const [isReopenDialogOpen, setIsReopenDialogOpen] = useState(false);
+  const [closedOrderToReopen, setClosedOrderToReopen] = useState<Order | null>(null);
+  const [isReopening, setIsReopening] = useState(false);
 
   // Realtime subscription for orders
   useEffect(() => {
@@ -396,6 +403,59 @@ export default function Tables() {
     return reservations?.find(r => r.table_id === tableId && r.status === 'confirmed');
   };
 
+  // Get closed (delivered) orders for a table in the last 24 hours
+  const getClosedTableOrders = (tableId: string) => {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    return allOrders?.filter(o => 
+      o.table_id === tableId && 
+      o.status === 'delivered' &&
+      o.order_items && 
+      o.order_items.length > 0 &&
+      new Date(o.updated_at || o.created_at!) > oneDayAgo
+    ) || [];
+  };
+
+  // Handle reopening a closed order
+  const handleReopenClosedOrder = async () => {
+    if (!closedOrderToReopen || !selectedTable) return;
+    
+    setIsReopening(true);
+    try {
+      // Reopen the order (set status back to preparing)
+      await updateOrder.mutateAsync({
+        id: closedOrderToReopen.id,
+        status: getInitialOrderStatus(),
+        updated_at: new Date().toISOString()
+      });
+      
+      // Reopen the table
+      await updateTable.mutateAsync({
+        id: selectedTable.id,
+        status: 'occupied'
+      });
+
+      // Update all order items status
+      if (closedOrderToReopen.order_items) {
+        for (const item of closedOrderToReopen.order_items) {
+          await supabase
+            .from('order_items')
+            .update({ status: getInitialOrderStatus() })
+            .eq('id', item.id);
+        }
+      }
+      
+      toast.success(`Mesa ${selectedTable.number} reaberta com sucesso!`);
+      setIsReopenDialogOpen(false);
+      setClosedOrderToReopen(null);
+      setSelectedTable({ ...selectedTable, status: 'occupied' });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    } catch (error) {
+      console.error('Error reopening order:', error);
+      toast.error('Erro ao reabrir mesa');
+    } finally {
+      setIsReopening(false);
+    }
+  };
 
   const handleTableClick = (table: Table) => {
     if (table.status === 'available') {
@@ -1218,6 +1278,36 @@ export default function Tables() {
                               Liberar Mesa
                             </Button>
                           )}
+
+                          {/* Reopen button for available tables with closed orders */}
+                          {selectedTable.status === 'available' && canReopenTable && (() => {
+                            const closedOrders = getClosedTableOrders(selectedTable.id);
+                            if (closedOrders.length === 0) return null;
+                            return (
+                              <div className="space-y-2 pt-2 border-t">
+                                <p className="text-xs text-muted-foreground">Pedidos fechados recentemente:</p>
+                                {closedOrders.slice(0, 3).map((order) => (
+                                  <Button 
+                                    key={order.id}
+                                    variant="outline" 
+                                    className="w-full justify-between"
+                                    onClick={() => {
+                                      setClosedOrderToReopen(order);
+                                      setIsReopenDialogOpen(true);
+                                    }}
+                                  >
+                                    <span className="flex items-center gap-2">
+                                      <RotateCcw className="h-4 w-4" />
+                                      #{order.id.slice(0, 8)}
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                      {formatCurrency(order.total || 0)}
+                                    </span>
+                                  </Button>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </>
                     )}
@@ -2203,6 +2293,68 @@ export default function Tables() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reopen Closed Order Dialog */}
+      <Dialog open={isReopenDialogOpen} onOpenChange={setIsReopenDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5" />
+              Reabrir Mesa {selectedTable?.number}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            {closedOrderToReopen && (
+              <>
+                <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Pedido</span>
+                    <span className="font-mono">#{closedOrderToReopen.id.slice(0, 8)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Itens</span>
+                    <span>{closedOrderToReopen.order_items?.length || 0}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total</span>
+                    <span className="font-bold">{formatCurrency(closedOrderToReopen.total || 0)}</span>
+                  </div>
+                  {closedOrderToReopen.customer_name && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Cliente</span>
+                      <span>{closedOrderToReopen.customer_name}</span>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 text-sm">
+                  <p className="font-medium text-warning">Atenção</p>
+                  <p className="text-muted-foreground text-xs mt-1">
+                    Ao reabrir a mesa, o pedido voltará para produção e você poderá adicionar ou remover itens.
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsReopenDialogOpen(false);
+                setClosedOrderToReopen(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleReopenClosedOrder}
+              disabled={isReopening}
+            >
+              {isReopening ? 'Reabrindo...' : 'Reabrir Mesa'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </PDVLayout>

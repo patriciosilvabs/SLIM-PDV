@@ -1209,6 +1209,33 @@ export type Database = {
         }
         Relationships: []
       }
+      user_permissions: {
+        Row: {
+          created_at: string | null
+          granted: boolean
+          granted_by: string | null
+          id: string
+          permission: Database["public"]["Enums"]["permission_code"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          granted?: boolean
+          granted_by?: string | null
+          id?: string
+          permission: Database["public"]["Enums"]["permission_code"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          granted?: boolean
+          granted_by?: string | null
+          id?: string
+          permission?: Database["public"]["Enums"]["permission_code"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -1233,6 +1260,13 @@ export type Database = {
     }
     Functions: {
       can_bootstrap_admin: { Args: { _user_id: string }; Returns: boolean }
+      has_permission: {
+        Args: {
+          _permission: Database["public"]["Enums"]["permission_code"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1253,6 +1287,33 @@ export type Database = {
         | "cancelled"
       order_type: "dine_in" | "takeaway" | "delivery"
       payment_method: "cash" | "credit_card" | "debit_card" | "pix"
+      permission_code:
+        | "orders_view"
+        | "orders_edit"
+        | "tables_view"
+        | "tables_switch"
+        | "tables_move_items"
+        | "tables_reprint_items"
+        | "tables_cancel_items"
+        | "tables_cancel_order"
+        | "tables_manage_payments"
+        | "tables_reopen"
+        | "tables_close"
+        | "tables_change_fees"
+        | "tables_order_as_other"
+        | "delivery_view"
+        | "delivery_manage"
+        | "customers_view"
+        | "customers_manage"
+        | "settings_general"
+        | "settings_print"
+        | "settings_users"
+        | "reports_view"
+        | "reports_export"
+        | "cash_register_view"
+        | "cash_register_manage"
+        | "menu_view"
+        | "menu_manage"
       stock_movement_type: "entry" | "exit" | "adjustment"
       table_status: "available" | "occupied" | "reserved" | "bill_requested"
     }
@@ -1387,6 +1448,34 @@ export const Constants = {
       order_status: ["pending", "preparing", "ready", "delivered", "cancelled"],
       order_type: ["dine_in", "takeaway", "delivery"],
       payment_method: ["cash", "credit_card", "debit_card", "pix"],
+      permission_code: [
+        "orders_view",
+        "orders_edit",
+        "tables_view",
+        "tables_switch",
+        "tables_move_items",
+        "tables_reprint_items",
+        "tables_cancel_items",
+        "tables_cancel_order",
+        "tables_manage_payments",
+        "tables_reopen",
+        "tables_close",
+        "tables_change_fees",
+        "tables_order_as_other",
+        "delivery_view",
+        "delivery_manage",
+        "customers_view",
+        "customers_manage",
+        "settings_general",
+        "settings_print",
+        "settings_users",
+        "reports_view",
+        "reports_export",
+        "cash_register_view",
+        "cash_register_manage",
+        "menu_view",
+        "menu_manage",
+      ],
       stock_movement_type: ["entry", "exit", "adjustment"],
       table_status: ["available", "occupied", "reserved", "bill_requested"],
     },
