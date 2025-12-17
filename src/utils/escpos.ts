@@ -166,7 +166,7 @@ export function buildKitchenTicket(
   if (data.orderType === 'dine_in' && data.tableNumber) {
     ticket += `MESA ${data.tableNumber}` + LF;
   } else if (data.orderType === 'takeaway') {
-    ticket += 'BALCAO' + LF;
+    ticket += 'BALCÃO' + LF;
   } else {
     ticket += 'DELIVERY' + LF;
   }
@@ -223,7 +223,7 @@ export function buildKitchenTicket(
     ticket += DASHED_LINE(width);
     ticket += fontCmd;
     ticket += TEXT_BOLD;
-    ticket += 'OBSERVACOES GERAIS:' + LF;
+    ticket += 'OBSERVAÇÕES GERAIS:' + LF;
     ticket += TEXT_BOLD_OFF;
     const wrappedNotes = wrapText(data.notes, width);
     for (const line of wrappedNotes) {
@@ -379,7 +379,7 @@ export function buildCustomerReceipt(
   }
 
   if (data.serviceCharge && data.serviceCharge.amount > 0) {
-    receipt += formatLine(`Taxa serviço (${data.serviceCharge.percent}%)`, `+${formatCurrency(data.serviceCharge.amount)}`, width);
+    receipt += formatLine(`Taxa de serviço (${data.serviceCharge.percent}%)`, `+${formatCurrency(data.serviceCharge.amount)}`, width);
   }
 
   receipt += TEXT_NORMAL;
@@ -419,7 +419,7 @@ export function buildCustomerReceipt(
     receipt += ALIGN_CENTER;
     receipt += fontCmd;
     receipt += TEXT_BOLD;
-    receipt += `DIVISAO (${data.splitBill.count} pessoas)` + LF;
+    receipt += `DIVISÃO (${data.splitBill.count} pessoas)` + LF;
     receipt += TEXT_DOUBLE_HEIGHT;
     receipt += `${formatCurrency(data.splitBill.amountPerPerson)} por pessoa` + LF;
     receipt += fontCmd;
@@ -439,7 +439,7 @@ export function buildCustomerReceipt(
       receipt += line + LF;
     }
   } else {
-    receipt += 'Obrigado pela preferencia!' + LF;
+    receipt += 'Obrigado pela preferência!' + LF;
     receipt += TEXT_BOLD_OFF;
     receipt += 'Volte sempre!' + LF;
   }

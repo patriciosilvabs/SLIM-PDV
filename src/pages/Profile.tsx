@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import PDVLayout from '@/components/layout/PDVLayout';
@@ -11,7 +12,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, User, Lock, Eye, EyeOff, Save, Mail, Calendar, Shield } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Loader2, User, Lock, Eye, EyeOff, Save, Mail, Calendar, Shield, Trash2, AlertTriangle } from 'lucide-react';
 
 const roleLabels: Record<AppRole, string> = {
   admin: 'Administrador',
@@ -28,9 +41,19 @@ const roleColors: Record<AppRole, string> = {
 };
 
 export default function Profile() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { roles } = useUserRole();
-  const { profile, isLoading, updateProfile, isUpdatingProfile, changePassword, isChangingPassword } = useProfile();
+  const { 
+    profile, 
+    isLoading, 
+    updateProfile, 
+    isUpdatingProfile, 
+    changePassword, 
+    isChangingPassword,
+    deleteAccount,
+    isDeletingAccount 
+  } = useProfile();
 
   // Profile form state
   const [name, setName] = useState('');
@@ -42,6 +65,12 @@ export default function Profile() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Delete account state
+  const [deletePassword, setDeletePassword] = useState('');
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   // Populate name when profile loads
   useEffect(() => {
@@ -80,9 +109,30 @@ export default function Profile() {
     );
   };
 
+  const handleDeleteAccount = () => {
+    if (!deletePassword || !confirmDelete) return;
+    
+    deleteAccount(
+      { password: deletePassword },
+      {
+        onSuccess: () => {
+          setDeleteDialogOpen(false);
+          navigate('/auth');
+        },
+      }
+    );
+  };
+
+  const resetDeleteState = () => {
+    setDeletePassword('');
+    setShowDeletePassword(false);
+    setConfirmDelete(false);
+  };
+
   const passwordsMatch = newPassword === confirmPassword;
   const isPasswordValid = newPassword.length >= 6;
   const canChangePassword = currentPassword && newPassword && confirmPassword && passwordsMatch && isPasswordValid;
+  const canDeleteAccount = deletePassword.length >= 6 && confirmDelete;
 
   if (isLoading) {
     return (
@@ -304,6 +354,123 @@ export default function Profile() {
                 </>
               )}
             </Button>
+          </CardContent>
+        </Card>
+
+        {/* Danger Zone - Delete Account */}
+        <Card className="border-destructive/50">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              <CardTitle className="text-destructive">Zona de Perigo</CardTitle>
+            </div>
+            <CardDescription>Ações irreversíveis da conta</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="p-4 bg-destructive/10 rounded-lg border border-destructive/20">
+              <h4 className="font-semibold text-destructive mb-2">Excluir sua conta</h4>
+              <p className="text-sm text-muted-foreground mb-4">
+                Ao excluir sua conta, todos os seus dados serão removidos permanentemente:
+              </p>
+              <ul className="text-sm text-muted-foreground space-y-1 mb-4 list-disc list-inside">
+                <li>Seu perfil e informações pessoais</li>
+                <li>Suas funções e permissões no sistema</li>
+                <li>Histórico de ações realizadas</li>
+              </ul>
+              <p className="text-sm font-semibold text-destructive">
+                Esta ação NÃO pode ser desfeita.
+              </p>
+            </div>
+
+            <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => {
+              setDeleteDialogOpen(open);
+              if (!open) resetDeleteState();
+            }}>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" className="w-full">
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Excluir Minha Conta
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+                    <AlertTriangle className="h-5 w-5" />
+                    Confirmar Exclusão de Conta
+                  </AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <div className="space-y-4">
+                      <p>
+                        Você está prestes a excluir permanentemente sua conta. 
+                        Esta ação é irreversível e todos os seus dados serão perdidos.
+                      </p>
+                      
+                      {/* Password confirmation */}
+                      <div className="space-y-2">
+                        <Label htmlFor="deletePassword">Digite sua senha para confirmar</Label>
+                        <div className="relative">
+                          <Input
+                            id="deletePassword"
+                            type={showDeletePassword ? 'text' : 'password'}
+                            value={deletePassword}
+                            onChange={(e) => setDeletePassword(e.target.value)}
+                            placeholder="Sua senha atual"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                            onClick={() => setShowDeletePassword(!showDeletePassword)}
+                          >
+                            {showDeletePassword ? (
+                              <EyeOff className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <Eye className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Confirmation checkbox */}
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="confirmDelete"
+                          checked={confirmDelete}
+                          onCheckedChange={(checked) => setConfirmDelete(checked as boolean)}
+                        />
+                        <Label 
+                          htmlFor="confirmDelete" 
+                          className="text-sm text-muted-foreground cursor-pointer"
+                        >
+                          Eu entendo que esta ação é irreversível
+                        </Label>
+                      </div>
+                    </div>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <Button
+                    variant="destructive"
+                    onClick={handleDeleteAccount}
+                    disabled={!canDeleteAccount || isDeletingAccount}
+                  >
+                    {isDeletingAccount ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Excluindo...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Excluir Conta
+                      </>
+                    )}
+                  </Button>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </CardContent>
         </Card>
       </div>

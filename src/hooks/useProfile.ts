@@ -96,6 +96,45 @@ export function useProfile() {
     },
   });
 
+  const deleteAccountMutation = useMutation({
+    mutationFn: async ({ password }: { password: string }) => {
+      if (!user?.id) throw new Error('Usuário não autenticado');
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (!token) throw new Error('Sessão inválida');
+
+      const response = await supabase.functions.invoke('delete-user', {
+        body: { password },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Erro ao excluir conta');
+      }
+
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      return response.data;
+    },
+    onSuccess: async () => {
+      await supabase.auth.signOut();
+      toast({
+        title: 'Conta excluída',
+        description: 'Sua conta foi excluída permanentemente.',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Erro ao excluir conta',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
   return {
     profile,
     isLoading,
@@ -103,5 +142,7 @@ export function useProfile() {
     isUpdatingProfile: updateProfileMutation.isPending,
     changePassword: changePasswordMutation.mutate,
     isChangingPassword: changePasswordMutation.isPending,
+    deleteAccount: deleteAccountMutation.mutate,
+    isDeletingAccount: deleteAccountMutation.isPending,
   };
 }
