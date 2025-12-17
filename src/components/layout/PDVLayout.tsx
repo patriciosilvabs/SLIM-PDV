@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
+import { PrinterStatusIndicator } from '@/components/PrinterStatusIndicator';
 import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Pizza, Store, Users, Kanban, ChefHat, History, Target } from 'lucide-react';
 
 interface NavItem {
@@ -98,7 +99,10 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
             <span className="text-sidebar-foreground font-semibold">PDV Pizzaria</span>
           </div>
         </div>
-        <OfflineIndicator />
+        <div className="flex items-center gap-2">
+          <OfflineIndicator />
+          <PrinterStatusIndicator />
+        </div>
       </header>
 
       {/* Sidebar */}
@@ -123,9 +127,10 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          {/* Offline indicator for desktop */}
-          <div className="hidden lg:flex px-4 py-2 border-b border-sidebar-border">
+          {/* Status indicators for desktop */}
+          <div className="hidden lg:flex px-4 py-2 border-b border-sidebar-border gap-2">
             <OfflineIndicator />
+            <PrinterStatusIndicator />
           </div>
 
           {/* Navigation */}
