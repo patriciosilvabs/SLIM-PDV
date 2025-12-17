@@ -119,12 +119,14 @@ export interface KitchenTicketData {
   orderType: 'dine_in' | 'takeaway' | 'delivery';
   tableNumber?: number;
   customerName?: string | null;
+  sectorName?: string; // Name of the print sector
   items: {
     quantity: number;
     productName: string;
     variation?: string | null;
     extras?: string[];
     notes?: string | null;
+    print_sector_id?: string | null;
   }[];
   notes?: string | null;
   createdAt: string;
@@ -154,11 +156,11 @@ export function buildKitchenTicket(
     ticket += GS + 'L' + String.fromCharCode(leftMargin) + '\x00';
   }
 
-  // Header
+  // Header - use sector name if provided
   ticket += ALIGN_CENTER;
   ticket += TEXT_BOLD;
   ticket += fontCmd;
-  ticket += 'COZINHA' + LF;
+  ticket += (data.sectorName?.toUpperCase() || 'COZINHA') + LF;
   ticket += TEXT_DOUBLE_SIZE;
   
   if (data.orderType === 'dine_in' && data.tableNumber) {

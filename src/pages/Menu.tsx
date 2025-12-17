@@ -20,7 +20,8 @@ import { useComplementGroups, useComplementGroupsMutations, ComplementGroup } fr
 import { useComplementOptions, useComplementOptionsMutations, ComplementOption } from '@/hooks/useComplementOptions';
 import { useComplementGroupOptions, useComplementGroupOptionsMutations } from '@/hooks/useComplementGroupOptions';
 import { useProductComplementGroups, useProductComplementGroupsMutations } from '@/hooks/useProductComplementGroups';
-import { Plus, Edit, Trash2, Search, Link2, Package, GripVertical, MoreVertical, Star, Percent, Eye, EyeOff } from 'lucide-react';
+import { usePrintSectors } from '@/hooks/usePrintSectors';
+import { Plus, Edit, Trash2, Search, Link2, Package, GripVertical, MoreVertical, Star, Percent, Eye, EyeOff, Printer } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ImageUpload } from '@/components/ImageUpload';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
@@ -56,6 +57,7 @@ interface ProductForm {
   internal_code: string;
   pdv_code: string;
   image_url: string | null;
+  print_sector_id: string | null;
 }
 
 const LABEL_OPTIONS = [
@@ -74,6 +76,7 @@ export default function Menu() {
   const { data: comboItems } = useComboItems();
   const { data: complementGroups } = useComplementGroups();
   const { data: complementOptions } = useComplementOptions();
+  const { data: printSectors } = usePrintSectors();
   const { createProduct, updateProduct, deleteProduct, updateSortOrder: updateProductSortOrder } = useProductMutations();
   const { createCategory, updateCategory, deleteCategory, updateSortOrder: updateCategorySortOrder } = useCategoryMutations();
   const { createCombo, updateCombo, deleteCombo } = useComboMutations();
@@ -98,7 +101,7 @@ export default function Menu() {
   const [productForm, setProductForm] = useState<ProductForm>({
     name: '', description: '', price: 0, cost_price: 0, category_id: '', 
     is_available: true, is_featured: false, is_promotion: false, promotion_price: 0,
-    label: 'none', internal_code: '', pdv_code: '', image_url: null
+    label: 'none', internal_code: '', pdv_code: '', image_url: null, print_sector_id: null
   });
   const [productLinkedExtras, setProductLinkedExtras] = useState<string[]>([]);
   const [productLinkedGroupIds, setProductLinkedGroupIds] = useState<string[]>([]);
@@ -195,7 +198,8 @@ export default function Menu() {
       pdv_code: productForm.pdv_code || null,
       image_url: productForm.image_url,
       preparation_time: 15,
-      sort_order: editingProduct?.sort_order ?? (products?.length ?? 0)
+      sort_order: editingProduct?.sort_order ?? (products?.length ?? 0),
+      print_sector_id: productForm.print_sector_id || null,
     };
 
     let productId = editingProduct?.id;
@@ -305,7 +309,7 @@ export default function Menu() {
     setProductForm({
       name: '', description: '', price: 0, cost_price: 0, category_id: '', 
       is_available: true, is_featured: false, is_promotion: false, promotion_price: 0,
-      label: 'none', internal_code: '', pdv_code: '', image_url: null
+      label: 'none', internal_code: '', pdv_code: '', image_url: null, print_sector_id: null
     });
     setProductLinkedExtras([]);
     setProductLinkedGroupIds([]);
@@ -326,7 +330,8 @@ export default function Menu() {
       label: product.label || 'none',
       internal_code: product.internal_code || '',
       pdv_code: product.pdv_code || '',
-      image_url: product.image_url
+      image_url: product.image_url,
+      print_sector_id: product.print_sector_id || null,
     });
     // Load linked groups
     const { data: linkedGroups } = await supabase
@@ -991,6 +996,35 @@ export default function Menu() {
                       onChange={(e) => setProductForm({...productForm, pdv_code: e.target.value})} 
                     />
                   </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="flex items-center gap-2">
+                    <Printer className="h-4 w-4" />
+                    Setor de Impressão
+                  </Label>
+                  <Select 
+                    value={productForm.print_sector_id || 'none'} 
+                    onValueChange={(v) => setProductForm({...productForm, print_sector_id: v === 'none' ? null : v})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o setor..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum (usa impressora padrão)</SelectItem>
+                      {printSectors?.filter(s => s.is_active).map(sector => (
+                        <SelectItem key={sector.id} value={sector.id}>
+                          <span className="flex items-center gap-2">
+                            <span style={{ color: sector.color }}>●</span>
+                            {sector.name}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Define em qual impressora este produto será impresso
+                  </p>
                 </div>
               </TabsContent>
 

@@ -653,6 +653,42 @@ export type Database = {
           },
         ]
       }
+      print_sectors: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          description: string | null
+          icon: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          printer_name: string | null
+          sort_order: number | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          printer_name?: string | null
+          sort_order?: number | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          printer_name?: string | null
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
       product_complement_groups: {
         Row: {
           created_at: string | null
@@ -843,6 +879,7 @@ export type Database = {
           pdv_code: string | null
           preparation_time: number | null
           price: number
+          print_sector_id: string | null
           promotion_price: number | null
           sort_order: number | null
           updated_at: string | null
@@ -863,6 +900,7 @@ export type Database = {
           pdv_code?: string | null
           preparation_time?: number | null
           price: number
+          print_sector_id?: string | null
           promotion_price?: number | null
           sort_order?: number | null
           updated_at?: string | null
@@ -883,6 +921,7 @@ export type Database = {
           pdv_code?: string | null
           preparation_time?: number | null
           price?: number
+          print_sector_id?: string | null
           promotion_price?: number | null
           sort_order?: number | null
           updated_at?: string | null
@@ -893,6 +932,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_print_sector_id_fkey"
+            columns: ["print_sector_id"]
+            isOneToOne: false
+            referencedRelation: "print_sectors"
             referencedColumns: ["id"]
           },
         ]
