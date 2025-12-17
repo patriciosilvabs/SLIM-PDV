@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { usePrinterOptional } from '@/contexts/PrinterContext';
 import { KitchenTicketData } from '@/utils/escpos';
+import { escapeHtml } from '@/lib/htmlEscape';
 
 interface KitchenReceiptProps {
   order: Order;
@@ -221,7 +222,7 @@ function printWithBrowser(order: Order, paperWidth: '58mm' | '80mm' = '80mm') {
           ${order.table?.number ? `MESA ${order.table.number}` : 
             order.order_type === 'takeaway' ? 'RETIRADA' : 'DELIVERY'}
         </div>
-        ${order.customer_name ? `<div style="font-size: 14px">${order.customer_name}</div>` : ''}
+        ${order.customer_name ? `<div style="font-size: 14px">${escapeHtml(order.customer_name)}</div>` : ''}
       </div>
       
       <div class="info">
@@ -235,9 +236,9 @@ function printWithBrowser(order: Order, paperWidth: '58mm' | '80mm' = '80mm') {
           <div class="item">
             <div class="item-line">
               <span class="quantity">${item.quantity}x</span>
-              <span class="product-name">${item.product?.name || 'Item'}</span>
+              <span class="product-name">${escapeHtml(item.product?.name) || 'Item'}</span>
             </div>
-            ${item.notes ? `<div class="notes">OBS: ${item.notes}</div>` : ''}
+            ${item.notes ? `<div class="notes">OBS: ${escapeHtml(item.notes)}</div>` : ''}
             ${index < (order.order_items?.length || 0) - 1 ? '<div class="item-separator"></div>' : ''}
           </div>
         `).join('') || ''}
@@ -246,7 +247,7 @@ function printWithBrowser(order: Order, paperWidth: '58mm' | '80mm' = '80mm') {
       ${order.notes ? `
         <div class="general-notes">
           <div style="font-weight: bold">OBSERVAÇÕES GERAIS:</div>
-          <div style="font-size: 11px">${order.notes}</div>
+          <div style="font-size: 11px">${escapeHtml(order.notes)}</div>
         </div>
       ` : ''}
       

@@ -2,6 +2,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { usePrinterOptional } from '@/contexts/PrinterContext';
 import { KitchenTicketData } from '@/utils/escpos';
+import { escapeHtml } from '@/lib/htmlEscape';
 
 interface OrderItem {
   id: string;
@@ -38,15 +39,15 @@ function printWithBrowser(props: KitchenOrderProps) {
   const itemsHtml = items.map(item => `
     <div style="margin-bottom: 8px; border-bottom: 1px dashed #999; padding-bottom: 8px;">
       <div style="font-weight: bold; font-size: 14px;">
-        ${item.quantity}x ${item.product?.name || 'Produto'}
+        ${item.quantity}x ${escapeHtml(item.product?.name) || 'Produto'}
       </div>
-      ${item.variation ? `<div style="font-size: 12px; color: #666;">▸ ${item.variation.name}</div>` : ''}
+      ${item.variation ? `<div style="font-size: 12px; color: #666;">▸ ${escapeHtml(item.variation.name)}</div>` : ''}
       ${item.extras && item.extras.length > 0 ? item.extras.map(e => `
         <div style="font-size: 12px; color: #666; padding-left: 8px;">
-          • ${e.extra_name.split(': ').slice(1).join(': ') || e.extra_name}
+          • ${escapeHtml(e.extra_name.split(': ').slice(1).join(': ') || e.extra_name)}
         </div>
       `).join('') : ''}
-      ${item.notes ? `<div style="font-size: 11px; color: #c00; margin-top: 4px;">OBS: ${item.notes}</div>` : ''}
+      ${item.notes ? `<div style="font-size: 11px; color: #c00; margin-top: 4px;">OBS: ${escapeHtml(item.notes)}</div>` : ''}
     </div>
   `).join('');
 
@@ -115,7 +116,7 @@ function printWithBrowser(props: KitchenOrderProps) {
       
       <div class="meta">
         <span>${format(new Date(createdAt), "dd/MM HH:mm", { locale: ptBR })}</span>
-        ${customerName ? `<span>${customerName}</span>` : ''}
+        ${customerName ? `<span>${escapeHtml(customerName)}</span>` : ''}
       </div>
       
       <div class="items">
@@ -125,7 +126,7 @@ function printWithBrowser(props: KitchenOrderProps) {
       ${notes ? `
         <div class="notes">
           <div class="notes-title">OBSERVAÇÕES GERAIS:</div>
-          <div>${notes}</div>
+          <div>${escapeHtml(notes)}</div>
         </div>
       ` : ''}
       

@@ -2,6 +2,7 @@ import { Order } from '@/hooks/useOrders';
 import { Payment } from '@/hooks/useCashRegister';
 import { usePrinterOptional } from '@/contexts/PrinterContext';
 import { CustomerReceiptData } from '@/utils/escpos';
+import { escapeHtml } from '@/lib/htmlEscape';
 
 interface CustomerReceiptProps {
   order: Order;
@@ -236,7 +237,7 @@ function printWithBrowser({
       
       <div class="order-info">
         <div>Pedido: #${order.id.slice(0, 8).toUpperCase()}</div>
-        <div>${orderTypeLabel}${order.customer_name ? ` - ${order.customer_name}` : ''}</div>
+        <div>${orderTypeLabel}${order.customer_name ? ` - ${escapeHtml(order.customer_name)}` : ''}</div>
         <div>Data: ${new Date(order.created_at).toLocaleString('pt-BR')}</div>
       </div>
       
@@ -245,15 +246,15 @@ function printWithBrowser({
         ${order.order_items?.map(item => `
           <div class="item">
             <div class="item-line">
-              <span>${item.quantity}x ${item.product?.name || 'Item'}${item.variation?.name ? ` (${item.variation.name})` : ''}</span>
+              <span>${item.quantity}x ${escapeHtml(item.product?.name) || 'Item'}${item.variation?.name ? ` (${escapeHtml(item.variation.name)})` : ''}</span>
               <span>${formatCurrency(item.total_price)}</span>
             </div>
             ${item.extras && item.extras.length > 0 ? `
               <div class="item-extras">
-                ${item.extras.map(e => `+ ${e.extra_name.includes(':') ? e.extra_name.split(': ').slice(1).join(': ') : e.extra_name}`).join('<br>')}
+                ${item.extras.map(e => `+ ${escapeHtml(e.extra_name.includes(':') ? e.extra_name.split(': ').slice(1).join(': ') : e.extra_name)}`).join('<br>')}
               </div>
             ` : ''}
-            ${item.notes ? `<div class="item-notes">Obs: ${item.notes}</div>` : ''}
+            ${item.notes ? `<div class="item-notes">Obs: ${escapeHtml(item.notes)}</div>` : ''}
           </div>
         `).join('') || ''}
       </div>
