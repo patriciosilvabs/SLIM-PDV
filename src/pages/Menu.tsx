@@ -1012,10 +1012,10 @@ export default function Menu() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhum (usa impressora padrão)</SelectItem>
-                      {printSectors?.filter(s => s.is_active).map(sector => (
+                      {printSectors?.filter(s => s.is_active !== false).map(sector => (
                         <SelectItem key={sector.id} value={sector.id}>
                           <span className="flex items-center gap-2">
-                            <span style={{ color: sector.color }}>●</span>
+                            <span style={{ color: sector.color || '#EF4444' }}>●</span>
                             {sector.name}
                           </span>
                         </SelectItem>
