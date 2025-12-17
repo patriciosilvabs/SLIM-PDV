@@ -1,13 +1,21 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Pizza } from 'lucide-react';
+import { Loader2, Pizza, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { z } from 'zod';
 
 const loginSchema = z.object({
@@ -23,6 +31,10 @@ const signupSchema = loginSchema.extend({
   path: ['confirmPassword'],
 });
 
+interface FieldErrors {
+  [key: string]: string | undefined;
+}
+
 export default function Auth() {
   const { user, loading, signIn, signUp } = useAuth();
   const { toast } = useToast();
@@ -32,6 +44,17 @@ export default function Auth() {
   const [signupData, setSignupData] = useState({ 
     email: '', password: '', confirmPassword: '', name: '' 
   });
+
+  // Validation errors state
+  const [loginErrors, setLoginErrors] = useState<FieldErrors>({});
+  const [signupErrors, setSignupErrors] = useState<FieldErrors>({});
+
+  // Forgot password state
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotEmailError, setForgotEmailError] = useState('');
+  const [isSendingReset, setIsSendingReset] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
 
   if (loading) {
     return (
@@ -45,16 +68,42 @@ export default function Auth() {
     return <Navigate to="/dashboard" replace />;
   }
 
+  // Validate individual login field
+  const validateLoginField = (field: keyof typeof loginData, value: string) => {
+    const testData = { ...loginData, [field]: value };
+    const result = loginSchema.safeParse(testData);
+    
+    if (!result.success) {
+      const fieldError = result.error.errors.find(e => e.path[0] === field);
+      setLoginErrors(prev => ({ ...prev, [field]: fieldError?.message }));
+    } else {
+      setLoginErrors(prev => ({ ...prev, [field]: undefined }));
+    }
+  };
+
+  // Validate individual signup field
+  const validateSignupField = (field: keyof typeof signupData, value: string) => {
+    const testData = { ...signupData, [field]: value };
+    const result = signupSchema.safeParse(testData);
+    
+    if (!result.success) {
+      const fieldError = result.error.errors.find(e => e.path[0] === field);
+      setSignupErrors(prev => ({ ...prev, [field]: fieldError?.message }));
+    } else {
+      setSignupErrors(prev => ({ ...prev, [field]: undefined }));
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
     const result = loginSchema.safeParse(loginData);
     if (!result.success) {
-      toast({
-        title: 'Erro de validação',
-        description: result.error.errors[0].message,
-        variant: 'destructive',
+      const errors: FieldErrors = {};
+      result.error.errors.forEach(err => {
+        errors[err.path[0] as string] = err.message;
       });
+      setLoginErrors(errors);
       return;
     }
 
@@ -78,11 +127,11 @@ export default function Auth() {
     
     const result = signupSchema.safeParse(signupData);
     if (!result.success) {
-      toast({
-        title: 'Erro de validação',
-        description: result.error.errors[0].message,
-        variant: 'destructive',
+      const errors: FieldErrors = {};
+      result.error.errors.forEach(err => {
+        errors[err.path[0] as string] = err.message;
       });
+      setSignupErrors(errors);
       return;
     }
 
@@ -104,6 +153,49 @@ export default function Auth() {
         description: 'Você já pode fazer login.',
       });
     }
+  };
+
+  const handleForgotPassword = async () => {
+    // Validate email
+    const emailSchema = z.string().email('Email inválido');
+    const result = emailSchema.safeParse(forgotEmail);
+    
+    if (!result.success) {
+      setForgotEmailError('Digite um email válido');
+      return;
+    }
+
+    setForgotEmailError('');
+    setIsSendingReset(true);
+
+    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+
+    setIsSendingReset(false);
+
+    if (error) {
+      toast({
+        title: 'Erro ao enviar email',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } else {
+      setResetEmailSent(true);
+    }
+  };
+
+  const handleCloseForgotPassword = () => {
+    setShowForgotPassword(false);
+    setForgotEmail('');
+    setForgotEmailError('');
+    setResetEmailSent(false);
+  };
+
+  const getInputClassName = (hasError: boolean) => {
+    return hasError 
+      ? "border-destructive focus-visible:ring-destructive" 
+      : "";
   };
 
   return (
@@ -135,8 +227,16 @@ export default function Auth() {
                     placeholder="seu@email.com"
                     value={loginData.email}
                     onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
+                    onBlur={(e) => validateLoginField('email', e.target.value)}
+                    className={getInputClassName(!!loginErrors.email)}
                     required
                   />
+                  {loginErrors.email && (
+                    <p className="text-sm text-destructive flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      {loginErrors.email}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="login-password">Senha</Label>
@@ -146,13 +246,31 @@ export default function Auth() {
                     placeholder="••••••"
                     value={loginData.password}
                     onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+                    onBlur={(e) => validateLoginField('password', e.target.value)}
+                    className={getInputClassName(!!loginErrors.password)}
                     required
                   />
+                  {loginErrors.password && (
+                    <p className="text-sm text-destructive flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      {loginErrors.password}
+                    </p>
+                  )}
                 </div>
                 <Button type="submit" className="w-full" disabled={isSubmitting}>
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Entrar
                 </Button>
+                <div className="text-center">
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="text-sm text-muted-foreground hover:text-primary"
+                    onClick={() => setShowForgotPassword(true)}
+                  >
+                    Esqueci minha senha
+                  </Button>
+                </div>
               </form>
             </TabsContent>
 
@@ -166,8 +284,16 @@ export default function Auth() {
                     placeholder="Seu nome"
                     value={signupData.name}
                     onChange={(e) => setSignupData({ ...signupData, name: e.target.value })}
+                    onBlur={(e) => validateSignupField('name', e.target.value)}
+                    className={getInputClassName(!!signupErrors.name)}
                     required
                   />
+                  {signupErrors.name && (
+                    <p className="text-sm text-destructive flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      {signupErrors.name}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="signup-email">Email</Label>
@@ -177,8 +303,16 @@ export default function Auth() {
                     placeholder="seu@email.com"
                     value={signupData.email}
                     onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
+                    onBlur={(e) => validateSignupField('email', e.target.value)}
+                    className={getInputClassName(!!signupErrors.email)}
                     required
                   />
+                  {signupErrors.email && (
+                    <p className="text-sm text-destructive flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      {signupErrors.email}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="signup-password">Senha</Label>
@@ -188,8 +322,16 @@ export default function Auth() {
                     placeholder="••••••"
                     value={signupData.password}
                     onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
+                    onBlur={(e) => validateSignupField('password', e.target.value)}
+                    className={getInputClassName(!!signupErrors.password)}
                     required
                   />
+                  {signupErrors.password && (
+                    <p className="text-sm text-destructive flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      {signupErrors.password}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="signup-confirm">Confirmar Senha</Label>
@@ -199,8 +341,16 @@ export default function Auth() {
                     placeholder="••••••"
                     value={signupData.confirmPassword}
                     onChange={(e) => setSignupData({ ...signupData, confirmPassword: e.target.value })}
+                    onBlur={(e) => validateSignupField('confirmPassword', e.target.value)}
+                    className={getInputClassName(!!signupErrors.confirmPassword)}
                     required
                   />
+                  {signupErrors.confirmPassword && (
+                    <p className="text-sm text-destructive flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      {signupErrors.confirmPassword}
+                    </p>
+                  )}
                 </div>
                 <Button type="submit" className="w-full" disabled={isSubmitting}>
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -211,6 +361,75 @@ export default function Auth() {
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* Forgot Password Modal */}
+      <Dialog open={showForgotPassword} onOpenChange={handleCloseForgotPassword}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Recuperar Senha</DialogTitle>
+            <DialogDescription>
+              Digite seu email para receber um link de recuperação de senha.
+            </DialogDescription>
+          </DialogHeader>
+
+          {resetEmailSent ? (
+            <div className="flex flex-col items-center gap-4 py-6">
+              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                <CheckCircle2 className="h-8 w-8 text-primary" />
+              </div>
+              <div className="text-center space-y-2">
+                <p className="font-medium">Email enviado!</p>
+                <p className="text-sm text-muted-foreground">
+                  Verifique sua caixa de entrada e clique no link para redefinir sua senha.
+                </p>
+              </div>
+              <Button onClick={handleCloseForgotPassword} className="w-full">
+                Fechar
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="forgot-email">Email</Label>
+                <Input
+                  id="forgot-email"
+                  type="email"
+                  placeholder="seu@email.com"
+                  value={forgotEmail}
+                  onChange={(e) => {
+                    setForgotEmail(e.target.value);
+                    setForgotEmailError('');
+                  }}
+                  className={getInputClassName(!!forgotEmailError)}
+                />
+                {forgotEmailError && (
+                  <p className="text-sm text-destructive flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {forgotEmailError}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleCloseForgotPassword}
+                  className="flex-1"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleForgotPassword}
+                  disabled={isSendingReset}
+                  className="flex-1"
+                >
+                  {isSendingReset && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Enviar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
