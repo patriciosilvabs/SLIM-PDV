@@ -93,9 +93,8 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
           >
             {sidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </Button>
-          <div className="flex items-center gap-3 ml-4">
-            <img src={logoTotal} alt="TOTAL" className="w-8 h-8 object-contain" />
-            <span className="font-semibold" style={{ color: '#D35400' }}>TOTAL</span>
+          <div className="flex items-center ml-4">
+            <img src={logoTotal} alt="TOTAL" className="h-10 w-auto object-contain" />
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -114,14 +113,8 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border">
-            <div className="flex items-center gap-3">
-              <img src={logoTotal} alt="TOTAL" className="w-10 h-10 object-contain" />
-              <div>
-                <h1 className="font-bold text-lg" style={{ color: '#D35400' }}>TOTAL</h1>
-                <p className="text-sidebar-foreground/60 text-xs">Sistema PDV</p>
-              </div>
-            </div>
+          <div className="h-16 flex items-center justify-center px-4 border-b border-sidebar-border">
+            <img src={logoTotal} alt="TOTAL - Sistema PDV" className="h-12 w-auto object-contain" />
           </div>
 
           {/* Status indicators for desktop */}
