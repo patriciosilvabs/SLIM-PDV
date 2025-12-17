@@ -54,7 +54,11 @@ export default function Stock() {
   const [selectedIngredient, setSelectedIngredient] = useState<Ingredient | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   
+  // Granular permission checks
   const canManageStock = hasPermission('stock_manage');
+  const canAddIngredient = hasPermission('stock_add');
+  const canAdjustStock = hasPermission('stock_adjust');
+  const canViewMovements = hasPermission('stock_view_movements');
 
   if (!permissionsLoading && !hasPermission('stock_view')) {
     return <AccessDenied permission="stock_view" />;
@@ -147,17 +151,18 @@ export default function Stock() {
             <h1 className="text-2xl font-bold">Estoque</h1>
             <p className="text-muted-foreground">Controle de ingredientes e fichas técnicas</p>
           </div>
-          <Dialog open={isNewIngredientOpen} onOpenChange={setIsNewIngredientOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Novo Ingrediente
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Cadastrar Ingrediente</DialogTitle>
-              </DialogHeader>
+          {(canAddIngredient || canManageStock) && (
+            <Dialog open={isNewIngredientOpen} onOpenChange={setIsNewIngredientOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Novo Ingrediente
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Cadastrar Ingrediente</DialogTitle>
+                </DialogHeader>
               <div className="space-y-4 pt-4">
                 <div className="space-y-2">
                   <Label>Nome</Label>
@@ -220,6 +225,7 @@ export default function Stock() {
               </div>
             </DialogContent>
           </Dialog>
+          )}
         </div>
 
         {/* Alerts */}
@@ -250,12 +256,14 @@ export default function Stock() {
           </Card>
         )}
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
-            <TabsTrigger value="ingredients">Ingredientes</TabsTrigger>
-            <TabsTrigger value="movements">Movimentações</TabsTrigger>
-            <TabsTrigger value="techsheets">Fichas Técnicas</TabsTrigger>
-          </TabsList>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList>
+              <TabsTrigger value="ingredients">Ingredientes</TabsTrigger>
+              {(canViewMovements || canManageStock) && (
+                <TabsTrigger value="movements">Movimentações</TabsTrigger>
+              )}
+              <TabsTrigger value="techsheets">Fichas Técnicas</TabsTrigger>
+            </TabsList>
 
           {/* Ingredients Tab */}
           <TabsContent value="ingredients" className="mt-4">

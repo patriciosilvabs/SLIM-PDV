@@ -7,6 +7,9 @@ export type PermissionCode =
   // Orders
   | 'orders_view'
   | 'orders_edit'
+  | 'orders_cancel'
+  | 'orders_create'
+  | 'orders_print'
   // Tables
   | 'tables_view'
   | 'tables_switch'
@@ -19,6 +22,10 @@ export type PermissionCode =
   | 'tables_close'
   | 'tables_change_fees'
   | 'tables_order_as_other'
+  // Reservations
+  | 'reservations_view'
+  | 'reservations_manage'
+  | 'reservations_cancel'
   // Delivery
   | 'delivery_view'
   | 'delivery_manage'
@@ -29,12 +36,21 @@ export type PermissionCode =
   | 'settings_general'
   | 'settings_print'
   | 'settings_users'
+  | 'settings_notifications'
+  | 'settings_tables'
+  | 'settings_announcements'
+  | 'settings_kds'
+  | 'settings_idle_tables'
   // Reports
   | 'reports_view'
   | 'reports_export'
   // Cash Register
   | 'cash_register_view'
   | 'cash_register_manage'
+  | 'cash_open'
+  | 'cash_close'
+  | 'cash_withdraw'
+  | 'cash_supply'
   // Menu
   | 'menu_view'
   | 'menu_manage'
@@ -52,11 +68,22 @@ export type PermissionCode =
   // Stock
   | 'stock_view'
   | 'stock_manage'
+  | 'stock_add'
+  | 'stock_adjust'
+  | 'stock_view_movements'
   // Dashboard
   | 'dashboard_view'
   | 'performance_view'
   // Combos
-  | 'combos_manage';
+  | 'combos_manage'
+  // Printing
+  | 'print_kitchen_ticket'
+  | 'print_customer_receipt'
+  | 'print_reprint'
+  // History
+  | 'closing_history_view'
+  | 'closing_history_export'
+  | 'reopen_history_view';
 
 export interface UserPermission {
   id: string;
@@ -73,6 +100,9 @@ export const PERMISSION_GROUPS = {
     permissions: [
       { code: 'orders_view' as PermissionCode, label: 'Visualizar pedidos' },
       { code: 'orders_edit' as PermissionCode, label: 'Editar pedidos' },
+      { code: 'orders_create' as PermissionCode, label: 'Criar pedidos' },
+      { code: 'orders_cancel' as PermissionCode, label: 'Cancelar pedidos' },
+      { code: 'orders_print' as PermissionCode, label: 'Imprimir pedidos' },
     ],
   },
   tables: {
@@ -89,6 +119,14 @@ export const PERMISSION_GROUPS = {
       { code: 'tables_close' as PermissionCode, label: 'Fechar mesa/comanda' },
       { code: 'tables_change_fees' as PermissionCode, label: 'Alterar taxas e descontos' },
       { code: 'tables_order_as_other' as PermissionCode, label: 'Lançar pedidos como outro garçom' },
+    ],
+  },
+  reservations: {
+    label: 'Reservas',
+    permissions: [
+      { code: 'reservations_view' as PermissionCode, label: 'Visualizar reservas' },
+      { code: 'reservations_manage' as PermissionCode, label: 'Criar/editar reservas' },
+      { code: 'reservations_cancel' as PermissionCode, label: 'Cancelar reservas' },
     ],
   },
   delivery: {
@@ -111,6 +149,11 @@ export const PERMISSION_GROUPS = {
       { code: 'settings_general' as PermissionCode, label: 'Configurações gerais' },
       { code: 'settings_print' as PermissionCode, label: 'Configurações de impressão' },
       { code: 'settings_users' as PermissionCode, label: 'Gerenciar usuários' },
+      { code: 'settings_notifications' as PermissionCode, label: 'Configurar notificações' },
+      { code: 'settings_tables' as PermissionCode, label: 'Gerenciar mesas' },
+      { code: 'settings_announcements' as PermissionCode, label: 'Gerenciar avisos programados' },
+      { code: 'settings_kds' as PermissionCode, label: 'Configurar KDS' },
+      { code: 'settings_idle_tables' as PermissionCode, label: 'Configurar mesas ociosas' },
     ],
   },
   reports: {
@@ -125,6 +168,10 @@ export const PERMISSION_GROUPS = {
     permissions: [
       { code: 'cash_register_view' as PermissionCode, label: 'Visualizar caixa' },
       { code: 'cash_register_manage' as PermissionCode, label: 'Gerenciar caixa' },
+      { code: 'cash_open' as PermissionCode, label: 'Abrir caixa' },
+      { code: 'cash_close' as PermissionCode, label: 'Fechar caixa' },
+      { code: 'cash_withdraw' as PermissionCode, label: 'Fazer sangrias' },
+      { code: 'cash_supply' as PermissionCode, label: 'Fazer suprimentos' },
     ],
   },
   menu: {
@@ -163,6 +210,9 @@ export const PERMISSION_GROUPS = {
     permissions: [
       { code: 'stock_view' as PermissionCode, label: 'Visualizar estoque' },
       { code: 'stock_manage' as PermissionCode, label: 'Gerenciar estoque' },
+      { code: 'stock_add' as PermissionCode, label: 'Adicionar ingredientes' },
+      { code: 'stock_adjust' as PermissionCode, label: 'Ajustar estoque' },
+      { code: 'stock_view_movements' as PermissionCode, label: 'Ver movimentações' },
     ],
   },
   dashboard: {
@@ -170,6 +220,22 @@ export const PERMISSION_GROUPS = {
     permissions: [
       { code: 'dashboard_view' as PermissionCode, label: 'Acessar dashboard' },
       { code: 'performance_view' as PermissionCode, label: 'Acessar análise de performance' },
+    ],
+  },
+  printing: {
+    label: 'Impressão',
+    permissions: [
+      { code: 'print_kitchen_ticket' as PermissionCode, label: 'Imprimir comanda de cozinha' },
+      { code: 'print_customer_receipt' as PermissionCode, label: 'Imprimir recibo do cliente' },
+      { code: 'print_reprint' as PermissionCode, label: 'Reimprimir documentos' },
+    ],
+  },
+  history: {
+    label: 'Históricos',
+    permissions: [
+      { code: 'closing_history_view' as PermissionCode, label: 'Ver histórico de fechamentos' },
+      { code: 'closing_history_export' as PermissionCode, label: 'Exportar histórico de fechamentos' },
+      { code: 'reopen_history_view' as PermissionCode, label: 'Ver histórico de reaberturas' },
     ],
   },
 };

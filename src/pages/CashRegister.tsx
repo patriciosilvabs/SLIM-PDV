@@ -11,6 +11,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useOpenCashRegister, useCashRegisterMutations, PaymentMethod } from '@/hooks/useCashRegister';
 import { useCashMovements } from '@/hooks/useReports';
 import { useOrders, Order } from '@/hooks/useOrders';
+import { useUserPermissions } from '@/hooks/useUserPermissions';
+import { AccessDenied } from '@/components/auth/AccessDenied';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -39,6 +41,19 @@ function formatCurrency(value: number) {
 }
 
 export default function CashRegister() {
+  const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
+  
+  // Granular permission checks
+  const canOpenCash = hasPermission('cash_open');
+  const canCloseCash = hasPermission('cash_close');
+  const canWithdraw = hasPermission('cash_withdraw');
+  const canSupply = hasPermission('cash_supply');
+  const canManage = hasPermission('cash_register_manage');
+
+  if (!permissionsLoading && !hasPermission('cash_register_view')) {
+    return <AccessDenied permission="cash_register_view" />;
+  }
+
   const [isOpenDialogOpen, setIsOpenDialogOpen] = useState(false);
   const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false);
   const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false);
@@ -195,7 +210,7 @@ export default function CashRegister() {
           {!openRegister ? (
             <Dialog open={isOpenDialogOpen} onOpenChange={setIsOpenDialogOpen}>
               <DialogTrigger asChild>
-                <Button size="lg" className="gap-2">
+                <Button size="lg" className="gap-2" disabled={!canOpenCash && !canManage}>
                   <Unlock className="h-5 w-5" />
                   Abrir Caixa
                 </Button>
@@ -223,7 +238,7 @@ export default function CashRegister() {
           ) : (
             <Dialog open={isCloseDialogOpen} onOpenChange={setIsCloseDialogOpen}>
               <DialogTrigger asChild>
-                <Button variant="destructive" size="lg" className="gap-2">
+                <Button variant="destructive" size="lg" className="gap-2" disabled={!canCloseCash && !canManage}>
                   <Lock className="h-5 w-5" />
                   Fechar Caixa
                 </Button>
@@ -421,26 +436,30 @@ export default function CashRegister() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <Dialog open={isMovementDialogOpen} onOpenChange={setIsMovementDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button 
-                        variant="outline" 
-                        className="w-full justify-start gap-3"
-                        onClick={() => setMovementType('withdrawal')}
-                      >
-                        <ArrowDownCircle className="h-5 w-5 text-destructive" />
-                        Sangria (Retirada)
-                      </Button>
-                    </DialogTrigger>
-                    <DialogTrigger asChild>
-                      <Button 
-                        variant="outline" 
-                        className="w-full justify-start gap-3"
-                        onClick={() => setMovementType('supply')}
-                      >
-                        <ArrowUpCircle className="h-5 w-5 text-accent" />
-                        Suprimento (Entrada)
-                      </Button>
-                    </DialogTrigger>
+                    {(canWithdraw || canManage) && (
+                      <DialogTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          className="w-full justify-start gap-3"
+                          onClick={() => setMovementType('withdrawal')}
+                        >
+                          <ArrowDownCircle className="h-5 w-5 text-destructive" />
+                          Sangria (Retirada)
+                        </Button>
+                      </DialogTrigger>
+                    )}
+                    {(canSupply || canManage) && (
+                      <DialogTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          className="w-full justify-start gap-3"
+                          onClick={() => setMovementType('supply')}
+                        >
+                          <ArrowUpCircle className="h-5 w-5 text-accent" />
+                          Suprimento (Entrada)
+                        </Button>
+                      </DialogTrigger>
+                    )}
                     <DialogContent>
                       <DialogHeader>
                         <DialogTitle>
