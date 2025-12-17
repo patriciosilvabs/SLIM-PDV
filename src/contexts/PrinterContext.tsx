@@ -85,6 +85,16 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const currentRestaurantName = localStorage.getItem('pdv_restaurant_name') || 'Minha Pizzaria';
       const currentRestaurantAddress = localStorage.getItem('pdv_restaurant_address') || '';
       const currentRestaurantPhone = localStorage.getItem('pdv_restaurant_phone') || '';
+      const currentRestaurantCnpj = localStorage.getItem('pdv_restaurant_cnpj') || '';
+      
+      // Get custom messages based on order type
+      const isTableOrder = data.orderType === 'dine_in';
+      const customMessage = isTableOrder 
+        ? localStorage.getItem('pdv_print_message_table') || 'Obrigado pela preferência!'
+        : localStorage.getItem('pdv_print_message_standard') || 'Obrigado pelo seu pedido!';
+      const qrCodeContent = isTableOrder
+        ? localStorage.getItem('pdv_print_qr_table') || ''
+        : localStorage.getItem('pdv_print_qr_standard') || '';
       
       // Merge restaurant info into data
       const enrichedData: CustomerReceiptData = {
@@ -92,6 +102,9 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
         restaurantName: currentRestaurantName,
         restaurantAddress: currentRestaurantAddress || undefined,
         restaurantPhone: currentRestaurantPhone || undefined,
+        restaurantCnpj: currentRestaurantCnpj || undefined,
+        customMessage: customMessage || undefined,
+        qrCodeContent: qrCodeContent || undefined,
       };
       
       const receiptData = buildCustomerReceipt(enrichedData, qz.config.paperWidth, currentReceiptFontSize, currentLineSpacing, currentLeftMargin);
