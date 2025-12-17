@@ -409,3 +409,69 @@ export function buildCustomerReceipt(data: CustomerReceiptData, paperWidth: '58m
 export function buildCashDrawerCommand(): string {
   return CASH_DRAWER_OPEN;
 }
+
+// Build font size test print
+export function buildFontSizeTestPrint(
+  paperWidth: '58mm' | '80mm' = '80mm', 
+  fontSize: PrintFontSize = 'normal',
+  type: 'kitchen' | 'receipt' = 'kitchen'
+): string {
+  const width = paperWidth === '58mm' ? 32 : 48;
+  let print = '';
+  const fontCmd = getFontSizeCommand(fontSize);
+
+  // Initialize
+  print += INIT;
+
+  // Header
+  print += ALIGN_CENTER;
+  print += TEXT_BOLD;
+  print += fontCmd;
+  print += 'MINHA PIZZARIA' + LF;
+  print += TEXT_NORMAL;
+  print += DASHED_LINE(width);
+
+  // Order info
+  print += fontCmd;
+  print += 'PEDIDO #123' + LF;
+  if (type === 'kitchen') {
+    print += 'COZINHA - Mesa: 05' + LF;
+  } else {
+    print += 'Mesa: 05' + LF;
+  }
+  print += TEXT_NORMAL;
+  print += DASHED_LINE(width);
+
+  // Items
+  print += ALIGN_LEFT;
+  print += fontCmd;
+  print += '1x Pizza Grande' + LF;
+  print += '  - Calabresa' + LF;
+  print += '2x Refrigerante' + LF;
+  print += TEXT_NORMAL;
+  print += DASHED_LINE(width);
+
+  // Total (only for receipt)
+  if (type === 'receipt') {
+    print += fontCmd;
+    print += TEXT_BOLD;
+    print += formatLine('TOTAL', 'R$ 65,00', width);
+    print += TEXT_BOLD_OFF;
+    print += TEXT_NORMAL;
+    print += DASHED_LINE(width);
+  }
+
+  // Footer - test info
+  print += ALIGN_CENTER;
+  print += fontCmd;
+  const fontLabel = fontSize === 'normal' ? 'NORMAL' : fontSize === 'large' ? 'GRANDE' : 'EXTRA GRANDE';
+  print += `TESTE DE FONTE: ${fontLabel}` + LF;
+  print += TEXT_NORMAL;
+  print += new Date().toLocaleString('pt-BR') + LF;
+  
+  // Feed and cut
+  print += FEED_LINES(3);
+  print += PAPER_CUT_PARTIAL;
+
+  return print;
+}

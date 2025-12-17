@@ -3,7 +3,8 @@ import { useState, useEffect } from 'react';
 const DUPLICATE_ITEMS_KEY = 'pdv_duplicate_items';
 const AUTO_PRINT_KITCHEN_KEY = 'pdv_auto_print_kitchen';
 const AUTO_PRINT_RECEIPT_KEY = 'pdv_auto_print_receipt';
-const PRINT_FONT_SIZE_KEY = 'pdv_print_font_size';
+const KITCHEN_FONT_SIZE_KEY = 'pdv_kitchen_font_size';
+const RECEIPT_FONT_SIZE_KEY = 'pdv_receipt_font_size';
 
 export type PrintFontSize = 'normal' | 'large' | 'extra_large';
 
@@ -23,9 +24,14 @@ export function useOrderSettings() {
     return localStorage.getItem(AUTO_PRINT_RECEIPT_KEY) === 'true';
   });
 
-  const [printFontSize, setPrintFontSize] = useState<PrintFontSize>(() => {
+  const [kitchenFontSize, setKitchenFontSize] = useState<PrintFontSize>(() => {
     if (typeof window === 'undefined') return 'normal';
-    return (localStorage.getItem(PRINT_FONT_SIZE_KEY) as PrintFontSize) || 'normal';
+    return (localStorage.getItem(KITCHEN_FONT_SIZE_KEY) as PrintFontSize) || 'normal';
+  });
+
+  const [receiptFontSize, setReceiptFontSize] = useState<PrintFontSize>(() => {
+    if (typeof window === 'undefined') return 'normal';
+    return (localStorage.getItem(RECEIPT_FONT_SIZE_KEY) as PrintFontSize) || 'normal';
   });
 
   const toggleDuplicateItems = (value: boolean) => {
@@ -43,9 +49,14 @@ export function useOrderSettings() {
     setAutoPrintCustomerReceipt(value);
   };
 
-  const updatePrintFontSize = (value: PrintFontSize) => {
-    localStorage.setItem(PRINT_FONT_SIZE_KEY, value);
-    setPrintFontSize(value);
+  const updateKitchenFontSize = (value: PrintFontSize) => {
+    localStorage.setItem(KITCHEN_FONT_SIZE_KEY, value);
+    setKitchenFontSize(value);
+  };
+
+  const updateReceiptFontSize = (value: PrintFontSize) => {
+    localStorage.setItem(RECEIPT_FONT_SIZE_KEY, value);
+    setReceiptFontSize(value);
   };
 
   // Sync across tabs
@@ -60,8 +71,11 @@ export function useOrderSettings() {
       if (e.key === AUTO_PRINT_RECEIPT_KEY) {
         setAutoPrintCustomerReceipt(e.newValue === 'true');
       }
-      if (e.key === PRINT_FONT_SIZE_KEY) {
-        setPrintFontSize((e.newValue as PrintFontSize) || 'normal');
+      if (e.key === KITCHEN_FONT_SIZE_KEY) {
+        setKitchenFontSize((e.newValue as PrintFontSize) || 'normal');
+      }
+      if (e.key === RECEIPT_FONT_SIZE_KEY) {
+        setReceiptFontSize((e.newValue as PrintFontSize) || 'normal');
       }
     };
     window.addEventListener('storage', handleStorage);
@@ -75,7 +89,9 @@ export function useOrderSettings() {
     toggleAutoPrintKitchenTicket,
     autoPrintCustomerReceipt,
     toggleAutoPrintCustomerReceipt,
-    printFontSize,
-    updatePrintFontSize
+    kitchenFontSize,
+    updateKitchenFontSize,
+    receiptFontSize,
+    updateReceiptFontSize
   };
 }
