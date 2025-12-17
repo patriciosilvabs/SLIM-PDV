@@ -2,3 +2,6 @@ project_id = "pgfeffykhanujyqymmir"
 
 [functions.create-user]
 verify_jwt = true
+
+[functions.qz-sign]
+verify_jwt = false
