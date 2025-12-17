@@ -8,6 +8,9 @@ const RECEIPT_FONT_SIZE_KEY = 'pdv_receipt_font_size';
 const LINE_SPACING_KEY = 'pdv_line_spacing';
 const LEFT_MARGIN_KEY = 'pdv_left_margin';
 const RESTAURANT_NAME_KEY = 'pdv_restaurant_name';
+const RESTAURANT_ADDRESS_KEY = 'pdv_restaurant_address';
+const RESTAURANT_PHONE_KEY = 'pdv_restaurant_phone';
+const DUPLICATE_KITCHEN_TICKET_KEY = 'pdv_duplicate_kitchen_ticket';
 
 export type PrintFontSize = 'normal' | 'large' | 'extra_large';
 
@@ -52,6 +55,21 @@ export function useOrderSettings() {
     return localStorage.getItem(RESTAURANT_NAME_KEY) || 'Minha Pizzaria';
   });
 
+  const [restaurantAddress, setRestaurantAddress] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem(RESTAURANT_ADDRESS_KEY) || '';
+  });
+
+  const [restaurantPhone, setRestaurantPhone] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem(RESTAURANT_PHONE_KEY) || '';
+  });
+
+  const [duplicateKitchenTicket, setDuplicateKitchenTicket] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(DUPLICATE_KITCHEN_TICKET_KEY) === 'true';
+  });
+
   const toggleDuplicateItems = (value: boolean) => {
     localStorage.setItem(DUPLICATE_ITEMS_KEY, String(value));
     setDuplicateItems(value);
@@ -92,6 +110,21 @@ export function useOrderSettings() {
     setRestaurantName(value);
   };
 
+  const updateRestaurantAddress = (value: string) => {
+    localStorage.setItem(RESTAURANT_ADDRESS_KEY, value);
+    setRestaurantAddress(value);
+  };
+
+  const updateRestaurantPhone = (value: string) => {
+    localStorage.setItem(RESTAURANT_PHONE_KEY, value);
+    setRestaurantPhone(value);
+  };
+
+  const toggleDuplicateKitchenTicket = (value: boolean) => {
+    localStorage.setItem(DUPLICATE_KITCHEN_TICKET_KEY, String(value));
+    setDuplicateKitchenTicket(value);
+  };
+
   // Sync across tabs
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
@@ -119,6 +152,15 @@ export function useOrderSettings() {
       if (e.key === RESTAURANT_NAME_KEY) {
         setRestaurantName(e.newValue || 'Minha Pizzaria');
       }
+      if (e.key === RESTAURANT_ADDRESS_KEY) {
+        setRestaurantAddress(e.newValue || '');
+      }
+      if (e.key === RESTAURANT_PHONE_KEY) {
+        setRestaurantPhone(e.newValue || '');
+      }
+      if (e.key === DUPLICATE_KITCHEN_TICKET_KEY) {
+        setDuplicateKitchenTicket(e.newValue === 'true');
+      }
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
@@ -140,6 +182,12 @@ export function useOrderSettings() {
     leftMargin,
     updateLeftMargin,
     restaurantName,
-    updateRestaurantName
+    updateRestaurantName,
+    restaurantAddress,
+    updateRestaurantAddress,
+    restaurantPhone,
+    updateRestaurantPhone,
+    duplicateKitchenTicket,
+    toggleDuplicateKitchenTicket
   };
 }

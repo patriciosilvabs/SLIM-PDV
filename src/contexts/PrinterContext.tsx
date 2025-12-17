@@ -82,8 +82,19 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const currentReceiptFontSize = (localStorage.getItem('pdv_receipt_font_size') as PrintFontSize) || 'normal';
       const currentLineSpacing = parseInt(localStorage.getItem('pdv_line_spacing') || '0');
       const currentLeftMargin = parseInt(localStorage.getItem('pdv_left_margin') || '0');
+      const currentRestaurantName = localStorage.getItem('pdv_restaurant_name') || 'Minha Pizzaria';
+      const currentRestaurantAddress = localStorage.getItem('pdv_restaurant_address') || '';
+      const currentRestaurantPhone = localStorage.getItem('pdv_restaurant_phone') || '';
       
-      const receiptData = buildCustomerReceipt(data, qz.config.paperWidth, currentReceiptFontSize, currentLineSpacing, currentLeftMargin);
+      // Merge restaurant info into data
+      const enrichedData: CustomerReceiptData = {
+        ...data,
+        restaurantName: currentRestaurantName,
+        restaurantAddress: currentRestaurantAddress || undefined,
+        restaurantPhone: currentRestaurantPhone || undefined,
+      };
+      
+      const receiptData = buildCustomerReceipt(enrichedData, qz.config.paperWidth, currentReceiptFontSize, currentLineSpacing, currentLeftMargin);
       await qz.printToCashier(receiptData);
       return true;
     } catch (err) {
