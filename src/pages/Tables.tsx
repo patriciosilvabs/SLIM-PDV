@@ -724,9 +724,28 @@ export default function Tables() {
   // Start bill closing
   const handleStartClosing = async () => {
     if (!selectedTable) return;
+    const order = getTableOrder(selectedTable.id);
+    
     setIsClosingBill(true);
     await updateTable.mutateAsync({ id: selectedTable.id, status: 'bill_requested' });
     setSelectedTable({ ...selectedTable, status: 'bill_requested' });
+    
+    // Auto-print bill summary when clicking "Fechar Conta"
+    if (order && printer?.canPrintToCashier) {
+      try {
+        printCustomerReceipt({
+          order,
+          payments: [],
+          discount: discountAmount > 0 ? { type: discountType, value: discountValue, amount: discountAmount } : undefined,
+          serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
+          splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
+          tableNumber: selectedTable.number,
+        });
+        toast.success('Resumo da conta impresso');
+      } catch (err) {
+        console.error('Auto print bill summary failed:', err);
+      }
+    }
   };
 
   // Reopen table (cancel closing)
