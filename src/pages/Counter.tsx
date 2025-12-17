@@ -121,10 +121,7 @@ export default function Counter() {
   if (!permissionsLoading && !hasPermission('counter_view')) {
     return <AccessDenied permission="counter_view" />;
   }
-  const { findOrCreateCustomer, updateCustomerStats } = useCustomerMutations();
-  const { data: openCashRegister } = useOpenCashRegister();
-  const { createPayment } = useCashRegisterMutations();
-  const isMobile = useIsMobile();
+
 
   const [orderType, setOrderType] = useState<OrderType>('takeaway');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
