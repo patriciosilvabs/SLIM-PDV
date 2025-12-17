@@ -69,7 +69,7 @@ serve(async (req) => {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: 'TOTAL PDV <onboarding@resend.dev>',
+        from: 'slim <onboarding@resend.dev>',
         to: adminEmails,
         subject: `⚠️ Mesa ${tableNumber} foi reaberta`,
         html: `<h2>Mesa ${tableNumber} reaberta</h2><p><strong>Por:</strong> ${userName}</p><p><strong>Valor:</strong> ${formattedValue}</p><p><strong>Horário:</strong> ${now}</p><p><strong>Motivo:</strong> ${reason}</p>`
