@@ -28,7 +28,12 @@ import { useToast } from '@/hooks/use-toast';
 export function PrinterSettings() {
   const printer = usePrinter();
   const { toast } = useToast();
-  const { autoPrintKitchenTicket, toggleAutoPrintKitchenTicket } = useOrderSettings();
+  const { 
+    autoPrintKitchenTicket, 
+    toggleAutoPrintKitchenTicket,
+    autoPrintCustomerReceipt,
+    toggleAutoPrintCustomerReceipt
+  } = useOrderSettings();
   const [testingPrinter, setTestingPrinter] = useState<string | null>(null);
 
   const handleConnect = async () => {
@@ -333,6 +338,26 @@ export function PrinterSettings() {
               {!printer.canPrintToKitchen && autoPrintKitchenTicket && (
                 <p className="text-xs text-amber-600">
                   ⚠️ Configure a impressora da cozinha para ativar a impressão automática
+                </p>
+              )}
+
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                <div className="space-y-0.5">
+                  <p className="font-medium text-sm">Imprimir recibo automaticamente</p>
+                  <p className="text-xs text-muted-foreground">
+                    Imprime recibo do cliente após confirmação do pagamento
+                  </p>
+                </div>
+                <Switch 
+                  checked={autoPrintCustomerReceipt}
+                  onCheckedChange={toggleAutoPrintCustomerReceipt}
+                  disabled={!printer.canPrintToCashier}
+                />
+              </div>
+              
+              {!printer.canPrintToCashier && autoPrintCustomerReceipt && (
+                <p className="text-xs text-amber-600">
+                  ⚠️ Configure a impressora do caixa para ativar a impressão automática
                 </p>
               )}
             </div>

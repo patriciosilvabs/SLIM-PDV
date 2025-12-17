@@ -100,7 +100,7 @@ export default function Counter() {
   const { data: variations } = useProductVariations();
   const { createOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
   const { toast } = useToast();
-  const { duplicateItems, autoPrintKitchenTicket } = useOrderSettings();
+  const { duplicateItems, autoPrintKitchenTicket, autoPrintCustomerReceipt } = useOrderSettings();
   const { getInitialOrderStatus } = useKdsSettings();
   const printer = usePrinterOptional();
   const { findOrCreateCustomer, updateCustomerStats } = useCustomerMutations();
@@ -512,8 +512,8 @@ export default function Counter() {
         }
       }
 
-      // Print receipt if requested
-      if (printReceipt) {
+      // Print receipt if requested OR if auto-print is enabled
+      if (printReceipt || (autoPrintCustomerReceipt && printer?.canPrintToCashier)) {
         printCustomerReceipt({
           order: {
             ...order,
@@ -548,6 +548,10 @@ export default function Counter() {
           discount: discountAmount > 0 ? { type: discountType, value: discountValue, amount: discountAmount } : undefined,
           serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
         });
+        
+        if (!printReceipt && autoPrintCustomerReceipt) {
+          toast({ title: '🖨️ Recibo impresso automaticamente' });
+        }
       }
 
       toast({ 

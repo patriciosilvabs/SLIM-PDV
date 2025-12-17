@@ -25,6 +25,7 @@ import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
 import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus, ArrowRightLeft, Edit, XCircle, Printer } from 'lucide-react';
 import { printKitchenOrderTicket } from '@/components/kitchen/KitchenOrderTicket';
+import { printCustomerReceipt } from '@/components/receipt/CustomerReceipt';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
@@ -96,7 +97,7 @@ export default function Tables() {
   const { settings: idleTableSettings } = useIdleTableSettings();
   const { playOrderReadySound, playTableWaitAlertSound, playIdleTableAlertSound, settings: audioSettings } = useAudioNotification();
   const { getInitialOrderStatus } = useKdsSettings();
-  const { autoPrintKitchenTicket } = useOrderSettings();
+  const { autoPrintKitchenTicket, autoPrintCustomerReceipt } = useOrderSettings();
   const printer = usePrinterOptional();
   const { data: tables, isLoading } = useTables();
   const { data: orders } = useOrders(['pending', 'preparing', 'ready']);
@@ -798,6 +799,31 @@ export default function Tables() {
           payment_method: payment.method,
           amount: payment.amount,
         });
+      }
+
+      // Auto-print customer receipt if enabled
+      if (autoPrintCustomerReceipt && printer?.canPrintToCashier) {
+        try {
+          printCustomerReceipt({
+            order: selectedOrder,
+            payments: registeredPayments.map(p => ({
+              id: '',
+              order_id: selectedOrder.id,
+              payment_method: p.method,
+              amount: p.amount,
+              cash_register_id: openCashRegister?.id || null,
+              received_by: null,
+              created_at: new Date().toISOString(),
+            })),
+            discount: discountAmount > 0 ? { type: discountType, value: discountValue, amount: discountAmount } : undefined,
+            serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
+            splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
+            tableNumber: selectedTable.number,
+          });
+          toast.success('Recibo impresso automaticamente');
+        } catch (err) {
+          console.error('Auto print receipt failed:', err);
+        }
       }
       
       // Clear state and close
