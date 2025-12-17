@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 // QZ Tray types
 declare global {
@@ -159,10 +160,17 @@ export function useQzTray() {
           }
           
           try {
+            // Get current session for authorization
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.access_token) {
+              throw new Error('User not authenticated');
+            }
+            
             const response = await fetch(QZ_SIGN_URL, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
               },
               body: JSON.stringify({ data: toSign }),
             });
