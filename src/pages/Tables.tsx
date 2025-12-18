@@ -1302,7 +1302,7 @@ export default function Tables() {
                                       })) || [],
                                       notes: selectedOrder.notes,
                                       createdAt: selectedOrder.created_at || new Date().toISOString(),
-                                    });
+                                    }, printer);
                                   }}
                                 >
                                   <Printer className="h-4 w-4 mr-2" />
@@ -1595,7 +1595,7 @@ export default function Tables() {
                               serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
                               splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
                               tableNumber: selectedTable.number,
-                            });
+                            }, printer);
                           }}
                         >
                           <Printer className="h-4 w-4 mr-2" />

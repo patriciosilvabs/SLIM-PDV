@@ -90,12 +90,12 @@ export function wrapText(text: string, width: number): string[] {
   return lines;
 }
 
-// Format currency
+// Format currency (simple format for thermal printer compatibility)
 export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL'
-  }).format(value);
+  // Use simple string formatting to avoid special UTF-8 characters
+  // that thermal printers don't support (like NBSP from Intl.NumberFormat)
+  const formatted = value.toFixed(2).replace('.', ',');
+  return 'R$ ' + formatted;
 }
 
 // Font size type
