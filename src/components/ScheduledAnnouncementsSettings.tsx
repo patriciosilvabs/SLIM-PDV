@@ -9,9 +9,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Slider } from '@/components/ui/slider';
+import { Textarea } from '@/components/ui/textarea';
 import { AudioRecorder } from '@/components/AudioRecorder';
 import { useScheduledAnnouncements, ScheduledAnnouncement } from '@/hooks/useScheduledAnnouncements';
-import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2, Activity, AlertTriangle, Timer } from 'lucide-react';
+import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2, Activity, AlertTriangle, Timer, Sparkles, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DAYS_OF_WEEK = [
@@ -59,6 +60,9 @@ export function ScheduledAnnouncementsSettings() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState<ScheduledAnnouncement | null>(null);
+  const [audioSource, setAudioSource] = useState<'record' | 'upload' | 'generate' | null>(null);
+  const [voiceText, setVoiceText] = useState('');
+  const [isGeneratingVoice, setIsGeneratingVoice] = useState(false);
   
   const [form, setForm] = useState({
     name: '',
@@ -97,6 +101,8 @@ export function ScheduledAnnouncementsSettings() {
       is_active: true
     });
     setEditingAnnouncement(null);
+    setAudioSource(null);
+    setVoiceText('');
   };
 
   const handleOpenDialog = (announcement?: ScheduledAnnouncement) => {
@@ -154,9 +160,58 @@ export function ScheduledAnnouncementsSettings() {
     try {
       const url = await uploadRecording(file, form.name);
       setForm(prev => ({ ...prev, file_path: url }));
+      setAudioSource(null);
       toast.success('Áudio enviado!');
     } catch (error: any) {
       toast.error('Erro ao enviar áudio: ' + error.message);
+    }
+  };
+
+  const handleGenerateVoice = async () => {
+    if (!form.name.trim()) {
+      toast.error('Digite um nome para o anúncio primeiro');
+      return;
+    }
+    if (!voiceText.trim()) {
+      toast.error('Digite o texto para gerar o áudio');
+      return;
+    }
+
+    setIsGeneratingVoice(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ 
+            text: voiceText,
+            voiceId: 'onwK4e9ZLuTAKqWW03F9' // Daniel - voz masculina PT-BR
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro ao gerar áudio');
+      }
+
+      const audioBlob = await response.blob();
+      const url = await uploadRecording(audioBlob, form.name);
+      
+      setForm(prev => ({ ...prev, file_path: url }));
+      setVoiceText('');
+      setAudioSource(null);
+      toast.success('Áudio gerado com sucesso!');
+    } catch (error: any) {
+      console.error('Erro ao gerar voz:', error);
+      toast.error('Erro ao gerar áudio: ' + error.message);
+    } finally {
+      setIsGeneratingVoice(false);
     }
   };
 
@@ -266,36 +321,126 @@ export function ScheduledAnnouncementsSettings() {
               {!form.file_path ? (
                 <div className="space-y-3">
                   <Label>Áudio</Label>
-                  {isRecording ? (
-                    <AudioRecorder
-                      onSave={handleSaveRecording}
-                      onCancel={() => setIsRecording(false)}
-                      maxDuration={120}
-                    />
-                  ) : (
-                    <div className="flex gap-2">
+                  
+                  {/* Seleção de modo */}
+                  {!audioSource && !isRecording && (
+                    <div className="grid grid-cols-3 gap-2">
                       <Button 
                         variant="outline" 
-                        className="flex-1 gap-2"
-                        onClick={() => setIsRecording(true)}
+                        className="h-auto py-3 flex flex-col items-center gap-1"
+                        onClick={() => {
+                          setAudioSource('record');
+                          setIsRecording(true);
+                        }}
                       >
-                        <Mic className="h-4 w-4" />
-                        Gravar
+                        <Mic className="h-5 w-5" />
+                        <span className="text-xs">Gravar</span>
                       </Button>
-                      <Label className="flex-1">
-                        <Button variant="outline" className="w-full gap-2" asChild>
-                          <span>
-                            <Upload className="h-4 w-4" />
-                            Enviar Arquivo
-                          </span>
+                      <Button 
+                        variant="outline" 
+                        className="h-auto py-3 flex flex-col items-center gap-1"
+                        onClick={() => setAudioSource('upload')}
+                      >
+                        <Upload className="h-5 w-5" />
+                        <span className="text-xs">Enviar</span>
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        className="h-auto py-3 flex flex-col items-center gap-1"
+                        onClick={() => setAudioSource('generate')}
+                      >
+                        <Sparkles className="h-5 w-5" />
+                        <span className="text-xs">Gerar Voz</span>
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Modo Gravação */}
+                  {(audioSource === 'record' || isRecording) && (
+                    <AudioRecorder
+                      onSave={handleSaveRecording}
+                      onCancel={() => {
+                        setIsRecording(false);
+                        setAudioSource(null);
+                      }}
+                      maxDuration={120}
+                    />
+                  )}
+
+                  {/* Modo Upload */}
+                  {audioSource === 'upload' && (
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Label className="flex-1">
+                          <Button variant="outline" className="w-full gap-2" asChild>
+                            <span>
+                              <Upload className="h-4 w-4" />
+                              Selecionar Arquivo
+                            </span>
+                          </Button>
+                          <input
+                            type="file"
+                            accept="audio/*"
+                            className="hidden"
+                            onChange={handleFileUpload}
+                          />
+                        </Label>
+                        <Button 
+                          variant="ghost" 
+                          onClick={() => setAudioSource(null)}
+                        >
+                          Cancelar
                         </Button>
-                        <input
-                          type="file"
-                          accept="audio/*"
-                          className="hidden"
-                          onChange={handleFileUpload}
-                        />
-                      </Label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Modo Geração de Voz */}
+                  {audioSource === 'generate' && (
+                    <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        Gerar Áudio com ElevenLabs
+                      </div>
+                      <Textarea
+                        placeholder="Digite o texto que será convertido em áudio...&#10;Ex: Atenção cozinha, estamos com alto volume de pedidos!"
+                        value={voiceText}
+                        onChange={(e) => setVoiceText(e.target.value)}
+                        rows={3}
+                        maxLength={500}
+                      />
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>{voiceText.length}/500 caracteres</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          className="flex-1 gap-2"
+                          onClick={handleGenerateVoice}
+                          disabled={isGeneratingVoice || !voiceText.trim() || !form.name.trim()}
+                        >
+                          {isGeneratingVoice ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 animate-spin" />
+                              Gerando...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="h-4 w-4" />
+                              Gerar Áudio
+                            </>
+                          )}
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          onClick={() => {
+                            setAudioSource(null);
+                            setVoiceText('');
+                          }}
+                          disabled={isGeneratingVoice}
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>
