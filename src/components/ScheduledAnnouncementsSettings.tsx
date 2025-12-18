@@ -73,6 +73,11 @@ export function ScheduledAnnouncementsSettings() {
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   
+  // Estados para preview de upload
+  const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string | null>(null);
+  const [uploadPreviewBlob, setUploadPreviewBlob] = useState<Blob | null>(null);
+  const [uploadFileName, setUploadFileName] = useState<string>('');
+  
   const [form, setForm] = useState({
     name: '',
     file_path: '',
@@ -121,6 +126,11 @@ export function ScheduledAnnouncementsSettings() {
     setPreviewAudioUrl(null);
     setPreviewBlob(null);
     setShowHistory(false);
+    // Limpar estados de upload preview
+    if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
+    setUploadPreviewUrl(null);
+    setUploadPreviewBlob(null);
+    setUploadFileName('');
   };
 
   const handleOpenDialog = (announcement?: ScheduledAnnouncement) => {
@@ -175,11 +185,42 @@ export function ScheduledAnnouncementsSettings() {
       return;
     }
 
+    // Validar tipo de arquivo
+    const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/webm', 'audio/wav', 'audio/ogg', 'audio/x-m4a', 'audio/mp4', 'audio/x-wav', 'audio/wave'];
+    if (!validTypes.includes(file.type) && !file.type.startsWith('audio/')) {
+      toast.error('Formato de áudio não suportado. Use MP3, WAV, OGG ou WebM.');
+      return;
+    }
+
+    // Limpar preview anterior
+    if (uploadPreviewUrl) {
+      URL.revokeObjectURL(uploadPreviewUrl);
+    }
+
+    // Criar preview
+    const previewUrl = URL.createObjectURL(file);
+    setUploadPreviewUrl(previewUrl);
+    setUploadPreviewBlob(file);
+    setUploadFileName(file.name);
+    
+    toast.success('Arquivo carregado! Ouça o preview e confirme.');
+  };
+
+  const handleConfirmUpload = async () => {
+    if (!uploadPreviewBlob || !form.name.trim()) return;
+    
     try {
-      const url = await uploadRecording(file, form.name);
+      const url = await uploadRecording(uploadPreviewBlob, form.name);
       setForm(prev => ({ ...prev, file_path: url }));
+      
+      // Limpar preview
+      if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
+      setUploadPreviewUrl(null);
+      setUploadPreviewBlob(null);
+      setUploadFileName('');
       setAudioSource(null);
-      toast.success('Áudio enviado!');
+      
+      toast.success('Áudio enviado com sucesso!');
     } catch (error: any) {
       toast.error('Erro ao enviar áudio: ' + error.message);
     }
@@ -415,29 +456,98 @@ export function ScheduledAnnouncementsSettings() {
 
                   {/* Modo Upload */}
                   {audioSource === 'upload' && (
-                    <div className="space-y-2">
-                      <div className="flex gap-2">
-                        <Label className="flex-1">
-                          <Button variant="outline" className="w-full gap-2" asChild>
-                            <span>
-                              <Upload className="h-4 w-4" />
-                              Selecionar Arquivo
-                            </span>
-                          </Button>
-                          <input
-                            type="file"
-                            accept="audio/*"
-                            className="hidden"
-                            onChange={handleFileUpload}
-                          />
-                        </Label>
-                        <Button 
-                          variant="ghost" 
-                          onClick={() => setAudioSource(null)}
-                        >
-                          Cancelar
-                        </Button>
+                    <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Upload className="h-4 w-4 text-primary" />
+                        Enviar Arquivo de Áudio
                       </div>
+                      
+                      {/* Seletor de arquivo */}
+                      {!uploadPreviewUrl && (
+                        <div className="flex gap-2">
+                          <Label className="flex-1">
+                            <Button variant="outline" className="w-full gap-2" asChild>
+                              <span>
+                                <Upload className="h-4 w-4" />
+                                Selecionar Arquivo (MP3, WAV, WebM)
+                              </span>
+                            </Button>
+                            <input
+                              type="file"
+                              accept="audio/mpeg,audio/mp3,audio/webm,audio/wav,audio/ogg,.mp3,.wav,.webm,.ogg,.m4a"
+                              className="hidden"
+                              onChange={handleFileUpload}
+                            />
+                          </Label>
+                          <Button variant="ghost" onClick={() => setAudioSource(null)}>
+                            Cancelar
+                          </Button>
+                        </div>
+                      )}
+                      
+                      {/* Preview do arquivo */}
+                      {uploadPreviewUrl && (
+                        <div className="space-y-3">
+                          <div className="p-3 border rounded-lg bg-green-500/10 border-green-500/30">
+                            <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400 mb-2">
+                              <Volume2 className="h-4 w-4" />
+                              Arquivo: {uploadFileName}
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  const audio = new Audio(uploadPreviewUrl);
+                                  audio.play();
+                                }}
+                                className="gap-2"
+                              >
+                                <Play className="h-4 w-4" />
+                                Ouvir
+                              </Button>
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={handleConfirmUpload}
+                                className="gap-2 flex-1"
+                              >
+                                <Check className="h-4 w-4" />
+                                Confirmar e Salvar
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Label className="flex-1">
+                              <Button variant="outline" size="sm" className="w-full gap-1" asChild>
+                                <span>
+                                  <RefreshCw className="h-4 w-4" />
+                                  Trocar Arquivo
+                                </span>
+                              </Button>
+                              <input
+                                type="file"
+                                accept="audio/mpeg,audio/mp3,audio/webm,audio/wav,audio/ogg,.mp3,.wav,.webm,.ogg,.m4a"
+                                className="hidden"
+                                onChange={handleFileUpload}
+                              />
+                            </Label>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
+                                setUploadPreviewUrl(null);
+                                setUploadPreviewBlob(null);
+                                setUploadFileName('');
+                                setAudioSource(null);
+                              }}
+                            >
+                              Cancelar
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
