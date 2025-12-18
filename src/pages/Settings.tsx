@@ -10,12 +10,20 @@ import { ScheduledAnnouncementsSettings } from '@/components/ScheduledAnnounceme
 import { PrinterSettings } from '@/components/PrinterSettings';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Crown, Sparkles, AlertTriangle } from 'lucide-react';
+import { Crown, Sparkles, AlertTriangle, Settings as SettingsIcon } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
 
 // Settings components
-import { SettingsSidebar, SettingsSection } from '@/components/settings/SettingsSidebar';
+import { SettingsSidebar, SettingsSection, SECTION_INFO } from '@/components/settings/SettingsSidebar';
 import { TablesSettings } from '@/components/settings/TablesSettings';
 import { KdsSettingsSection } from '@/components/settings/KdsSettingsSection';
 import { OrderSettingsSection } from '@/components/settings/OrderSettingsSection';
@@ -170,9 +178,33 @@ export default function Settings() {
     <PDVLayout>
       <RequireRole roles={['admin']}>
         <div className="space-y-6">
+          {/* Breadcrumb header */}
           <div>
-            <h1 className="text-2xl font-bold">Configurações</h1>
-            <p className="text-muted-foreground">Gerencie usuários, permissões e mesas do sistema</p>
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbLink 
+                    href="/settings/tables" 
+                    className="flex items-center gap-2 hover:text-foreground"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleSectionChange('tables');
+                    }}
+                  >
+                    <SettingsIcon className="h-4 w-4" />
+                    Configurações
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbPage className="flex items-center gap-2">
+                    {React.createElement(SECTION_INFO[activeSection].icon, { className: "h-4 w-4" })}
+                    {SECTION_INFO[activeSection].label}
+                  </BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+            <p className="text-muted-foreground mt-1">Gerencie usuários, permissões e mesas do sistema</p>
           </div>
 
           <div className="flex gap-6">
