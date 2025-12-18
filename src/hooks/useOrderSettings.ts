@@ -14,6 +14,8 @@ const RESTAURANT_CNPJ_KEY = 'pdv_restaurant_cnpj';
 const DUPLICATE_KITCHEN_TICKET_KEY = 'pdv_duplicate_kitchen_ticket';
 const ASCII_MODE_KEY = 'pdv_ascii_mode';
 const CHAR_SPACING_KEY = 'pdv_char_spacing';
+const TOP_MARGIN_KEY = 'pdv_top_margin';
+const BOTTOM_MARGIN_KEY = 'pdv_bottom_margin';
 
 // General print settings keys
 const PRINT_SHOW_ITEM_NUMBER_KEY = 'pdv_print_show_item_number';
@@ -102,6 +104,16 @@ export function useOrderSettings() {
   const [charSpacing, setCharSpacing] = useState<number>(() => {
     if (typeof window === 'undefined') return 1;
     return parseInt(localStorage.getItem(CHAR_SPACING_KEY) || '1');
+  });
+
+  const [topMargin, setTopMargin] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0;
+    return parseInt(localStorage.getItem(TOP_MARGIN_KEY) || '0');
+  });
+
+  const [bottomMargin, setBottomMargin] = useState<number>(() => {
+    if (typeof window === 'undefined') return 3;
+    return parseInt(localStorage.getItem(BOTTOM_MARGIN_KEY) || '3');
   });
 
   // General print settings
@@ -240,6 +252,16 @@ export function useOrderSettings() {
     setCharSpacing(value);
   };
 
+  const updateTopMargin = (value: number) => {
+    localStorage.setItem(TOP_MARGIN_KEY, String(value));
+    setTopMargin(value);
+  };
+
+  const updateBottomMargin = (value: number) => {
+    localStorage.setItem(BOTTOM_MARGIN_KEY, String(value));
+    setBottomMargin(value);
+  };
+
   // General print settings toggles
   const toggleShowItemNumber = (value: boolean) => {
     localStorage.setItem(PRINT_SHOW_ITEM_NUMBER_KEY, String(value));
@@ -347,6 +369,12 @@ export function useOrderSettings() {
       if (e.key === CHAR_SPACING_KEY) {
         setCharSpacing(parseInt(e.newValue || '1'));
       }
+      if (e.key === TOP_MARGIN_KEY) {
+        setTopMargin(parseInt(e.newValue || '0'));
+      }
+      if (e.key === BOTTOM_MARGIN_KEY) {
+        setBottomMargin(parseInt(e.newValue || '3'));
+      }
       // General print settings
       if (e.key === PRINT_SHOW_ITEM_NUMBER_KEY) {
         setShowItemNumber(e.newValue === 'true');
@@ -419,6 +447,10 @@ export function useOrderSettings() {
     toggleAsciiMode,
     charSpacing,
     updateCharSpacing,
+    topMargin,
+    updateTopMargin,
+    bottomMargin,
+    updateBottomMargin,
     // General print settings
     showItemNumber,
     toggleShowItemNumber,

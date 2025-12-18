@@ -110,7 +110,11 @@ export function PrinterSettings() {
     asciiMode,
     toggleAsciiMode,
     charSpacing,
-    updateCharSpacing
+    updateCharSpacing,
+    topMargin,
+    updateTopMargin,
+    bottomMargin,
+    updateBottomMargin
   } = useOrderSettings();
   const [testingPrinter, setTestingPrinter] = useState<string | null>(null);
   const [testingFont, setTestingFont] = useState<'kitchen' | 'receipt' | null>(null);
@@ -460,6 +464,54 @@ export function PrinterSettings() {
               </Select>
               <p className="text-xs text-muted-foreground">
                 Aumenta o espaço entre as letras para melhor legibilidade
+              </p>
+            </div>
+
+            {/* Top Margin */}
+            <div className="space-y-2">
+              <Label>Margem Superior (linhas em branco)</Label>
+              <Select
+                value={String(topMargin)}
+                onValueChange={(v) => updateTopMargin(Number(v))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Sem margem (padrão)</SelectItem>
+                  <SelectItem value="1">1 linha</SelectItem>
+                  <SelectItem value="2">2 linhas</SelectItem>
+                  <SelectItem value="3">3 linhas</SelectItem>
+                  <SelectItem value="4">4 linhas</SelectItem>
+                  <SelectItem value="5">5 linhas</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Linhas em branco antes do conteúdo
+              </p>
+            </div>
+
+            {/* Bottom Margin */}
+            <div className="space-y-2">
+              <Label>Margem Inferior (antes do corte)</Label>
+              <Select
+                value={String(bottomMargin)}
+                onValueChange={(v) => updateBottomMargin(Number(v))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Sem margem</SelectItem>
+                  <SelectItem value="1">1 linha</SelectItem>
+                  <SelectItem value="2">2 linhas</SelectItem>
+                  <SelectItem value="3">3 linhas (padrão comanda)</SelectItem>
+                  <SelectItem value="4">4 linhas (padrão recibo)</SelectItem>
+                  <SelectItem value="5">5 linhas</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Linhas em branco antes do corte do papel
               </p>
             </div>
 

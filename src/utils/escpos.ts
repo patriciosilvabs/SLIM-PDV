@@ -165,7 +165,9 @@ export function buildKitchenTicket(
   lineSpacing: number = 0,
   leftMargin: number = 0,
   asciiMode: boolean = false,
-  charSpacing: number = 1
+  charSpacing: number = 1,
+  topMargin: number = 0,
+  bottomMargin: number = 3
 ): string {
   const width = paperWidth === '58mm' ? 32 : 48;
   let ticket = '';
@@ -174,6 +176,11 @@ export function buildKitchenTicket(
 
   // Initialize
   ticket += INIT;
+
+  // Top margin (blank lines at beginning)
+  if (topMargin > 0) {
+    ticket += FEED_LINES(topMargin);
+  }
 
   // Apply character spacing if set (improves readability)
   if (charSpacing > 0) {
@@ -254,27 +261,8 @@ export function buildKitchenTicket(
     ticket += LF;
   }
 
-  // General notes
-  if (data.notes) {
-    ticket += TEXT_NORMAL;
-    ticket += DASHED_LINE(width);
-    
-    // Tarja preta com fonte grande para observações gerais
-    ticket += ALIGN_CENTER;
-    ticket += TEXT_DOUBLE_SIZE;
-    ticket += GS + 'B' + '\x01'; // INVERT ON (tarja preta)
-    ticket += ' OBS GERAIS ' + LF;
-    ticket += GS + 'B' + '\x00'; // INVERT OFF
-    ticket += ALIGN_LEFT;
-    
-    // Texto das observações também com fonte grande
-    ticket += TEXT_DOUBLE_HEIGHT;
-    const wrappedNotes = wrapText(processText(data.notes), Math.floor(width / 2));
-    for (const line of wrappedNotes) {
-      ticket += line + LF;
-    }
-    ticket += fontCmd; // Volta para fonte configurada
-  }
+  // General notes - NOT printed on kitchen ticket (only shown in system)
+  // Removed per user request - observações gerais appear only in the system UI
 
   // Footer
   ticket += TEXT_NORMAL;
@@ -282,8 +270,8 @@ export function buildKitchenTicket(
   ticket += ALIGN_CENTER;
   ticket += `Impresso: ${new Date().toLocaleString('pt-BR')}` + LF;
   
-  // Feed and cut
-  ticket += FEED_LINES(3);
+  // Feed and cut (use configurable bottom margin)
+  ticket += FEED_LINES(bottomMargin);
   ticket += PAPER_CUT_PARTIAL;
 
   return ticket;
@@ -327,7 +315,9 @@ export function buildCustomerReceipt(
   lineSpacing: number = 0,
   leftMargin: number = 0,
   asciiMode: boolean = false,
-  charSpacing: number = 1
+  charSpacing: number = 1,
+  topMargin: number = 0,
+  bottomMargin: number = 4
 ): string {
   const width = paperWidth === '58mm' ? 32 : 48;
   let receipt = '';
@@ -336,6 +326,11 @@ export function buildCustomerReceipt(
 
   // Initialize
   receipt += INIT;
+
+  // Top margin (blank lines at beginning)
+  if (topMargin > 0) {
+    receipt += FEED_LINES(topMargin);
+  }
 
   // Apply character spacing if set (improves readability)
   if (charSpacing > 0) {
@@ -540,8 +535,8 @@ export function buildCustomerReceipt(
   
   receipt += new Date().toLocaleString('pt-BR') + LF;
 
-  // Feed and cut
-  receipt += FEED_LINES(4);
+  // Feed and cut (use configurable bottom margin)
+  receipt += FEED_LINES(bottomMargin);
   receipt += PAPER_CUT_PARTIAL;
 
   return receipt;
