@@ -718,13 +718,28 @@ export function ScheduledAnnouncementsSettings() {
                       <Volume2 className="h-4 w-4 text-green-600" />
                       <span className="text-sm text-green-600 dark:text-green-400">Áudio configurado</span>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setForm(prev => ({ ...prev, file_path: '' }))}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1"
+                        onClick={() => {
+                          const audio = new Audio(form.file_path);
+                          audio.volume = form.volume;
+                          audio.play();
+                        }}
+                      >
+                        <Play className="h-4 w-4" />
+                        Ouvir
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setForm(prev => ({ ...prev, file_path: '' }))}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
