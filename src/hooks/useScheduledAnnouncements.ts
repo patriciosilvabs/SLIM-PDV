@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { sanitizeFileName } from '@/lib/sanitizeFileName';
 
 export interface ScheduledAnnouncement {
   id: string;
@@ -166,7 +167,8 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Usuário não autenticado');
 
-    const fileName = `${user.id}/${name.replace(/\s+/g, '_')}_${Date.now()}.webm`;
+    const safeName = sanitizeFileName(name);
+    const fileName = `${user.id}/${safeName}_${Date.now()}.webm`;
 
     const { error: uploadError } = await supabase.storage
       .from('announcements')
