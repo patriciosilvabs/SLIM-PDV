@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { usePrinter } from '@/contexts/PrinterContext';
-import { useOrderSettings, PrintFontSize } from '@/hooks/useOrderSettings';
+import { useOrderSettings, PrintFontSize, LogoPrintMode } from '@/hooks/useOrderSettings';
 import { usePrintSectors, usePrintSectorMutations, PrintSector } from '@/hooks/usePrintSectors';
 import { invalidateLogoCache, clearLogoCache } from '@/utils/imageToBase64';
 import { buildFontSizeTestPrint } from '@/utils/escpos';
@@ -48,6 +48,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 // Available icons for sectors
 const SECTOR_ICONS: { value: string; label: string; icon: LucideIcon }[] = [
@@ -125,6 +126,8 @@ export function PrinterSettings() {
     updateRestaurantLogoUrl,
     logoMaxWidth,
     updateLogoMaxWidth,
+    logoPrintMode,
+    updateLogoPrintMode,
     qrCodeSize,
     updateQrCodeSize
   } = useOrderSettings();
@@ -548,8 +551,66 @@ export function PrinterSettings() {
                   checked={showLogo}
                   onCheckedChange={toggleShowLogo}
                   disabled={!restaurantLogoUrl}
-                />
+              />
               </div>
+
+              {/* Logo Print Mode - só mostra se tem logo e está habilitado */}
+              {restaurantLogoUrl && showLogo && (
+                <div className="space-y-3 pt-2 border-t">
+                  <Label className="text-sm">Modo de Cor da Logo</Label>
+                  <Select
+                    value={logoPrintMode}
+                    onValueChange={(v) => updateLogoPrintMode(v as LogoPrintMode)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="original">Original (colorido)</SelectItem>
+                      <SelectItem value="grayscale">Escala de Cinza</SelectItem>
+                      <SelectItem value="dithered">Preto e Branco (Dithering)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Impressoras térmicas podem ter melhor resultado com Escala de Cinza ou Dithering
+                  </p>
+                  
+                  {/* Preview dos 3 modos */}
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { mode: 'original' as LogoPrintMode, label: 'Original' },
+                      { mode: 'grayscale' as LogoPrintMode, label: 'Cinza' },
+                      { mode: 'dithered' as LogoPrintMode, label: 'P&B' },
+                    ].map(({ mode, label }) => (
+                      <div 
+                        key={mode}
+                        className={cn(
+                          "p-2 rounded border text-center cursor-pointer transition-colors",
+                          logoPrintMode === mode 
+                            ? "border-primary bg-primary/10" 
+                            : "border-muted hover:border-muted-foreground"
+                        )}
+                        onClick={() => updateLogoPrintMode(mode)}
+                      >
+                        <div 
+                          className="w-full aspect-square bg-white rounded mb-1 overflow-hidden flex items-center justify-center"
+                          style={{ 
+                            filter: mode === 'grayscale' ? 'grayscale(100%)' : 
+                                    mode === 'dithered' ? 'grayscale(100%) contrast(200%)' : 'none'
+                          }}
+                        >
+                          <img 
+                            src={restaurantLogoUrl} 
+                            alt={label}
+                            className="max-w-full max-h-full object-contain"
+                          />
+                        </div>
+                        <span className="text-xs">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Logo Max Width */}
               {restaurantLogoUrl && showLogo && (

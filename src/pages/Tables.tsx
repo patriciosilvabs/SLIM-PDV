@@ -24,7 +24,8 @@ import { useIdleTableSettings } from '@/hooks/useIdleTableSettings';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
-import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus, ArrowRightLeft, Edit, XCircle, Printer, RotateCcw } from 'lucide-react';
+import { CancelOrderDialog } from '@/components/order/CancelOrderDialog';
+import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus, ArrowRightLeft, Edit, XCircle, Printer, RotateCcw, Ban } from 'lucide-react';
 import { printKitchenOrderTicket } from '@/components/kitchen/KitchenOrderTicket';
 import { printCustomerReceipt } from '@/components/receipt/CustomerReceipt';
 import { Switch } from '@/components/ui/switch';
@@ -102,6 +103,7 @@ export default function Tables() {
   const canSwitchTable = hasPermission('tables_switch');
   const canManagePayments = hasPermission('tables_manage_payments');
   const canCloseBill = hasPermission('tables_close');
+  const canCancelOrder = hasPermission('tables_cancel_order');
   const canChangeFees = hasPermission('tables_change_fees');
   
   const { settings: tableWaitSettings } = useTableWaitSettings();
@@ -184,6 +186,10 @@ export default function Tables() {
   const [closedOrderToReopen, setClosedOrderToReopen] = useState<Order | null>(null);
   const [isReopening, setIsReopening] = useState(false);
   const [reopenReason, setReopenReason] = useState('');
+
+  // Cancel order states
+  const [isCancelOrderDialogOpen, setIsCancelOrderDialogOpen] = useState(false);
+  const [isCancellingOrder, setIsCancellingOrder] = useState(false);
   const MIN_REASON_LENGTH = 10;
 
   // Realtime subscription for orders
@@ -726,6 +732,48 @@ export default function Tables() {
       setSelectedTable(null);
     } catch (error) {
       toast.error('Erro ao fechar mesa');
+    }
+  };
+
+  // Cancel order with reason
+  const handleCancelOrder = async (reason: string) => {
+    if (!selectedOrder || !selectedTable) return;
+    
+    setIsCancellingOrder(true);
+    try {
+      // Update order with cancellation info using direct supabase call
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({
+          status: 'cancelled',
+          cancellation_reason: reason,
+          cancelled_by: user?.id,
+          cancelled_at: new Date().toISOString(),
+        })
+        .eq('id', selectedOrder.id);
+      
+      if (orderError) throw orderError;
+      
+      // Free the table
+      await updateTable.mutateAsync({
+        id: selectedTable.id,
+        status: 'available',
+      });
+      
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      
+      toast.success('Pedido cancelado', {
+        description: `Motivo: ${reason}`,
+      });
+      
+      setIsCancelOrderDialogOpen(false);
+      setSelectedTable(null);
+    } catch (error) {
+      console.error('Error cancelling order:', error);
+      toast.error('Erro ao cancelar pedido');
+    } finally {
+      setIsCancellingOrder(false);
     }
   };
 
@@ -1320,6 +1368,17 @@ export default function Tables() {
                                 <Button variant="outline" className="w-full" onClick={handleStartClosing}>
                                   <Receipt className="h-4 w-4 mr-2" />
                                   Fechar Conta
+                                </Button>
+                              )}
+                              {/* Cancel Order button */}
+                              {canCancelOrder && selectedOrder && (
+                                <Button 
+                                  variant="outline" 
+                                  className="w-full text-destructive border-destructive/50 hover:bg-destructive/10"
+                                  onClick={() => setIsCancelOrderDialogOpen(true)}
+                                >
+                                  <Ban className="h-4 w-4 mr-2" />
+                                  Cancelar Pedido
                                 </Button>
                               )}
                             </>
@@ -2430,6 +2489,15 @@ export default function Tables() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Cancel Order Dialog */}
+      <CancelOrderDialog
+        open={isCancelOrderDialogOpen}
+        onOpenChange={setIsCancelOrderDialogOpen}
+        onConfirm={handleCancelOrder}
+        orderInfo={selectedTable && selectedOrder ? `Mesa ${selectedTable.number} - Pedido #${selectedOrder.id.slice(0, 8)}` : undefined}
+        isLoading={isCancellingOrder}
+      />
     </PDVLayout>
   );
 }
