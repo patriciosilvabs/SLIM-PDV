@@ -13,11 +13,8 @@ function formatCurrency(value: number) {
 }
 
 export default function Dashboard() {
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
-  
-  if (!permissionsLoading && !hasPermission('dashboard_view')) {
-    return <AccessDenied permission="dashboard_view" />;
-  }
   const { data: stats } = useDashboardStats();
   const { data: topProducts } = useTopProducts(7);
   const { data: salesChart } = useSalesChart(7);
@@ -27,6 +24,11 @@ export default function Dashboard() {
   // Calculate current month totals and variation
   const currentMonthData = monthlyRevenue?.[monthlyRevenue.length - 1];
   const monthVariation = currentMonthData?.variation || 0;
+
+  // Permission check AFTER all hooks
+  if (!permissionsLoading && !hasPermission('dashboard_view')) {
+    return <AccessDenied permission="dashboard_view" />;
+  }
 
   return (
     <PDVLayout>
