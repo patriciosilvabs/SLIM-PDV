@@ -12,8 +12,13 @@ import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { AudioRecorder } from '@/components/AudioRecorder';
 import { useScheduledAnnouncements, ScheduledAnnouncement } from '@/hooks/useScheduledAnnouncements';
-import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2, Activity, AlertTriangle, Timer, Sparkles, RefreshCw } from 'lucide-react';
+import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2, Activity, AlertTriangle, Timer, Sparkles, RefreshCw, Check, User } from 'lucide-react';
 import { toast } from 'sonner';
+
+const ELEVENLABS_VOICES = {
+  male: { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel (Masculina)' },
+  female: { id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura (Feminina)' }
+};
 
 const DAYS_OF_WEEK = [
   { value: 1, label: 'Dom' },
@@ -63,6 +68,9 @@ export function ScheduledAnnouncementsSettings() {
   const [audioSource, setAudioSource] = useState<'record' | 'upload' | 'generate' | null>(null);
   const [voiceText, setVoiceText] = useState('');
   const [isGeneratingVoice, setIsGeneratingVoice] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState<'male' | 'female'>('male');
+  const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   
   const [form, setForm] = useState({
     name: '',
@@ -103,6 +111,9 @@ export function ScheduledAnnouncementsSettings() {
     setEditingAnnouncement(null);
     setAudioSource(null);
     setVoiceText('');
+    setSelectedVoice('male');
+    setPreviewAudioUrl(null);
+    setPreviewBlob(null);
   };
 
   const handleOpenDialog = (announcement?: ScheduledAnnouncement) => {
@@ -177,6 +188,13 @@ export function ScheduledAnnouncementsSettings() {
       return;
     }
 
+    // Limpar preview anterior
+    if (previewAudioUrl) {
+      URL.revokeObjectURL(previewAudioUrl);
+      setPreviewAudioUrl(null);
+      setPreviewBlob(null);
+    }
+
     setIsGeneratingVoice(true);
     try {
       const response = await fetch(
@@ -190,7 +208,7 @@ export function ScheduledAnnouncementsSettings() {
           },
           body: JSON.stringify({ 
             text: voiceText,
-            voiceId: 'onwK4e9ZLuTAKqWW03F9' // Daniel - voz masculina PT-BR
+            voiceId: ELEVENLABS_VOICES[selectedVoice].id
           }),
         }
       );
@@ -201,17 +219,35 @@ export function ScheduledAnnouncementsSettings() {
       }
 
       const audioBlob = await response.blob();
-      const url = await uploadRecording(audioBlob, form.name);
-      
-      setForm(prev => ({ ...prev, file_path: url }));
-      setVoiceText('');
-      setAudioSource(null);
-      toast.success('Áudio gerado com sucesso!');
+      const tempUrl = URL.createObjectURL(audioBlob);
+      setPreviewAudioUrl(tempUrl);
+      setPreviewBlob(audioBlob);
+      toast.success('Preview gerado! Ouça e confirme.');
     } catch (error: any) {
       console.error('Erro ao gerar voz:', error);
       toast.error('Erro ao gerar áudio: ' + error.message);
     } finally {
       setIsGeneratingVoice(false);
+    }
+  };
+
+  const handleConfirmAndSave = async () => {
+    if (!previewBlob || !form.name.trim()) return;
+    
+    try {
+      const url = await uploadRecording(previewBlob, form.name);
+      setForm(prev => ({ ...prev, file_path: url }));
+      
+      // Limpar preview
+      if (previewAudioUrl) URL.revokeObjectURL(previewAudioUrl);
+      setPreviewAudioUrl(null);
+      setPreviewBlob(null);
+      setVoiceText('');
+      setAudioSource(null);
+      
+      toast.success('Áudio salvo com sucesso!');
+    } catch (error: any) {
+      toast.error('Erro ao salvar áudio: ' + error.message);
     }
   };
 
@@ -402,6 +438,34 @@ export function ScheduledAnnouncementsSettings() {
                         <Sparkles className="h-4 w-4 text-primary" />
                         Gerar Áudio com ElevenLabs
                       </div>
+                      
+                      {/* Seleção de Voz */}
+                      <div className="space-y-2">
+                        <Label className="text-xs">Tipo de Voz</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            type="button"
+                            variant={selectedVoice === 'male' ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setSelectedVoice('male')}
+                            className="gap-2"
+                          >
+                            <User className="h-4 w-4" />
+                            Masculina
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={selectedVoice === 'female' ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setSelectedVoice('female')}
+                            className="gap-2"
+                          >
+                            <User className="h-4 w-4" />
+                            Feminina
+                          </Button>
+                        </div>
+                      </div>
+                      
                       <Textarea
                         placeholder="Digite o texto que será convertido em áudio...&#10;Ex: Atenção cozinha, estamos com alto volume de pedidos!"
                         value={voiceText}
@@ -412,9 +476,44 @@ export function ScheduledAnnouncementsSettings() {
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <span>{voiceText.length}/500 caracteres</span>
                       </div>
+                      
+                      {/* Preview do Áudio */}
+                      {previewAudioUrl && (
+                        <div className="p-3 border rounded-lg bg-green-500/10 border-green-500/30 space-y-2">
+                          <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400">
+                            <Volume2 className="h-4 w-4" />
+                            Preview Gerado
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const audio = new Audio(previewAudioUrl);
+                                audio.play();
+                              }}
+                              className="gap-2"
+                            >
+                              <Play className="h-4 w-4" />
+                              Ouvir
+                            </Button>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={handleConfirmAndSave}
+                              className="gap-2 flex-1"
+                            >
+                              <Check className="h-4 w-4" />
+                              Confirmar e Salvar
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      
                       <div className="flex gap-2">
                         <Button
                           className="flex-1 gap-2"
+                          variant={previewAudioUrl ? 'outline' : 'default'}
                           onClick={handleGenerateVoice}
                           disabled={isGeneratingVoice || !voiceText.trim() || !form.name.trim()}
                         >
@@ -423,18 +522,26 @@ export function ScheduledAnnouncementsSettings() {
                               <RefreshCw className="h-4 w-4 animate-spin" />
                               Gerando...
                             </>
+                          ) : previewAudioUrl ? (
+                            <>
+                              <RefreshCw className="h-4 w-4" />
+                              Regenerar
+                            </>
                           ) : (
                             <>
                               <Sparkles className="h-4 w-4" />
-                              Gerar Áudio
+                              Gerar Preview
                             </>
                           )}
                         </Button>
                         <Button 
                           variant="ghost" 
                           onClick={() => {
+                            if (previewAudioUrl) URL.revokeObjectURL(previewAudioUrl);
                             setAudioSource(null);
                             setVoiceText('');
+                            setPreviewAudioUrl(null);
+                            setPreviewBlob(null);
                           }}
                           disabled={isGeneratingVoice}
                         >
