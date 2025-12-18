@@ -553,7 +553,7 @@ export default function Settings() {
                 Ajuste o comportamento do Kitchen Display System
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label className="font-medium">Exibir coluna "Pendente"</Label>
@@ -566,6 +566,32 @@ export default function Settings() {
                   checked={kdsSettings.showPendingColumn} 
                   onCheckedChange={(showPendingColumn) => updateKdsSettings({ showPendingColumn })} 
                 />
+              </div>
+
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="font-medium">Intervalo do Alerta de Cancelamento</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Com que frequência o som de alerta toca quando há pedidos cancelados não confirmados.
+                    </p>
+                  </div>
+                  <Select
+                    value={String(kdsSettings.cancellationAlertInterval || 3)}
+                    onValueChange={(value) => updateKdsSettings({ cancellationAlertInterval: Number(value) })}
+                  >
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 segundo</SelectItem>
+                      <SelectItem value="2">2 segundos</SelectItem>
+                      <SelectItem value="3">3 segundos</SelectItem>
+                      <SelectItem value="5">5 segundos</SelectItem>
+                      <SelectItem value="10">10 segundos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardContent>
           </Card>
