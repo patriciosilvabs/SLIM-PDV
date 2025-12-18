@@ -27,6 +27,7 @@ import CancellationHistory from "./pages/CancellationHistory";
 import Performance from "./pages/Performance";
 import ReopenHistory from "./pages/ReopenHistory";
 import AuditDashboard from "./pages/AuditDashboard";
+import ShareReceiver from "./pages/ShareReceiver";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -62,6 +63,7 @@ const App = () => (
                 <Route path="/performance" element={<Performance />} />
                 <Route path="/reopen-history" element={<ReopenHistory />} />
                 <Route path="/audit-dashboard" element={<AuditDashboard />} />
+                <Route path="/share-receiver" element={<ShareReceiver />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
