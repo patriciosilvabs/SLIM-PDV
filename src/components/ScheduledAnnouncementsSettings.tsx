@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,8 +12,9 @@ import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { AudioRecorder } from '@/components/AudioRecorder';
 import { useScheduledAnnouncements, ScheduledAnnouncement } from '@/hooks/useScheduledAnnouncements';
-import { useVoiceTextHistory, ELEVENLABS_VOICES } from '@/hooks/useVoiceTextHistory';
-import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2, Activity, AlertTriangle, Timer, Sparkles, RefreshCw, Check, History, X } from 'lucide-react';
+import { useVoiceTextHistory } from '@/hooks/useVoiceTextHistory';
+import { useWebSpeechTTS, DEFAULT_VOICES } from '@/hooks/useWebSpeechTTS';
+import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2, Activity, AlertTriangle, Timer, Sparkles, RefreshCw, Check, History, X, Square } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -61,6 +62,7 @@ export function ScheduledAnnouncementsSettings() {
   } = useScheduledAnnouncements();
 
   const { getHistory, addToHistory, clearHistory } = useVoiceTextHistory();
+  const { voices, ptVoices, enVoices, isSupported, isSpeaking, speak, cancelSpeech } = useWebSpeechTTS();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -68,12 +70,12 @@ export function ScheduledAnnouncementsSettings() {
   const [audioSource, setAudioSource] = useState<'record' | 'upload' | 'generate' | null>(null);
   const [voiceText, setVoiceText] = useState('');
   const [isGeneratingVoice, setIsGeneratingVoice] = useState(false);
-  const [selectedVoiceId, setSelectedVoiceId] = useState(ELEVENLABS_VOICES[0].id);
+  const [selectedVoiceURI, setSelectedVoiceURI] = useState('');
   const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   
-  // Estados para preview de upload
+  // States for upload preview
   const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string | null>(null);
   const [uploadPreviewBlob, setUploadPreviewBlob] = useState<Blob | null>(null);
   const [uploadFileName, setUploadFileName] = useState<string>('');
@@ -96,10 +98,21 @@ export function ScheduledAnnouncementsSettings() {
     is_active: true
   });
 
-  const selectedVoice = ELEVENLABS_VOICES.find(v => v.id === selectedVoiceId) || ELEVENLABS_VOICES[0];
   const history = getHistory();
-  const ptVoices = ELEVENLABS_VOICES.filter(v => v.lang === 'pt');
-  const enVoices = ELEVENLABS_VOICES.filter(v => v.lang === 'en');
+  
+  // Use available voices or defaults
+  const availablePtVoices = ptVoices.length > 0 ? ptVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('pt'));
+  const availableEnVoices = enVoices.length > 0 ? enVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('en'));
+  const allVoices = [...availablePtVoices, ...availableEnVoices];
+  
+  // Set default voice when voices load
+  useEffect(() => {
+    if (!selectedVoiceURI && allVoices.length > 0) {
+      setSelectedVoiceURI(allVoices[0].voiceURI);
+    }
+  }, [allVoices, selectedVoiceURI]);
+
+  const selectedVoice = allVoices.find(v => v.voiceURI === selectedVoiceURI) || allVoices[0];
 
   const resetForm = () => {
     setForm({
@@ -122,11 +135,10 @@ export function ScheduledAnnouncementsSettings() {
     setEditingAnnouncement(null);
     setAudioSource(null);
     setVoiceText('');
-    setSelectedVoiceId(ELEVENLABS_VOICES[0].id);
     setPreviewAudioUrl(null);
     setPreviewBlob(null);
     setShowHistory(false);
-    // Limpar estados de upload preview
+    // Clear upload preview states
     if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
     setUploadPreviewUrl(null);
     setUploadPreviewBlob(null);
@@ -185,19 +197,19 @@ export function ScheduledAnnouncementsSettings() {
       return;
     }
 
-    // Validar tipo de arquivo
+    // Validate file type
     const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/webm', 'audio/wav', 'audio/ogg', 'audio/x-m4a', 'audio/mp4', 'audio/x-wav', 'audio/wave'];
     if (!validTypes.includes(file.type) && !file.type.startsWith('audio/')) {
       toast.error('Formato de áudio não suportado. Use MP3, WAV, OGG ou WebM.');
       return;
     }
 
-    // Limpar preview anterior
+    // Clear previous preview
     if (uploadPreviewUrl) {
       URL.revokeObjectURL(uploadPreviewUrl);
     }
 
-    // Criar preview
+    // Create preview
     const previewUrl = URL.createObjectURL(file);
     setUploadPreviewUrl(previewUrl);
     setUploadPreviewBlob(file);
@@ -213,7 +225,7 @@ export function ScheduledAnnouncementsSettings() {
       const url = await uploadRecording(uploadPreviewBlob, form.name);
       setForm(prev => ({ ...prev, file_path: url }));
       
-      // Limpar preview
+      // Clear preview
       if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
       setUploadPreviewUrl(null);
       setUploadPreviewBlob(null);
@@ -223,6 +235,19 @@ export function ScheduledAnnouncementsSettings() {
       toast.success('Áudio enviado com sucesso!');
     } catch (error: any) {
       toast.error('Erro ao enviar áudio: ' + error.message);
+    }
+  };
+
+  const handlePreviewVoice = () => {
+    if (!voiceText.trim()) {
+      toast.error('Digite o texto para ouvir');
+      return;
+    }
+
+    if (isSpeaking) {
+      cancelSpeech();
+    } else {
+      speak(voiceText, selectedVoiceURI);
     }
   };
 
@@ -236,7 +261,12 @@ export function ScheduledAnnouncementsSettings() {
       return;
     }
 
-    // Limpar preview anterior
+    if (!isSupported) {
+      toast.error('Síntese de voz não suportada neste navegador');
+      return;
+    }
+
+    // Clear previous preview
     if (previewAudioUrl) {
       URL.revokeObjectURL(previewAudioUrl);
       setPreviewAudioUrl(null);
@@ -245,35 +275,59 @@ export function ScheduledAnnouncementsSettings() {
 
     setIsGeneratingVoice(true);
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ 
-            text: voiceText,
-            voiceId: selectedVoiceId
-          }),
-        }
-      );
+      // Use MediaRecorder to capture system audio
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const chunks: BlobPart[] = [];
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Erro ao gerar áudio');
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+
+      const recordingPromise = new Promise<Blob>((resolve, reject) => {
+        mediaRecorder.onstop = () => {
+          stream.getTracks().forEach(track => track.stop());
+          const blob = new Blob(chunks, { type: 'audio/webm' });
+          resolve(blob);
+        };
+        mediaRecorder.onerror = () => reject(new Error('Erro na gravação'));
+      });
+
+      // Start recording before speech
+      mediaRecorder.start();
+
+      // Create utterance
+      const utterance = new SpeechSynthesisUtterance(voiceText);
+      if (selectedVoiceURI) {
+        const availableVoices = window.speechSynthesis.getVoices();
+        const voice = availableVoices.find(v => v.voiceURI === selectedVoiceURI);
+        if (voice) utterance.voice = voice;
       }
 
-      const audioBlob = await response.blob();
+      // Wait for speech to end
+      await new Promise<void>((resolve, reject) => {
+        utterance.onend = () => {
+          setTimeout(() => {
+            mediaRecorder.stop();
+            resolve();
+          }, 300);
+        };
+        utterance.onerror = () => {
+          mediaRecorder.stop();
+          reject(new Error('Erro na síntese'));
+        };
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(utterance);
+      });
+
+      const audioBlob = await recordingPromise;
       const tempUrl = URL.createObjectURL(audioBlob);
       setPreviewAudioUrl(tempUrl);
       setPreviewBlob(audioBlob);
-      toast.success('Preview gerado! Ouça e confirme.');
+      toast.success('Áudio gravado! Ouça o preview.');
     } catch (error: any) {
       console.error('Erro ao gerar voz:', error);
-      toast.error('Erro ao gerar áudio: ' + error.message);
+      toast.error('Erro ao gerar áudio. Permita acesso ao microfone.');
     } finally {
       setIsGeneratingVoice(false);
     }
@@ -283,13 +337,13 @@ export function ScheduledAnnouncementsSettings() {
     if (!previewBlob || !form.name.trim()) return;
     
     try {
-      // Salvar no histórico
-      addToHistory(voiceText, selectedVoiceId, selectedVoice.name);
+      // Save to history
+      addToHistory(voiceText, selectedVoiceURI, selectedVoice?.name || 'Voz');
       
       const url = await uploadRecording(previewBlob, form.name);
       setForm(prev => ({ ...prev, file_path: url }));
       
-      // Limpar preview
+      // Clear preview
       if (previewAudioUrl) URL.revokeObjectURL(previewAudioUrl);
       setPreviewAudioUrl(null);
       setPreviewBlob(null);
@@ -367,6 +421,12 @@ export function ScheduledAnnouncementsSettings() {
     return announcement.scheduled_days.map(d => DAYS_OF_WEEK.find(x => x.value === d)?.label).join(', ');
   };
 
+  const getVoiceFlag = (lang: string) => {
+    if (lang.startsWith('pt')) return '🇧🇷';
+    if (lang.startsWith('en')) return '🇺🇸';
+    return '🌐';
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -409,7 +469,7 @@ export function ScheduledAnnouncementsSettings() {
                 <div className="space-y-3">
                   <Label>Áudio</Label>
                   
-                  {/* Seleção de modo */}
+                  {/* Mode selection */}
                   {!audioSource && !isRecording && (
                     <div className="grid grid-cols-3 gap-2">
                       <Button 
@@ -442,7 +502,7 @@ export function ScheduledAnnouncementsSettings() {
                     </div>
                   )}
 
-                  {/* Modo Gravação */}
+                  {/* Recording Mode */}
                   {(audioSource === 'record' || isRecording) && (
                     <AudioRecorder
                       onSave={handleSaveRecording}
@@ -454,7 +514,7 @@ export function ScheduledAnnouncementsSettings() {
                     />
                   )}
 
-                  {/* Modo Upload */}
+                  {/* Upload Mode */}
                   {audioSource === 'upload' && (
                     <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
                       <div className="flex items-center gap-2 text-sm font-medium">
@@ -462,7 +522,7 @@ export function ScheduledAnnouncementsSettings() {
                         Enviar Arquivo de Áudio
                       </div>
                       
-                      {/* Seletor de arquivo */}
+                      {/* File selector */}
                       {!uploadPreviewUrl && (
                         <div className="flex gap-2">
                           <Label className="flex-1">
@@ -485,7 +545,7 @@ export function ScheduledAnnouncementsSettings() {
                         </div>
                       )}
                       
-                      {/* Preview do arquivo */}
+                      {/* File preview */}
                       {uploadPreviewUrl && (
                         <div className="space-y-3">
                           <div className="p-3 border rounded-lg bg-green-500/10 border-green-500/30">
@@ -551,40 +611,50 @@ export function ScheduledAnnouncementsSettings() {
                     </div>
                   )}
 
-                  {/* Modo Geração de Voz */}
+                  {/* Voice Generation Mode */}
                   {audioSource === 'generate' && (
                     <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
                       <div className="flex items-center gap-2 text-sm font-medium">
                         <Sparkles className="h-4 w-4 text-primary" />
-                        Gerar Áudio com ElevenLabs
+                        Gerar Áudio com Voz Sintetizada
                       </div>
                       
-                      {/* Seleção de Voz */}
+                      {!isSupported && (
+                        <p className="text-xs text-destructive">
+                          Síntese de voz não suportada neste navegador.
+                        </p>
+                      )}
+                      
+                      {/* Voice Selection */}
                       <div className="space-y-2">
                         <Label className="text-xs">Voz</Label>
-                        <Select value={selectedVoiceId} onValueChange={setSelectedVoiceId}>
+                        <Select value={selectedVoiceURI} onValueChange={setSelectedVoiceURI}>
                           <SelectTrigger>
                             <SelectValue>
-                              {selectedVoice.flag} {selectedVoice.name} ({selectedVoice.gender === 'male' ? '♂' : '♀'})
+                              {selectedVoice ? `${getVoiceFlag(selectedVoice.lang)} ${selectedVoice.name}` : 'Selecione uma voz'}
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectGroup>
-                              <SelectLabel>🇧🇷 Português</SelectLabel>
-                              {ptVoices.map(voice => (
-                                <SelectItem key={voice.id} value={voice.id}>
-                                  {voice.flag} {voice.name} ({voice.gender === 'male' ? 'Masculina' : 'Feminina'})
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
-                            <SelectGroup>
-                              <SelectLabel>🇺🇸 English</SelectLabel>
-                              {enVoices.map(voice => (
-                                <SelectItem key={voice.id} value={voice.id}>
-                                  {voice.flag} {voice.name} ({voice.gender === 'male' ? 'Male' : 'Female'})
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
+                            {availablePtVoices.length > 0 && (
+                              <SelectGroup>
+                                <SelectLabel>🇧🇷 Português</SelectLabel>
+                                {availablePtVoices.map(voice => (
+                                  <SelectItem key={voice.voiceURI} value={voice.voiceURI}>
+                                    🇧🇷 {voice.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            )}
+                            {availableEnVoices.length > 0 && (
+                              <SelectGroup>
+                                <SelectLabel>🇺🇸 English</SelectLabel>
+                                {availableEnVoices.map(voice => (
+                                  <SelectItem key={voice.voiceURI} value={voice.voiceURI}>
+                                    🇺🇸 {voice.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            )}
                           </SelectContent>
                         </Select>
                       </div>
@@ -598,20 +668,32 @@ export function ScheduledAnnouncementsSettings() {
                       />
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <span>{voiceText.length}/500 caracteres</span>
-                        {history.length > 0 && (
+                        <div className="flex items-center gap-2">
                           <Button
                             variant="ghost"
                             size="sm"
                             className="h-6 gap-1 text-xs"
-                            onClick={() => setShowHistory(!showHistory)}
+                            onClick={handlePreviewVoice}
+                            disabled={!voiceText.trim() || !isSupported}
                           >
-                            <History className="h-3 w-3" />
-                            Histórico ({history.length})
+                            {isSpeaking ? <Square className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                            {isSpeaking ? 'Parar' : 'Ouvir'}
                           </Button>
-                        )}
+                          {history.length > 0 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 gap-1 text-xs"
+                              onClick={() => setShowHistory(!showHistory)}
+                            >
+                              <History className="h-3 w-3" />
+                              Histórico ({history.length})
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       
-                      {/* Histórico de Textos */}
+                      {/* Text History */}
                       {showHistory && history.length > 0 && (
                         <div className="space-y-2 p-2 border rounded-lg bg-background max-h-40 overflow-y-auto">
                           <div className="flex items-center justify-between">
@@ -629,36 +711,33 @@ export function ScheduledAnnouncementsSettings() {
                               Limpar
                             </Button>
                           </div>
-                          {history.slice(0, 5).map(item => {
-                            const voice = ELEVENLABS_VOICES.find(v => v.id === item.voiceId);
-                            return (
-                              <div
-                                key={item.id}
-                                className="flex items-start gap-2 p-2 rounded border hover:bg-muted/50 cursor-pointer"
-                                onClick={() => {
-                                  setVoiceText(item.text);
-                                  if (voice) setSelectedVoiceId(voice.id);
-                                  setShowHistory(false);
-                                }}
-                              >
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm truncate">{item.text}</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {voice?.flag || '🎤'} {item.voiceName} · {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true, locale: ptBR })}
-                                  </p>
-                                </div>
+                          {history.slice(0, 5).map(item => (
+                            <div
+                              key={item.id}
+                              className="flex items-start gap-2 p-2 rounded border hover:bg-muted/50 cursor-pointer"
+                              onClick={() => {
+                                setVoiceText(item.text);
+                                if (item.voiceId) setSelectedVoiceURI(item.voiceId);
+                                setShowHistory(false);
+                              }}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm truncate">{item.text}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  🎤 {item.voiceName} · {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true, locale: ptBR })}
+                                </p>
                               </div>
-                            );
-                          })}
+                            </div>
+                          ))}
                         </div>
                       )}
                       
-                      {/* Preview do Áudio */}
+                      {/* Audio Preview */}
                       {previewAudioUrl && (
                         <div className="p-3 border rounded-lg bg-green-500/10 border-green-500/30 space-y-2">
                           <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400">
                             <Volume2 className="h-4 w-4" />
-                            Preview Gerado
+                            Preview Gravado
                           </div>
                           <div className="flex gap-2">
                             <Button
@@ -691,39 +770,28 @@ export function ScheduledAnnouncementsSettings() {
                           className="flex-1 gap-2"
                           variant={previewAudioUrl ? 'outline' : 'default'}
                           onClick={handleGenerateVoice}
-                          disabled={isGeneratingVoice || !voiceText.trim() || !form.name.trim()}
+                          disabled={isGeneratingVoice || !voiceText.trim() || !form.name.trim() || !isSupported}
                         >
                           {isGeneratingVoice ? (
                             <>
                               <RefreshCw className="h-4 w-4 animate-spin" />
-                              Gerando...
-                            </>
-                          ) : previewAudioUrl ? (
-                            <>
-                              <RefreshCw className="h-4 w-4" />
-                              Regenerar
+                              Gravando...
                             </>
                           ) : (
                             <>
                               <Sparkles className="h-4 w-4" />
-                              Gerar Preview
+                              Gravar com Voz
                             </>
                           )}
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          onClick={() => {
-                            if (previewAudioUrl) URL.revokeObjectURL(previewAudioUrl);
-                            setAudioSource(null);
-                            setVoiceText('');
-                            setPreviewAudioUrl(null);
-                            setPreviewBlob(null);
-                          }}
-                          disabled={isGeneratingVoice}
-                        >
+                        <Button variant="ghost" onClick={() => setAudioSource(null)}>
                           Cancelar
                         </Button>
                       </div>
+                      
+                      <p className="text-xs text-muted-foreground">
+                        Usa a síntese de voz do navegador. Requer permissão de microfone para gravar.
+                      </p>
                     </div>
                   )}
                 </div>
@@ -731,59 +799,55 @@ export function ScheduledAnnouncementsSettings() {
                 <div className="space-y-2">
                   <Label>Áudio</Label>
                   <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted/30">
+                    <Volume2 className="h-4 w-4 text-primary" />
+                    <span className="flex-1 text-sm truncate">{form.file_path.split('/').pop()}</span>
                     <Button
                       variant="ghost"
-                      size="icon"
+                      size="sm"
                       onClick={() => {
                         const audio = new Audio(form.file_path);
-                        audio.volume = form.volume;
                         audio.play();
                       }}
                     >
                       <Play className="h-4 w-4" />
                     </Button>
-                    <span className="flex-1 text-sm truncate">{form.name || 'Áudio carregado'}</span>
                     <Button
                       variant="ghost"
-                      size="icon"
-                      onClick={() => setForm({ ...form, file_path: '' })}
-                      className="text-destructive"
+                      size="sm"
+                      onClick={() => setForm(prev => ({ ...prev, file_path: '' }))}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <X className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
               )}
 
               {/* Trigger Type */}
-              <div className="space-y-3">
-                <Label>Tipo de Disparo</Label>
+              <div className="space-y-2">
+                <Label>Tipo de Gatilho</Label>
                 <div className="grid grid-cols-2 gap-2">
                   <Button
-                    type="button"
                     variant={form.trigger_type === 'scheduled' ? 'default' : 'outline'}
-                    className="h-auto py-3 flex flex-col items-center gap-1"
-                    onClick={() => setForm({ ...form, trigger_type: 'scheduled' })}
+                    className="gap-2"
+                    onClick={() => setForm(prev => ({ ...prev, trigger_type: 'scheduled' }))}
                   >
-                    <Clock className="h-5 w-5" />
-                    <span className="text-xs">Por Horário</span>
+                    <Calendar className="h-4 w-4" />
+                    Agendado
                   </Button>
                   <Button
-                    type="button"
                     variant={form.trigger_type === 'condition' ? 'default' : 'outline'}
-                    className="h-auto py-3 flex flex-col items-center gap-1"
-                    onClick={() => setForm({ ...form, trigger_type: 'condition' })}
+                    className="gap-2"
+                    onClick={() => setForm(prev => ({ ...prev, trigger_type: 'condition' }))}
                   >
-                    <Activity className="h-5 w-5" />
-                    <span className="text-xs">Por Demanda</span>
+                    <Activity className="h-4 w-4" />
+                    Condicional
                   </Button>
                 </div>
               </div>
 
-              {/* Scheduled trigger options */}
+              {/* Scheduled Options */}
               {form.trigger_type === 'scheduled' && (
                 <>
-                  {/* Schedule Type */}
                   <div className="space-y-2">
                     <Label>Frequência</Label>
                     <Select 
@@ -796,17 +860,13 @@ export function ScheduledAnnouncementsSettings() {
                       <SelectContent>
                         <SelectItem value="once">Uma vez</SelectItem>
                         <SelectItem value="daily">Diariamente</SelectItem>
-                        <SelectItem value="weekly">Dias da semana</SelectItem>
+                        <SelectItem value="weekly">Dias específicos</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {/* Time */}
                   <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Clock className="h-4 w-4" />
-                      Horário
-                    </Label>
+                    <Label>Horário</Label>
                     <Input
                       type="time"
                       value={form.scheduled_time}
@@ -814,13 +874,9 @@ export function ScheduledAnnouncementsSettings() {
                     />
                   </div>
 
-                  {/* Date (for once) */}
                   {form.schedule_type === 'once' && (
                     <div className="space-y-2">
-                      <Label className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4" />
-                        Data
-                      </Label>
+                      <Label>Data</Label>
                       <Input
                         type="date"
                         value={form.scheduled_date}
@@ -829,7 +885,6 @@ export function ScheduledAnnouncementsSettings() {
                     </div>
                   )}
 
-                  {/* Days of Week (for weekly) */}
                   {form.schedule_type === 'weekly' && (
                     <div className="space-y-2">
                       <Label>Dias da Semana</Label>
@@ -837,7 +892,6 @@ export function ScheduledAnnouncementsSettings() {
                         {DAYS_OF_WEEK.map(day => (
                           <Button
                             key={day.value}
-                            type="button"
                             variant={form.scheduled_days.includes(day.value) ? 'default' : 'outline'}
                             size="sm"
                             onClick={() => toggleDay(day.value)}
@@ -851,19 +905,9 @@ export function ScheduledAnnouncementsSettings() {
                 </>
               )}
 
-              {/* Condition trigger options */}
+              {/* Condition Options */}
               {form.trigger_type === 'condition' && (
                 <>
-                  <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-                    <div className="flex items-start gap-2">
-                      <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
-                      <p className="text-xs text-yellow-700 dark:text-yellow-400">
-                        O anúncio será disparado automaticamente quando a condição for atingida, respeitando o tempo de cooldown configurado.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Condition Type */}
                   <div className="space-y-2">
                     <Label>Condição</Label>
                     <Select 
@@ -874,200 +918,178 @@ export function ScheduledAnnouncementsSettings() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {CONDITION_TYPES.map(ct => (
-                          <SelectItem key={ct.value} value={ct.value}>
-                            <div>
-                              <div>{ct.label}</div>
-                              <div className="text-xs text-muted-foreground">{ct.description}</div>
-                            </div>
+                        {CONDITION_TYPES.map(condition => (
+                          <SelectItem key={condition.value} value={condition.value}>
+                            {condition.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {CONDITION_TYPES.find(c => c.value === form.condition_type)?.description}
+                    </p>
                   </div>
 
-                  {/* Condition Comparison & Threshold */}
-                  <div className="space-y-2">
-                    <Label>Disparar quando for</Label>
-                    <div className="flex gap-2 items-center">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Comparação</Label>
                       <Select 
                         value={form.condition_comparison} 
                         onValueChange={(v) => setForm({ ...form, condition_comparison: v as any })}
                       >
-                        <SelectTrigger className="w-[140px]">
+                        <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {CONDITION_COMPARISONS.map(cc => (
-                            <SelectItem key={cc.value} value={cc.value}>{cc.label}</SelectItem>
+                          {CONDITION_COMPARISONS.map(comp => (
+                            <SelectItem key={comp.value} value={comp.value}>
+                              {comp.label}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Valor</Label>
                       <Input
                         type="number"
-                        min="1"
+                        min={0}
                         value={form.condition_threshold}
-                        onChange={(e) => setForm({ ...form, condition_threshold: parseInt(e.target.value) || 1 })}
-                        className="w-24"
+                        onChange={(e) => setForm({ ...form, condition_threshold: parseInt(e.target.value) || 0 })}
                       />
-                      <span className="flex items-center text-sm text-muted-foreground">
-                        {CONDITION_TYPES.find(ct => ct.value === form.condition_type)?.unit || 'pedidos'}
-                      </span>
                     </div>
                   </div>
 
-                  {/* Delay Threshold (for delayed_orders_count) */}
                   {form.condition_type === 'delayed_orders_count' && (
-                    <div className="space-y-3 p-3 rounded-lg bg-muted/50 border">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-orange-500" />
-                        <Label>Considerar atrasado após: {form.delay_threshold_minutes} minutos</Label>
-                      </div>
-                      <Slider
-                        value={[form.delay_threshold_minutes]}
-                        onValueChange={([value]) => setForm({ ...form, delay_threshold_minutes: value })}
-                        min={5}
-                        max={60}
-                        step={5}
+                    <div className="space-y-2">
+                      <Label>Tempo de Atraso (minutos)</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={form.delay_threshold_minutes}
+                        onChange={(e) => setForm({ ...form, delay_threshold_minutes: parseInt(e.target.value) || 20 })}
                       />
                       <p className="text-xs text-muted-foreground">
-                        Pedidos esperando há mais de {form.delay_threshold_minutes} minutos serão contados como atrasados.
+                        Pedidos acima deste tempo serão considerados atrasados
                       </p>
                     </div>
                   )}
 
-                  {/* Cooldown */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Timer className="h-4 w-4 text-muted-foreground" />
-                      <Label>Cooldown: {form.cooldown_minutes} minutos</Label>
-                    </div>
-                    <Slider
-                      value={[form.cooldown_minutes]}
-                      onValueChange={([value]) => setForm({ ...form, cooldown_minutes: value })}
-                      min={5}
-                      max={120}
-                      step={5}
+                  <div className="space-y-2">
+                    <Label>Cooldown (minutos entre reproduções)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={form.cooldown_minutes}
+                      onChange={(e) => setForm({ ...form, cooldown_minutes: parseInt(e.target.value) || 30 })}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Após disparar, o anúncio não tocará novamente por {form.cooldown_minutes} minutos, mesmo que a condição continue ativa.
-                    </p>
                   </div>
                 </>
               )}
 
               {/* Target Screens */}
               <div className="space-y-2">
-                <Label>Onde Reproduzir</Label>
+                <Label>Telas Alvo</Label>
                 <div className="space-y-2">
                   {TARGET_SCREENS.map(screen => (
-                    <label 
-                      key={screen.value} 
-                      className="flex items-center gap-2 cursor-pointer"
-                    >
+                    <div key={screen.value} className="flex items-center space-x-2">
                       <Checkbox
+                        id={screen.value}
                         checked={form.target_screens.includes(screen.value)}
                         onCheckedChange={() => toggleScreen(screen.value)}
                       />
-                      <span className="text-sm">{screen.label}</span>
-                    </label>
+                      <label htmlFor={screen.value} className="text-sm cursor-pointer">
+                        {screen.label}
+                      </label>
+                    </div>
                   ))}
                 </div>
               </div>
 
               {/* Volume */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Volume2 className="h-4 w-4 text-muted-foreground" />
-                  <Label>Volume: {Math.round(form.volume * 100)}%</Label>
-                </div>
+              <div className="space-y-2">
+                <Label>Volume ({Math.round(form.volume * 100)}%)</Label>
                 <Slider
-                  value={[form.volume * 100]}
-                  onValueChange={([value]) => setForm({ ...form, volume: value / 100 })}
-                  max={100}
-                  step={5}
+                  value={[form.volume]}
+                  onValueChange={([v]) => setForm({ ...form, volume: v })}
+                  min={0.1}
+                  max={1}
+                  step={0.1}
                 />
               </div>
 
-              {/* Active Toggle */}
+              {/* Active */}
               <div className="flex items-center justify-between">
                 <Label>Ativo</Label>
                 <Switch
                   checked={form.is_active}
-                  onCheckedChange={(is_active) => setForm({ ...form, is_active })}
+                  onCheckedChange={(checked) => setForm({ ...form, is_active: checked })}
                 />
               </div>
 
-              {/* Actions */}
+              {/* Submit */}
               <div className="flex gap-2 pt-4">
-                <Button variant="outline" className="flex-1" onClick={() => setIsDialogOpen(false)}>
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    setIsDialogOpen(false);
+                    resetForm();
+                  }}
+                >
                   Cancelar
                 </Button>
-                <Button 
-                  className="flex-1" 
+                <Button
+                  className="flex-1"
                   onClick={handleSubmit}
-                  disabled={createAnnouncement.isPending || updateAnnouncement.isPending}
+                  disabled={!form.name.trim() || !form.file_path || createAnnouncement.isPending || updateAnnouncement.isPending}
                 >
-                  {editingAnnouncement ? 'Salvar' : 'Criar Anúncio'}
+                  {createAnnouncement.isPending || updateAnnouncement.isPending ? 'Salvando...' : 'Salvar'}
                 </Button>
               </div>
             </div>
           </DialogContent>
         </Dialog>
 
-        {/* List of Announcements */}
+        {/* Announcements List */}
         {isLoading ? (
-          <div className="text-center py-8 text-muted-foreground">Carregando...</div>
+          <div className="text-center py-8 text-muted-foreground">
+            Carregando anúncios...
+          </div>
         ) : announcements.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            <Megaphone className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Nenhum anúncio agendado</p>
-            <p className="text-sm">Crie um novo anúncio para começar</p>
+            Nenhum anúncio agendado
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {announcements.map(announcement => (
-              <div 
-                key={announcement.id} 
-                className="flex items-center justify-between p-3 border rounded-lg"
+              <div
+                key={announcement.id}
+                className="flex items-center gap-3 p-3 border rounded-lg"
               >
+                <div className={`w-2 h-2 rounded-full ${announcement.is_active ? 'bg-green-500' : 'bg-muted'}`} />
+                
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant={announcement.is_active ? 'default' : 'secondary'}>
-                      {announcement.is_active ? 'Ativo' : 'Inativo'}
-                    </Badge>
-                    <Badge variant="outline" className={announcement.trigger_type === 'condition' ? 'border-orange-500 text-orange-500' : ''}>
-                      {announcement.trigger_type === 'condition' ? (
-                        <><Activity className="h-3 w-3 mr-1" />Demanda</>
-                      ) : (
-                        <><Clock className="h-3 w-3 mr-1" />Horário</>
-                      )}
-                    </Badge>
+                  <div className="flex items-center gap-2">
                     <span className="font-medium truncate">{announcement.name}</span>
+                    <Badge variant="outline" className="text-xs">
+                      {announcement.trigger_type === 'condition' ? (
+                        <Activity className="h-3 w-3 mr-1" />
+                      ) : (
+                        <Clock className="h-3 w-3 mr-1" />
+                      )}
+                      {announcement.trigger_type === 'condition' ? 'Condicional' : announcement.scheduled_time.slice(0, 5)}
+                    </Badge>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                    {announcement.trigger_type === 'scheduled' && (
-                      <>
-                        <Clock className="h-3 w-3" />
-                        <span>{announcement.scheduled_time.slice(0, 5)}</span>
-                        <span>•</span>
-                      </>
-                    )}
+                  <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                     <span>{getAnnouncementDescription(announcement)}</span>
-                    {announcement.trigger_type === 'condition' && (
-                      <>
-                        <span>•</span>
-                        <span>Cooldown: {announcement.cooldown_minutes}min</span>
-                      </>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                    {announcement.target_screens.map(s => 
-                      TARGET_SCREENS.find(x => x.value === s)?.label
-                    ).join(', ')}
+                    <span>·</span>
+                    <span>{announcement.target_screens.join(', ')}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-1 ml-2">
+
+                <div className="flex items-center gap-1">
                   <Button
                     variant="ghost"
                     size="icon"
@@ -1085,8 +1107,8 @@ export function ScheduledAnnouncementsSettings() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => handleDelete(announcement.id)}
                     className="text-destructive"
+                    onClick={() => handleDelete(announcement.id)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
