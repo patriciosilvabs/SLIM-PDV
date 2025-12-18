@@ -385,6 +385,7 @@ export function PrinterSettings() {
                   variant="outline" 
                   size="sm"
                   onClick={handleRefreshPrinters}
+                  disabled={printerCtx.isConnecting}
                 >
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Atualizar
@@ -393,26 +394,49 @@ export function PrinterSettings() {
                   variant="outline" 
                   size="sm"
                   onClick={handleDisconnect}
+                  disabled={printerCtx.isConnecting}
                 >
                   Desconectar
                 </Button>
               </>
+            ) : printerCtx.waitingForAuth ? (
+              <Button disabled>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Aguardando Login...
+              </Button>
             ) : (
               <Button 
                 onClick={handleConnect}
-                disabled={printerCtx.isConnecting || printerCtx.waitingForAuth}
+                disabled={printerCtx.isConnecting}
               >
                 {printerCtx.isConnecting ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : printerCtx.waitingForAuth ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 ) : (
-                  <Wifi className="w-4 h-4 mr-2" />
+                  <RefreshCw className="w-4 h-4 mr-2" />
                 )}
-                {printerCtx.waitingForAuth ? 'Aguardando...' : 'Conectar'}
+                {printerCtx.isConnecting ? 'Conectando...' : 'Reconectar'}
               </Button>
             )}
           </div>
+        </div>
+
+        {/* Auto-connect Setting */}
+        <div className="flex items-center justify-between p-4 rounded-lg border">
+          <div className="flex items-center gap-3">
+            <Zap className="w-5 h-5 text-muted-foreground" />
+            <div>
+              <div className="font-medium">Conexão automática</div>
+              <div className="text-sm text-muted-foreground">
+                Conectar automaticamente ao QZ Tray quando fizer login
+              </div>
+            </div>
+          </div>
+          <Switch
+            checked={printerCtx.config.autoConnectOnLogin}
+            onCheckedChange={(checked) => 
+              printerCtx.updateConfig({ autoConnectOnLogin: checked })
+            }
+          />
         </div>
 
         {/* Error Alert */}

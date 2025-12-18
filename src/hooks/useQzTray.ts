@@ -66,6 +66,7 @@ export interface PrinterConfig {
   kitchenPrinter: string | null;
   cashierPrinter: string | null;
   paperWidth: '58mm' | '80mm';
+  autoConnectOnLogin: boolean;
 }
 
 // Type for mixed print data (strings or image objects)
@@ -84,6 +85,7 @@ const DEFAULT_CONFIG: PrinterConfig = {
   kitchenPrinter: null,
   cashierPrinter: null,
   paperWidth: '80mm',
+  autoConnectOnLogin: true,
 };
 
 const STORAGE_KEY = 'pdv_printer_config';
@@ -271,15 +273,14 @@ export function useQzTray() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === 'SIGNED_IN' && session?.access_token) {
-          // User just logged in, try to connect to QZ Tray
           setWaitingForAuth(false);
-          if (window.qz && !window.qz.websocket.isActive()) {
+          // Only auto-connect if setting is enabled
+          if (config.autoConnectOnLogin && window.qz && !window.qz.websocket.isActive()) {
             setTimeout(() => {
               connect().catch(console.error);
             }, 500);
           }
         } else if (event === 'SIGNED_OUT') {
-          // Disconnect when user logs out
           setWaitingForAuth(false);
           disconnect().catch(console.error);
         }
@@ -287,7 +288,7 @@ export function useQzTray() {
     );
 
     return () => subscription.unsubscribe();
-  }, [connect, disconnect]);
+  }, [connect, disconnect, config.autoConnectOnLogin]);
 
   const refreshPrinters = useCallback(async () => {
     if (!window.qz || !isConnected) {
