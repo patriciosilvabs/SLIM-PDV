@@ -38,6 +38,11 @@ export const CASH_DRAWER_OPEN_PIN5 = ESC + 'p' + '\x01' + '\x19' + '\xFA'; // Pi
 export const LINE_SPACING_DEFAULT = ESC + '2';
 export const LINE_SPACING_SET = (n: number) => ESC + '3' + String.fromCharCode(n);
 
+// Character spacing (horizontal space between characters)
+// ESC SP n - where n is the number of dot units (0-255)
+export const CHAR_SPACING_SET = (n: number) => ESC + ' ' + String.fromCharCode(n);
+export const CHAR_SPACING_DEFAULT = CHAR_SPACING_SET(0);
+
 // Character size
 export const CHAR_SIZE = (width: number, height: number) => {
   const n = ((width - 1) << 4) | (height - 1);
@@ -159,7 +164,8 @@ export function buildKitchenTicket(
   fontSize: PrintFontSize = 'normal',
   lineSpacing: number = 0,
   leftMargin: number = 0,
-  asciiMode: boolean = false
+  asciiMode: boolean = false,
+  charSpacing: number = 1
 ): string {
   const width = paperWidth === '58mm' ? 32 : 48;
   let ticket = '';
@@ -168,6 +174,11 @@ export function buildKitchenTicket(
 
   // Initialize
   ticket += INIT;
+
+  // Apply character spacing if set (improves readability)
+  if (charSpacing > 0) {
+    ticket += CHAR_SPACING_SET(charSpacing);
+  }
 
   // Apply line spacing if set
   if (lineSpacing > 0) {
@@ -303,7 +314,8 @@ export function buildCustomerReceipt(
   fontSize: PrintFontSize = 'normal',
   lineSpacing: number = 0,
   leftMargin: number = 0,
-  asciiMode: boolean = false
+  asciiMode: boolean = false,
+  charSpacing: number = 1
 ): string {
   const width = paperWidth === '58mm' ? 32 : 48;
   let receipt = '';
@@ -312,6 +324,11 @@ export function buildCustomerReceipt(
 
   // Initialize
   receipt += INIT;
+
+  // Apply character spacing if set (improves readability)
+  if (charSpacing > 0) {
+    receipt += CHAR_SPACING_SET(charSpacing);
+  }
 
   // Apply line spacing if set
   if (lineSpacing > 0) {

@@ -13,6 +13,7 @@ const RESTAURANT_PHONE_KEY = 'pdv_restaurant_phone';
 const RESTAURANT_CNPJ_KEY = 'pdv_restaurant_cnpj';
 const DUPLICATE_KITCHEN_TICKET_KEY = 'pdv_duplicate_kitchen_ticket';
 const ASCII_MODE_KEY = 'pdv_ascii_mode';
+const CHAR_SPACING_KEY = 'pdv_char_spacing';
 
 // General print settings keys
 const PRINT_SHOW_ITEM_NUMBER_KEY = 'pdv_print_show_item_number';
@@ -96,6 +97,11 @@ export function useOrderSettings() {
   const [asciiMode, setAsciiMode] = useState(() => {
     if (typeof window === 'undefined') return false;
     return localStorage.getItem(ASCII_MODE_KEY) === 'true';
+  });
+
+  const [charSpacing, setCharSpacing] = useState<number>(() => {
+    if (typeof window === 'undefined') return 1;
+    return parseInt(localStorage.getItem(CHAR_SPACING_KEY) || '1');
   });
 
   // General print settings
@@ -229,6 +235,11 @@ export function useOrderSettings() {
     setAsciiMode(value);
   };
 
+  const updateCharSpacing = (value: number) => {
+    localStorage.setItem(CHAR_SPACING_KEY, String(value));
+    setCharSpacing(value);
+  };
+
   // General print settings toggles
   const toggleShowItemNumber = (value: boolean) => {
     localStorage.setItem(PRINT_SHOW_ITEM_NUMBER_KEY, String(value));
@@ -333,6 +344,9 @@ export function useOrderSettings() {
       if (e.key === ASCII_MODE_KEY) {
         setAsciiMode(e.newValue === 'true');
       }
+      if (e.key === CHAR_SPACING_KEY) {
+        setCharSpacing(parseInt(e.newValue || '1'));
+      }
       // General print settings
       if (e.key === PRINT_SHOW_ITEM_NUMBER_KEY) {
         setShowItemNumber(e.newValue === 'true');
@@ -403,6 +417,8 @@ export function useOrderSettings() {
     toggleDuplicateKitchenTicket,
     asciiMode,
     toggleAsciiMode,
+    charSpacing,
+    updateCharSpacing,
     // General print settings
     showItemNumber,
     toggleShowItemNumber,
