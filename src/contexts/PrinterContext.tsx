@@ -80,8 +80,10 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const currentLeftMargin = parseInt(localStorage.getItem('pdv_left_margin') || '0');
       const currentAsciiMode = localStorage.getItem('pdv_ascii_mode') === 'true';
       const currentCharSpacing = parseInt(localStorage.getItem('pdv_char_spacing') || '1');
+      const currentTopMargin = parseInt(localStorage.getItem('pdv_top_margin') || '0');
+      const currentBottomMargin = parseInt(localStorage.getItem('pdv_bottom_margin') || '3');
       
-      const ticketData = buildKitchenTicket(data, qz.config.paperWidth, currentKitchenFontSize, currentLineSpacing, currentLeftMargin, currentAsciiMode, currentCharSpacing);
+      const ticketData = buildKitchenTicket(data, qz.config.paperWidth, currentKitchenFontSize, currentLineSpacing, currentLeftMargin, currentAsciiMode, currentCharSpacing, currentTopMargin, currentBottomMargin);
       await qz.printToKitchen(ticketData);
       return true;
     } catch (err) {
@@ -103,6 +105,8 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const currentLeftMargin = parseInt(localStorage.getItem('pdv_left_margin') || '0');
       const currentAsciiMode = localStorage.getItem('pdv_ascii_mode') === 'true';
       const currentCharSpacing = parseInt(localStorage.getItem('pdv_char_spacing') || '1');
+      const currentTopMargin = parseInt(localStorage.getItem('pdv_top_margin') || '0');
+      const currentBottomMargin = parseInt(localStorage.getItem('pdv_bottom_margin') || '3');
 
       // Group items by sector
       const itemsBySector: Record<string, SectorPrintItem[]> = {};
@@ -161,7 +165,9 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
           currentLineSpacing, 
           currentLeftMargin,
           currentAsciiMode,
-          currentCharSpacing
+          currentCharSpacing,
+          currentTopMargin,
+          currentBottomMargin
         );
 
         // Print to the sector's printer
@@ -197,6 +203,8 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const currentRestaurantCnpj = localStorage.getItem('pdv_restaurant_cnpj') || '';
       const currentAsciiMode = localStorage.getItem('pdv_ascii_mode') === 'true';
       const currentCharSpacing = parseInt(localStorage.getItem('pdv_char_spacing') || '1');
+      const currentTopMargin = parseInt(localStorage.getItem('pdv_top_margin') || '0');
+      const currentBottomMargin = parseInt(localStorage.getItem('pdv_bottom_margin') || '4');
       
       // Get custom messages based on order type
       const isTableOrder = data.orderType === 'dine_in';
@@ -218,7 +226,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
         qrCodeContent: qrCodeContent || undefined,
       };
       
-      const receiptData = buildCustomerReceipt(enrichedData, qz.config.paperWidth, currentReceiptFontSize, currentLineSpacing, currentLeftMargin, currentAsciiMode, currentCharSpacing);
+      const receiptData = buildCustomerReceipt(enrichedData, qz.config.paperWidth, currentReceiptFontSize, currentLineSpacing, currentLeftMargin, currentAsciiMode, currentCharSpacing, currentTopMargin, currentBottomMargin);
       await qz.printToCashier(receiptData);
       return true;
     } catch (err) {
