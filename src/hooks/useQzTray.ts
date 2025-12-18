@@ -69,12 +69,11 @@ export interface PrinterConfig {
 export type PrintDataItem = string | {
   type: 'raw';
   format: 'image' | 'base64' | 'plain';
+  flavor?: 'base64' | 'file' | 'plain';
   data: string;
   options?: {
     language?: string;
     dotDensity?: 'single' | 'double';
-    scaleImage?: boolean;
-    imageWidth?: number;
   };
 };
 

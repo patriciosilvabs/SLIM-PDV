@@ -20,6 +20,48 @@ export function invalidateLogoCache(url: string): void {
 }
 
 /**
+ * Extrai apenas o base64 puro de um data URL (remove o prefixo data:image/...;base64,)
+ */
+export function extractBase64Data(dataUrl: string): string {
+  const base64Marker = ';base64,';
+  const index = dataUrl.indexOf(base64Marker);
+  return index !== -1 ? dataUrl.slice(index + base64Marker.length) : dataUrl;
+}
+
+/**
+ * Redimensiona uma imagem para largura máxima especificada
+ * Retorna o dataURL redimensionado
+ */
+export async function resizeImage(dataUrl: string, maxWidth: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      // Se a imagem já é menor que maxWidth, retorna original
+      if (img.width <= maxWidth) {
+        resolve(dataUrl);
+        return;
+      }
+      
+      const canvas = document.createElement('canvas');
+      const scale = maxWidth / img.width;
+      canvas.width = maxWidth;
+      canvas.height = img.height * scale;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+      
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error('Failed to load image for resize'));
+    img.src = dataUrl;
+  });
+}
+
+/**
  * Fetches an image from URL and converts it to base64 data URI
  * Used for printing images via ESC/POS on thermal printers
  */

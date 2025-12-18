@@ -13,7 +13,7 @@ import {
 } from '@/utils/escpos';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { PrintSector } from '@/hooks/usePrintSectors';
-import { imageUrlToBase64Cached } from '@/utils/imageToBase64';
+import { imageUrlToBase64Cached, extractBase64Data, resizeImage } from '@/utils/imageToBase64';
 
 // Interface for items with sector info for sector-based printing
 export interface SectorPrintItem {
@@ -259,20 +259,23 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
         const logoBase64 = await imageUrlToBase64Cached(logoUrl);
         
         if (logoBase64) {
+          // Resize image to configured max width before sending to printer
+          const resizedLogo = await resizeImage(logoBase64, logoMaxWidth);
+          const pureBase64 = extractBase64Data(resizedLogo);
+          
           // Build print array: init + center + logo image + spacing + receipt text
           const printArray: PrintDataItem[] = [
             // Initialize and center align for logo
             INIT + ALIGN_CENTER,
-            // Logo image object with configurable width
+            // Logo image object - using flavor: 'base64' and pure base64 data
             {
               type: 'raw',
               format: 'image',
-              data: logoBase64,
+              flavor: 'base64',
+              data: pureBase64,
               options: {
                 language: 'ESCPOS',
-                dotDensity: 'double',
-                scaleImage: true,
-                imageWidth: logoMaxWidth
+                dotDensity: 'double'
               }
             },
             // Spacing after logo
