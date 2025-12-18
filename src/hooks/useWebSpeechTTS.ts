@@ -7,6 +7,63 @@ export interface WebSpeechVoice {
   localService: boolean;
 }
 
+// Supported language prefixes - empty array means ALL voices
+const SUPPORTED_LANGUAGES = ['pt', 'en', 'es', 'fr', 'de', 'it', 'ja', 'zh', 'ko', 'ru', 'nl', 'pl', 'ar', 'hi', 'tr'];
+
+export const LANGUAGE_NAMES: Record<string, string> = {
+  'pt': '🇧🇷 Português',
+  'pt-BR': '🇧🇷 Português (Brasil)',
+  'pt-PT': '🇵🇹 Português (Portugal)',
+  'en': '🇺🇸 Inglês',
+  'en-US': '🇺🇸 Inglês (EUA)',
+  'en-GB': '🇬🇧 Inglês (Reino Unido)',
+  'en-AU': '🇦🇺 Inglês (Austrália)',
+  'en-IN': '🇮🇳 Inglês (Índia)',
+  'es': '🇪🇸 Espanhol',
+  'es-ES': '🇪🇸 Espanhol (Espanha)',
+  'es-MX': '🇲🇽 Espanhol (México)',
+  'es-US': '🇺🇸 Espanhol (EUA)',
+  'es-AR': '🇦🇷 Espanhol (Argentina)',
+  'fr': '🇫🇷 Francês',
+  'fr-FR': '🇫🇷 Francês (França)',
+  'fr-CA': '🇨🇦 Francês (Canadá)',
+  'de': '🇩🇪 Alemão',
+  'de-DE': '🇩🇪 Alemão (Alemanha)',
+  'de-AT': '🇦🇹 Alemão (Áustria)',
+  'it': '🇮🇹 Italiano',
+  'it-IT': '🇮🇹 Italiano',
+  'ja': '🇯🇵 Japonês',
+  'ja-JP': '🇯🇵 Japonês',
+  'zh': '🇨🇳 Chinês',
+  'zh-CN': '🇨🇳 Chinês (Simplificado)',
+  'zh-TW': '🇹🇼 Chinês (Tradicional)',
+  'zh-HK': '🇭🇰 Chinês (Hong Kong)',
+  'ko': '🇰🇷 Coreano',
+  'ko-KR': '🇰🇷 Coreano',
+  'ru': '🇷🇺 Russo',
+  'ru-RU': '🇷🇺 Russo',
+  'nl': '🇳🇱 Holandês',
+  'nl-NL': '🇳🇱 Holandês',
+  'pl': '🇵🇱 Polonês',
+  'pl-PL': '🇵🇱 Polonês',
+  'ar': '🇸🇦 Árabe',
+  'ar-SA': '🇸🇦 Árabe',
+  'hi': '🇮🇳 Hindi',
+  'hi-IN': '🇮🇳 Hindi',
+  'tr': '🇹🇷 Turco',
+  'tr-TR': '🇹🇷 Turco',
+};
+
+export const getLanguageName = (langCode: string): string => {
+  return LANGUAGE_NAMES[langCode] || LANGUAGE_NAMES[langCode.split('-')[0]] || langCode;
+};
+
+export const getLanguageFlag = (langCode: string): string => {
+  const name = LANGUAGE_NAMES[langCode] || LANGUAGE_NAMES[langCode.split('-')[0]] || '';
+  const match = name.match(/^(\p{Emoji})/u);
+  return match ? match[1] : '🌐';
+};
+
 export function useWebSpeechTTS() {
   const [voices, setVoices] = useState<WebSpeechVoice[]>([]);
   const [isSupported, setIsSupported] = useState(false);
@@ -19,15 +76,17 @@ export function useWebSpeechTTS() {
       
       const loadVoices = () => {
         const availableVoices = window.speechSynthesis.getVoices();
-        // Filter for Portuguese and English voices
+        // Filter for supported languages, or show all if no filter
         const filtered = availableVoices
-          .filter(v => v.lang.startsWith('pt') || v.lang.startsWith('en'))
+          .filter(v => SUPPORTED_LANGUAGES.length === 0 || 
+            SUPPORTED_LANGUAGES.some(lang => v.lang.startsWith(lang)))
           .map(v => ({
             name: v.name,
             lang: v.lang,
             voiceURI: v.voiceURI,
             localService: v.localService
-          }));
+          }))
+          .sort((a, b) => a.lang.localeCompare(b.lang));
         setVoices(filtered);
       };
 
@@ -151,13 +210,38 @@ export function useWebSpeechTTS() {
   }, [isSupported, getVoiceByURI]);
 
   // Get voices grouped by language
+  const getVoicesByLanguage = useCallback((langPrefix: string) => {
+    return voices.filter(v => v.lang.startsWith(langPrefix));
+  }, [voices]);
+
   const ptVoices = voices.filter(v => v.lang.startsWith('pt'));
   const enVoices = voices.filter(v => v.lang.startsWith('en'));
+  const esVoices = voices.filter(v => v.lang.startsWith('es'));
+  const frVoices = voices.filter(v => v.lang.startsWith('fr'));
+  const deVoices = voices.filter(v => v.lang.startsWith('de'));
+  const itVoices = voices.filter(v => v.lang.startsWith('it'));
+  const jaVoices = voices.filter(v => v.lang.startsWith('ja'));
+  const zhVoices = voices.filter(v => v.lang.startsWith('zh'));
+  const koVoices = voices.filter(v => v.lang.startsWith('ko'));
+  const ruVoices = voices.filter(v => v.lang.startsWith('ru'));
+  const otherVoices = voices.filter(v => 
+    !['pt', 'en', 'es', 'fr', 'de', 'it', 'ja', 'zh', 'ko', 'ru'].some(lang => v.lang.startsWith(lang))
+  );
 
   return {
     voices,
     ptVoices,
     enVoices,
+    esVoices,
+    frVoices,
+    deVoices,
+    itVoices,
+    jaVoices,
+    zhVoices,
+    koVoices,
+    ruVoices,
+    otherVoices,
+    getVoicesByLanguage,
     isSupported,
     isSpeaking,
     speak,
@@ -169,8 +253,31 @@ export function useWebSpeechTTS() {
 
 // Default voices to show when no system voices available
 export const DEFAULT_VOICES: WebSpeechVoice[] = [
+  // Português
   { name: 'Google português do Brasil', lang: 'pt-BR', voiceURI: 'Google português do Brasil', localService: false },
   { name: 'Microsoft Maria', lang: 'pt-BR', voiceURI: 'Microsoft Maria - Portuguese (Brazil)', localService: true },
+  { name: 'Google português de Portugal', lang: 'pt-PT', voiceURI: 'Google português de Portugal', localService: false },
+  // Inglês
   { name: 'Google US English', lang: 'en-US', voiceURI: 'Google US English', localService: false },
+  { name: 'Google UK English Female', lang: 'en-GB', voiceURI: 'Google UK English Female', localService: false },
+  { name: 'Google UK English Male', lang: 'en-GB', voiceURI: 'Google UK English Male', localService: false },
   { name: 'Microsoft Zira', lang: 'en-US', voiceURI: 'Microsoft Zira - English (United States)', localService: true },
+  { name: 'Microsoft David', lang: 'en-US', voiceURI: 'Microsoft David - English (United States)', localService: true },
+  // Espanhol
+  { name: 'Google español', lang: 'es-ES', voiceURI: 'Google español', localService: false },
+  { name: 'Google español de Estados Unidos', lang: 'es-US', voiceURI: 'Google español de Estados Unidos', localService: false },
+  // Francês
+  { name: 'Google français', lang: 'fr-FR', voiceURI: 'Google français', localService: false },
+  // Alemão
+  { name: 'Google Deutsch', lang: 'de-DE', voiceURI: 'Google Deutsch', localService: false },
+  // Italiano
+  { name: 'Google italiano', lang: 'it-IT', voiceURI: 'Google italiano', localService: false },
+  // Japonês
+  { name: 'Google 日本語', lang: 'ja-JP', voiceURI: 'Google 日本語', localService: false },
+  // Chinês
+  { name: 'Google 普通话（中国大陆）', lang: 'zh-CN', voiceURI: 'Google 普通话（中国大陆）', localService: false },
+  // Coreano
+  { name: 'Google 한국의', lang: 'ko-KR', voiceURI: 'Google 한국의', localService: false },
+  // Russo
+  { name: 'Google русский', lang: 'ru-RU', voiceURI: 'Google русский', localService: false },
 ];

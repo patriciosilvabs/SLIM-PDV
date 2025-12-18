@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCustomSounds, SoundType } from '@/hooks/useCustomSounds';
 import { useVoiceTextHistory } from '@/hooks/useVoiceTextHistory';
-import { useWebSpeechTTS, DEFAULT_VOICES } from '@/hooks/useWebSpeechTTS';
+import { useWebSpeechTTS, DEFAULT_VOICES, getLanguageFlag, LANGUAGE_NAMES } from '@/hooks/useWebSpeechTTS';
 import { Play, Upload, Trash2, Music, Mic, Sparkles, RefreshCw, Check, Volume2, History, Square } from 'lucide-react';
 import { toast } from 'sonner';
 import { AudioRecorder } from '@/components/AudioRecorder';
@@ -25,7 +25,24 @@ interface SoundSelectorProps {
 export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: SoundSelectorProps) {
   const { customSounds, uploadSound, deleteSound, getSoundsForType, predefinedSounds } = useCustomSounds();
   const { getHistory, addToHistory, clearHistory } = useVoiceTextHistory();
-  const { voices, ptVoices, enVoices, isSupported, isSpeaking, speak, cancelSpeech } = useWebSpeechTTS();
+  const { 
+    voices, 
+    ptVoices, 
+    enVoices, 
+    esVoices, 
+    frVoices, 
+    deVoices, 
+    itVoices,
+    jaVoices,
+    zhVoices,
+    koVoices,
+    ruVoices,
+    otherVoices,
+    isSupported, 
+    isSpeaking, 
+    speak, 
+    cancelSpeech 
+  } = useWebSpeechTTS();
   
   const [isOpen, setIsOpen] = useState(false);
   const [uploadName, setUploadName] = useState('');
@@ -42,10 +59,22 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
   const predefinedList = Object.entries(predefinedSounds);
   const history = getHistory();
 
-  // Use available voices or defaults
-  const availablePtVoices = ptVoices.length > 0 ? ptVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('pt'));
-  const availableEnVoices = enVoices.length > 0 ? enVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('en'));
-  const allVoices = [...availablePtVoices, ...availableEnVoices];
+  // Use available voices or defaults, grouped by language
+  const voiceGroups = [
+    { key: 'pt', label: '🇧🇷 Português', voices: ptVoices.length > 0 ? ptVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('pt')) },
+    { key: 'en', label: '🇺🇸 English', voices: enVoices.length > 0 ? enVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('en')) },
+    { key: 'es', label: '🇪🇸 Español', voices: esVoices.length > 0 ? esVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('es')) },
+    { key: 'fr', label: '🇫🇷 Français', voices: frVoices.length > 0 ? frVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('fr')) },
+    { key: 'de', label: '🇩🇪 Deutsch', voices: deVoices.length > 0 ? deVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('de')) },
+    { key: 'it', label: '🇮🇹 Italiano', voices: itVoices.length > 0 ? itVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('it')) },
+    { key: 'ja', label: '🇯🇵 日本語', voices: jaVoices },
+    { key: 'zh', label: '🇨🇳 中文', voices: zhVoices },
+    { key: 'ko', label: '🇰🇷 한국어', voices: koVoices },
+    { key: 'ru', label: '🇷🇺 Русский', voices: ruVoices },
+    { key: 'other', label: '🌐 Outros', voices: otherVoices },
+  ].filter(g => g.voices.length > 0);
+
+  const allVoices = voiceGroups.flatMap(g => g.voices);
   
   // Set default voice when voices load
   useEffect(() => {
@@ -234,11 +263,6 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
     return 'Beep Clássico';
   };
 
-  const getVoiceFlag = (lang: string) => {
-    if (lang.startsWith('pt')) return '🇧🇷';
-    if (lang.startsWith('en')) return '🇺🇸';
-    return '🌐';
-  };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -412,34 +436,24 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
           
           {/* Voice Selection */}
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Voz</Label>
+            <Label className="text-xs text-muted-foreground">Voz ({allVoices.length} disponíveis)</Label>
             <Select value={selectedVoiceURI} onValueChange={setSelectedVoiceURI}>
               <SelectTrigger>
                 <SelectValue>
-                  {selectedVoice ? `${getVoiceFlag(selectedVoice.lang)} ${selectedVoice.name}` : 'Selecione uma voz'}
+                  {selectedVoice ? `${getLanguageFlag(selectedVoice.lang)} ${selectedVoice.name}` : 'Selecione uma voz'}
                 </SelectValue>
               </SelectTrigger>
-              <SelectContent>
-                {availablePtVoices.length > 0 && (
-                  <SelectGroup>
-                    <SelectLabel>🇧🇷 Português</SelectLabel>
-                    {availablePtVoices.map(voice => (
+              <SelectContent className="max-h-80">
+                {voiceGroups.map(group => (
+                  <SelectGroup key={group.key}>
+                    <SelectLabel>{group.label}</SelectLabel>
+                    {group.voices.map(voice => (
                       <SelectItem key={voice.voiceURI} value={voice.voiceURI}>
-                        🇧🇷 {voice.name}
+                        {getLanguageFlag(voice.lang)} {voice.name} {voice.localService ? '(local)' : ''}
                       </SelectItem>
                     ))}
                   </SelectGroup>
-                )}
-                {availableEnVoices.length > 0 && (
-                  <SelectGroup>
-                    <SelectLabel>🇺🇸 English</SelectLabel>
-                    {availableEnVoices.map(voice => (
-                      <SelectItem key={voice.voiceURI} value={voice.voiceURI}>
-                        🇺🇸 {voice.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                )}
+                ))}
               </SelectContent>
             </Select>
           </div>
