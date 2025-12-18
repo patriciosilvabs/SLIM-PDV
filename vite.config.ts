@@ -90,6 +90,29 @@ export default defineConfig(({ mode }) => ({
             icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }]
           }
         ],
+        screenshots: [
+          {
+            src: 'screenshots/tables-wide.png',
+            sizes: '1280x736',
+            type: 'image/png',
+            form_factor: 'wide',
+            label: 'Gerenciamento de Mesas'
+          },
+          {
+            src: 'screenshots/kds-wide.png',
+            sizes: '1280x736',
+            type: 'image/png',
+            form_factor: 'wide',
+            label: 'Kitchen Display System'
+          },
+          {
+            src: 'screenshots/tables-narrow.png',
+            sizes: '768x1344',
+            type: 'image/png',
+            form_factor: 'narrow',
+            label: 'Mesas no Mobile'
+          }
+        ],
         prefer_related_applications: false
       },
       workbox: {
