@@ -68,7 +68,7 @@ export interface PrinterConfig {
 // Type for mixed print data (strings or image objects)
 export type PrintDataItem = string | {
   type: 'raw';
-  format: 'image' | 'base64' | 'plain';
+  format: 'image' | 'base64' | 'command';
   flavor?: 'base64' | 'file' | 'plain';
   data: string;
   options?: {
@@ -290,12 +290,12 @@ export function useQzTray() {
       if (Array.isArray(data)) {
         printData = data.map(item => 
           typeof item === 'string' 
-            ? { type: 'raw', format: 'plain', data: item }
+            ? { type: 'raw', format: 'command', data: item }
             : item
         );
       } else {
         printData = isRaw 
-          ? [{ type: 'raw', format: 'plain', data }]
+          ? [{ type: 'raw', format: 'command', data }]
           : [{ type: 'html', format: 'plain', data }];
       }
 

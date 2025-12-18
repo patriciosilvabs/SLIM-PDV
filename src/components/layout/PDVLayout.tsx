@@ -10,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { PrinterStatusIndicator } from '@/components/PrinterStatusIndicator';
-import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Store, Users, Kanban, ChefHat, History, Target, UserCircle, Pizza, RotateCcw, Shield } from 'lucide-react';
+import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Store, Users, Kanban, ChefHat, History, Target, UserCircle, Pizza, RotateCcw, Shield, Ban } from 'lucide-react';
 import logoSlim from '@/assets/logo-slim.png';
 
 interface NavItem {
@@ -34,6 +34,7 @@ const navigation: NavItem[] = [
   { name: 'Caixa', href: '/cash-register', icon: CreditCard, roles: ['admin', 'cashier'], permission: 'cash_register_view' },
   { name: 'Relatórios', href: '/reports', icon: BarChart3, roles: ['admin', 'cashier'], permission: 'reports_view' },
   { name: 'Histórico', href: '/closing-history', icon: History, roles: ['admin', 'cashier'], permission: 'closing_history_view' },
+  { name: 'Cancelamentos', href: '/cancellation-history', icon: Ban, roles: ['admin', 'cashier'], permission: 'closing_history_view' },
   { name: 'Reaberturas', href: '/reopen-history', icon: RotateCcw, roles: ['admin'], permission: 'reopen_history_view' },
   { name: 'Auditoria', href: '/audit-dashboard', icon: Shield, roles: ['admin'], permission: 'audit_view' },
   { name: 'Desempenho', href: '/performance', icon: Target, roles: ['admin', 'cashier'], permission: 'performance_view' },

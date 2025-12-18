@@ -36,8 +36,10 @@ const PRINT_QR_STANDARD_KEY = 'pdv_print_qr_standard';
 const PRINT_QR_TABLE_KEY = 'pdv_print_qr_table';
 const LOGO_MAX_WIDTH_KEY = 'pdv_logo_max_width';
 const QR_CODE_SIZE_KEY = 'pdv_qr_code_size';
+const LOGO_PRINT_MODE_KEY = 'pdv_logo_print_mode';
 
 export type PrintFontSize = 'normal' | 'large' | 'extra_large';
+export type LogoPrintMode = 'original' | 'grayscale' | 'dithered';
 
 export function useOrderSettings() {
   const [duplicateItems, setDuplicateItems] = useState(() => {
@@ -206,6 +208,11 @@ export function useOrderSettings() {
     return parseInt(localStorage.getItem(QR_CODE_SIZE_KEY) || '5');
   });
 
+  const [logoPrintMode, setLogoPrintMode] = useState<LogoPrintMode>(() => {
+    if (typeof window === 'undefined') return 'original';
+    return (localStorage.getItem(LOGO_PRINT_MODE_KEY) as LogoPrintMode) || 'original';
+  });
+
   const toggleDuplicateItems = (value: boolean) => {
     localStorage.setItem(DUPLICATE_ITEMS_KEY, String(value));
     setDuplicateItems(value);
@@ -367,6 +374,11 @@ export function useOrderSettings() {
     localStorage.setItem(QR_CODE_SIZE_KEY, String(value));
     setQrCodeSize(value);
   };
+
+  const updateLogoPrintMode = (value: LogoPrintMode) => {
+    localStorage.setItem(LOGO_PRINT_MODE_KEY, value);
+    setLogoPrintMode(value);
+  };
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
       if (e.key === DUPLICATE_ITEMS_KEY) {
@@ -467,6 +479,9 @@ export function useOrderSettings() {
       if (e.key === QR_CODE_SIZE_KEY) {
         setQrCodeSize(parseInt(e.newValue || '5'));
       }
+      if (e.key === LOGO_PRINT_MODE_KEY) {
+        setLogoPrintMode((e.newValue as LogoPrintMode) || 'original');
+      }
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
@@ -538,6 +553,8 @@ export function useOrderSettings() {
     logoMaxWidth,
     updateLogoMaxWidth,
     qrCodeSize,
-    updateQrCodeSize
+    updateQrCodeSize,
+    logoPrintMode,
+    updateLogoPrintMode
   };
 }

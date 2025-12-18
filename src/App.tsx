@@ -23,6 +23,7 @@ import Customers from "./pages/Customers";
 import OrderManagement from "./pages/OrderManagement";
 import KDS from "./pages/KDS";
 import ClosingHistory from "./pages/ClosingHistory";
+import CancellationHistory from "./pages/CancellationHistory";
 import Performance from "./pages/Performance";
 import ReopenHistory from "./pages/ReopenHistory";
 import AuditDashboard from "./pages/AuditDashboard";
@@ -57,6 +58,7 @@ const App = () => (
                 <Route path="/order-management" element={<OrderManagement />} />
                 <Route path="/kds" element={<KDS />} />
                 <Route path="/closing-history" element={<ClosingHistory />} />
+                <Route path="/cancellation-history" element={<CancellationHistory />} />
                 <Route path="/performance" element={<Performance />} />
                 <Route path="/reopen-history" element={<ReopenHistory />} />
                 <Route path="/audit-dashboard" element={<AuditDashboard />} />
