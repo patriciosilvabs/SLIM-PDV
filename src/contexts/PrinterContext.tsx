@@ -1,15 +1,19 @@
 import React, { createContext, useContext, ReactNode } from 'react';
-import { useQzTray, PrinterConfig } from '@/hooks/useQzTray';
+import { useQzTray, PrinterConfig, PrintDataItem } from '@/hooks/useQzTray';
 import { 
   buildKitchenTicket, 
   buildCustomerReceipt, 
   buildCashDrawerCommand,
   KitchenTicketData,
   CustomerReceiptData,
-  PrintFontSize
+  PrintFontSize,
+  INIT,
+  ALIGN_CENTER,
+  LF
 } from '@/utils/escpos';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { PrintSector } from '@/hooks/usePrintSectors';
+import { imageUrlToBase64 } from '@/utils/imageToBase64';
 
 // Interface for items with sector info for sector-based printing
 export interface SectorPrintItem {
@@ -206,6 +210,10 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const currentTopMargin = parseInt(localStorage.getItem('pdv_top_margin') || '0');
       const currentBottomMarginReceipt = parseInt(localStorage.getItem('pdv_bottom_margin_receipt') || '4');
       
+      // Logo settings
+      const showLogo = localStorage.getItem('pdv_print_show_logo') === 'true';
+      const logoUrl = localStorage.getItem('pdv_restaurant_logo_url') || '';
+      
       // Get custom messages based on order type
       const isTableOrder = data.orderType === 'dine_in';
       const customMessage = isTableOrder 
@@ -214,6 +222,9 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const qrCodeContent = isTableOrder
         ? localStorage.getItem('pdv_print_qr_table') || ''
         : localStorage.getItem('pdv_print_qr_standard') || '';
+      
+      // Check if we should print logo instead of text restaurant name
+      const shouldPrintLogo = showLogo && !!logoUrl;
       
       // Merge restaurant info into data
       const enrichedData: CustomerReceiptData = {
@@ -226,7 +237,48 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
         qrCodeContent: qrCodeContent || undefined,
       };
       
-      const receiptData = buildCustomerReceipt(enrichedData, qz.config.paperWidth, currentReceiptFontSize, currentLineSpacing, currentLeftMargin, currentAsciiMode, currentCharSpacing, currentTopMargin, currentBottomMarginReceipt);
+      // Build receipt text (skip restaurant name if logo will be printed)
+      const receiptData = buildCustomerReceipt(
+        enrichedData, 
+        qz.config.paperWidth, 
+        currentReceiptFontSize, 
+        currentLineSpacing, 
+        currentLeftMargin, 
+        currentAsciiMode, 
+        currentCharSpacing, 
+        currentTopMargin, 
+        currentBottomMarginReceipt,
+        shouldPrintLogo // Skip restaurant name text when logo is enabled
+      );
+      
+      // If logo is enabled, build mixed array with image + text
+      if (shouldPrintLogo) {
+        const logoBase64 = await imageUrlToBase64(logoUrl);
+        
+        if (logoBase64) {
+          // Build print array: init + center + logo image + spacing + receipt text
+          const printArray: PrintDataItem[] = [
+            // Initialize and center align for logo
+            INIT + ALIGN_CENTER,
+            // Logo image object
+            {
+              type: 'raw' as const,
+              format: 'image' as const,
+              data: logoBase64,
+              options: { language: 'ESCPOS', dotDensity: 'double' as const }
+            },
+            // Spacing after logo
+            LF + LF,
+            // Receipt text (without restaurant name)
+            receiptData
+          ];
+          
+          await qz.print(qz.config.cashierPrinter, printArray);
+          return true;
+        }
+      }
+      
+      // Fallback: print text-only receipt
       await qz.printToCashier(receiptData);
       return true;
     } catch (err) {
