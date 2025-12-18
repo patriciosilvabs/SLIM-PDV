@@ -35,9 +35,6 @@ const orderTypeLabels: Record<string, string> = {
 export default function ReopenHistory() {
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   
-  if (!permissionsLoading && !hasPermission('reopen_history_view')) {
-    return <AccessDenied permission="reopen_history_view" />;
-  }
   const [startDate, setStartDate] = useState<Date>(subDays(new Date(), 7));
   const [endDate, setEndDate] = useState<Date>(new Date());
 
@@ -71,6 +68,10 @@ export default function ReopenHistory() {
 
     return { total: reopens.length, totalValue, topUsers };
   }, [reopens]);
+
+  if (!permissionsLoading && !hasPermission('reopen_history_view')) {
+    return <AccessDenied permission="reopen_history_view" />;
+  }
 
   return (
     <PDVLayout>

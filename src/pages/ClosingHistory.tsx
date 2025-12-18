@@ -53,12 +53,6 @@ const orderTypeLabels = {
 export default function ClosingHistory() {
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   
-  const canViewHistory = hasPermission('closing_history_view');
-  const canExportHistory = hasPermission('closing_history_export');
-
-  if (!permissionsLoading && !canViewHistory) {
-    return <AccessDenied permission="closing_history_view" />;
-  }
   const [filters, setFilters] = useState<ClosingHistoryFilters>({
     dateRange: 'today',
     paymentMethod: 'all',
@@ -84,6 +78,13 @@ export default function ClosingHistory() {
     const total = Object.values(summary.byPaymentMethod).reduce((a, b) => a + b, 0);
     return total || 1; // Prevent division by zero
   }, [summary.byPaymentMethod]);
+
+  const canViewHistory = hasPermission('closing_history_view');
+  const canExportHistory = hasPermission('closing_history_export');
+
+  if (!permissionsLoading && !canViewHistory) {
+    return <AccessDenied permission="closing_history_view" />;
+  }
 
   const clearFilters = () => {
     setFilters({
