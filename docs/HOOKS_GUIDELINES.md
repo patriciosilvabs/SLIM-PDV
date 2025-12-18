@@ -111,7 +111,36 @@ rules: {
 }
 ```
 
+## Pre-commit Hook Automático
+
+Este projeto usa **husky** + **lint-staged** para verificar automaticamente as regras de hooks antes de cada commit.
+
+### O que acontece no commit?
+
+1. `git commit` dispara o hook pre-commit
+2. lint-staged executa ESLint apenas nos arquivos staged (.ts/.tsx)
+3. Se houver violações de hooks, o commit é **bloqueado**
+4. Você deve corrigir os erros antes de fazer commit
+
+### Configuração
+
+O projeto inclui:
+- `.husky/pre-commit` - Hook que executa lint-staged
+- `.lintstagedrc.json` - Configuração do lint-staged
+
+### Bypass (não recomendado)
+
+Em casos extremos, você pode pular a verificação:
+
+```bash
+git commit --no-verify -m "mensagem"
+```
+
+⚠️ Isso **NÃO é recomendado** e deve ser evitado.
+
 ## Referências
 
 - [Rules of Hooks - React Docs](https://react.dev/reference/rules/rules-of-hooks)
 - [eslint-plugin-react-hooks](https://www.npmjs.com/package/eslint-plugin-react-hooks)
+- [Husky](https://typicode.github.io/husky/)
+- [lint-staged](https://github.com/lint-staged/lint-staged)
