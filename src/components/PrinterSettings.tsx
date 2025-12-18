@@ -108,7 +108,9 @@ export function PrinterSettings() {
     printQrTable,
     updatePrintQrTable,
     asciiMode,
-    toggleAsciiMode
+    toggleAsciiMode,
+    charSpacing,
+    updateCharSpacing
   } = useOrderSettings();
   const [testingPrinter, setTestingPrinter] = useState<string | null>(null);
   const [testingFont, setTestingFont] = useState<'kitchen' | 'receipt' | null>(null);
@@ -438,7 +440,29 @@ export function PrinterSettings() {
               </Select>
             </div>
 
-            {/* ASCII Mode Toggle */}
+            {/* Character Spacing */}
+            <div className="space-y-2">
+              <Label>Espaçamento entre Caracteres (Horizontal)</Label>
+              <Select
+                value={String(charSpacing)}
+                onValueChange={(v) => updateCharSpacing(Number(v))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Nenhum (padrão da impressora)</SelectItem>
+                  <SelectItem value="1">Pequeno (+1)</SelectItem>
+                  <SelectItem value="2">Médio (+2)</SelectItem>
+                  <SelectItem value="3">Grande (+3)</SelectItem>
+                  <SelectItem value="4">Extra Grande (+4)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Aumenta o espaço entre as letras para melhor legibilidade
+              </p>
+            </div>
+
             <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
               <div className="space-y-0.5">
                 <Label className="flex items-center gap-2">
@@ -476,7 +500,7 @@ export function PrinterSettings() {
                       style={{ width: `${leftMargin * 4}px` }}
                     />
                   )}
-                  <div style={{ lineHeight: `${1.2 + (lineSpacing / 32)}em` }}>
+                  <div style={{ lineHeight: `${1.2 + (lineSpacing / 32)}em`, letterSpacing: `${charSpacing * 0.5}px` }}>
                     <div className="font-bold text-center">{restaurantName || 'RESTAURANTE'}</div>
                     {restaurantAddress && <div className="text-center text-[10px]">{restaurantAddress}</div>}
                     {restaurantPhone && <div className="text-center text-[10px]">Tel: {restaurantPhone}</div>}
@@ -492,10 +516,12 @@ export function PrinterSettings() {
                   </div>
                 </div>
               </div>
-              <div className="flex gap-4 text-xs text-muted-foreground mt-2">
+              <div className="flex flex-wrap gap-4 text-xs text-muted-foreground mt-2">
                 <span>Margem: {leftMargin === 0 ? 'Nenhuma' : `${leftMargin} unidades`}</span>
                 <span>•</span>
-                <span>Espaçamento: {lineSpacing === 0 ? 'Normal' : `+${lineSpacing}`}</span>
+                <span>Espaçamento linhas: {lineSpacing === 0 ? 'Normal' : `+${lineSpacing}`}</span>
+                <span>•</span>
+                <span>Espaçamento caracteres: {charSpacing === 0 ? 'Padrão' : `+${charSpacing}`}</span>
               </div>
             </div>
 

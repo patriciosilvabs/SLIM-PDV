@@ -79,8 +79,9 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const currentLineSpacing = parseInt(localStorage.getItem('pdv_line_spacing') || '0');
       const currentLeftMargin = parseInt(localStorage.getItem('pdv_left_margin') || '0');
       const currentAsciiMode = localStorage.getItem('pdv_ascii_mode') === 'true';
+      const currentCharSpacing = parseInt(localStorage.getItem('pdv_char_spacing') || '1');
       
-      const ticketData = buildKitchenTicket(data, qz.config.paperWidth, currentKitchenFontSize, currentLineSpacing, currentLeftMargin, currentAsciiMode);
+      const ticketData = buildKitchenTicket(data, qz.config.paperWidth, currentKitchenFontSize, currentLineSpacing, currentLeftMargin, currentAsciiMode, currentCharSpacing);
       await qz.printToKitchen(ticketData);
       return true;
     } catch (err) {
@@ -101,6 +102,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const currentLineSpacing = parseInt(localStorage.getItem('pdv_line_spacing') || '0');
       const currentLeftMargin = parseInt(localStorage.getItem('pdv_left_margin') || '0');
       const currentAsciiMode = localStorage.getItem('pdv_ascii_mode') === 'true';
+      const currentCharSpacing = parseInt(localStorage.getItem('pdv_char_spacing') || '1');
 
       // Group items by sector
       const itemsBySector: Record<string, SectorPrintItem[]> = {};
@@ -158,7 +160,8 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
           currentKitchenFontSize, 
           currentLineSpacing, 
           currentLeftMargin,
-          currentAsciiMode
+          currentAsciiMode,
+          currentCharSpacing
         );
 
         // Print to the sector's printer
@@ -193,6 +196,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const currentRestaurantPhone = localStorage.getItem('pdv_restaurant_phone') || '';
       const currentRestaurantCnpj = localStorage.getItem('pdv_restaurant_cnpj') || '';
       const currentAsciiMode = localStorage.getItem('pdv_ascii_mode') === 'true';
+      const currentCharSpacing = parseInt(localStorage.getItem('pdv_char_spacing') || '1');
       
       // Get custom messages based on order type
       const isTableOrder = data.orderType === 'dine_in';
@@ -214,7 +218,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
         qrCodeContent: qrCodeContent || undefined,
       };
       
-      const receiptData = buildCustomerReceipt(enrichedData, qz.config.paperWidth, currentReceiptFontSize, currentLineSpacing, currentLeftMargin, currentAsciiMode);
+      const receiptData = buildCustomerReceipt(enrichedData, qz.config.paperWidth, currentReceiptFontSize, currentLineSpacing, currentLeftMargin, currentAsciiMode, currentCharSpacing);
       await qz.printToCashier(receiptData);
       return true;
     } catch (err) {

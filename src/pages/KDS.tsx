@@ -75,14 +75,16 @@ export default function KDS() {
     return Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
   };
 
-  // List for display (includes ready)
+  // List for display (includes ready) - only orders with items
   const activeOrdersList = orders.filter(o => 
-    o.status === 'pending' || o.status === 'preparing' || o.status === 'ready'
+    (o.status === 'pending' || o.status === 'preparing' || o.status === 'ready') &&
+    (o.order_items?.length ?? 0) > 0
   );
   
   // List for alerts (ONLY pending and preparing - ready orders should not trigger alerts)
   const ordersForAlerts = orders.filter(o => 
-    o.status === 'pending' || o.status === 'preparing'
+    (o.status === 'pending' || o.status === 'preparing') &&
+    (o.order_items?.length ?? 0) > 0
   );
   
   // Use updated_at for wait time calculation - this resets when new items are added to a ready order
@@ -219,10 +221,13 @@ export default function KDS() {
     localStorage.setItem(FILTER_STORAGE_KEY, orderTypeFilter);
   }, [orderTypeFilter]);
 
-  // Filter active orders (pending, preparing, ready)
+  // Filter active orders (pending, preparing, ready) - only orders with items
   const activeOrders = orders.filter(order => {
     const isActive = order.status === 'pending' || order.status === 'preparing' || order.status === 'ready';
     if (!isActive) return false;
+    
+    // Don't show orders without items (table just opened)
+    if ((order.order_items?.length ?? 0) === 0) return false;
 
     if (orderTypeFilter === 'all') return true;
     if (orderTypeFilter === 'table') return order.order_type === 'dine_in';
@@ -231,9 +236,10 @@ export default function KDS() {
     return true;
   });
 
-  // Count by type (unfiltered)
+  // Count by type (unfiltered) - only orders with items
   const allActiveOrders = orders.filter(
-    order => order.status === 'pending' || order.status === 'preparing' || order.status === 'ready'
+    order => (order.status === 'pending' || order.status === 'preparing' || order.status === 'ready') &&
+             (order.order_items?.length ?? 0) > 0
   );
   const tableCount = allActiveOrders.filter(o => o.order_type === 'dine_in').length;
   const takeawayCount = allActiveOrders.filter(o => o.order_type === 'takeaway').length;
