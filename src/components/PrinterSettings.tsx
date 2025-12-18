@@ -344,6 +344,14 @@ export function PrinterSettings() {
               <div className="p-2 rounded-full bg-green-500/20">
                 <Wifi className="w-5 h-5 text-green-500" />
               </div>
+            ) : printerCtx.waitingForAuth ? (
+              <div className="p-2 rounded-full bg-yellow-500/20">
+                <Loader2 className="w-5 h-5 text-yellow-500 animate-spin" />
+              </div>
+            ) : printerCtx.isConnecting ? (
+              <div className="p-2 rounded-full bg-blue-500/20">
+                <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+              </div>
             ) : (
               <div className="p-2 rounded-full bg-muted">
                 <WifiOff className="w-5 h-5 text-muted-foreground" />
@@ -351,12 +359,22 @@ export function PrinterSettings() {
             )}
             <div>
               <div className="font-medium">
-                Status: {printerCtx.isConnected ? 'Conectado' : 'Desconectado'}
+                Status: {printerCtx.isConnected 
+                  ? 'Conectado' 
+                  : printerCtx.waitingForAuth 
+                    ? 'Aguardando Login' 
+                    : printerCtx.isConnecting 
+                      ? 'Conectando...' 
+                      : 'Desconectado'}
               </div>
               <div className="text-sm text-muted-foreground">
                 {printerCtx.isConnected 
                   ? `${printerCtx.printers.length} impressora(s) disponível(is)`
-                  : 'Clique em Conectar para iniciar'}
+                  : printerCtx.waitingForAuth 
+                    ? 'Faça login para conectar a impressora'
+                    : printerCtx.isConnecting
+                      ? 'Estabelecendo conexão com QZ Tray...'
+                      : 'Clique em Conectar para iniciar'}
               </div>
             </div>
           </div>
@@ -382,14 +400,16 @@ export function PrinterSettings() {
             ) : (
               <Button 
                 onClick={handleConnect}
-                disabled={printerCtx.isConnecting}
+                disabled={printerCtx.isConnecting || printerCtx.waitingForAuth}
               >
                 {printerCtx.isConnecting ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : printerCtx.waitingForAuth ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 ) : (
                   <Wifi className="w-4 h-4 mr-2" />
                 )}
-                Conectar
+                {printerCtx.waitingForAuth ? 'Aguardando...' : 'Conectar'}
               </Button>
             )}
           </div>
