@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,7 +17,7 @@ import { useCategories } from '@/hooks/useCategories';
 import { useCombos } from '@/hooks/useCombos';
 import { useComboItems } from '@/hooks/useComboItems';
 import { useProductVariations } from '@/hooks/useProductVariations';
-import { useOrderMutations, Order } from '@/hooks/useOrders';
+import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { useToast } from '@/hooks/use-toast';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
@@ -26,10 +27,12 @@ import { useOpenCashRegister, useCashRegisterMutations, PaymentMethod } from '@/
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { AccessDenied } from '@/components/auth/AccessDenied';
 import { ProductDetailDialog, SelectedComplement } from '@/components/order/ProductDetailDialog';
+import { CancelOrderDialog } from '@/components/order/CancelOrderDialog';
 import { printCustomerReceipt } from '@/components/receipt/CustomerReceipt';
 import { usePrinterOptional, SectorPrintItem } from '@/contexts/PrinterContext';
 import { KitchenTicketData } from '@/utils/escpos';
 import { usePrintSectors } from '@/hooks/usePrintSectors';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   Package, 
   ShoppingCart, 
@@ -56,7 +59,12 @@ import {
   Banknote,
   CreditCard,
   QrCode,
-  Printer
+  Printer,
+  History,
+  ChevronRight,
+  XCircle,
+  Store,
+  Truck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -98,11 +106,13 @@ type OrderType = 'takeaway' | 'delivery';
 
 export default function Counter() {
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
+  const queryClient = useQueryClient();
   const { data: products } = useProducts();
   const { data: categories } = useCategories();
   const { data: combos } = useCombos();
   const { data: comboItems } = useComboItems();
   const { data: variations } = useProductVariations();
+  const { data: allOrders = [] } = useOrders();
   const { createOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
   const { toast } = useToast();
   const { duplicateItems, autoPrintKitchenTicket, autoPrintCustomerReceipt, duplicateKitchenTicket } = useOrderSettings();
@@ -117,10 +127,22 @@ export default function Counter() {
   const canAddItems = hasPermission('counter_add_items');
   const canApplyDiscount = hasPermission('counter_apply_discount');
   const canProcessPayment = hasPermission('counter_process_payment');
+  const canCancelOrder = hasPermission('orders_cancel');
 
   if (!permissionsLoading && !hasPermission('counter_view')) {
     return <AccessDenied permission="counter_view" />;
   }
+
+  // Filter active takeaway/delivery orders from today
+  const todayActiveOrders = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return allOrders.filter(order => 
+      (order.order_type === 'takeaway' || order.order_type === 'delivery') &&
+      order.status !== 'delivered' && 
+      order.status !== 'cancelled' &&
+      order.created_at?.startsWith(today)
+    );
+  }, [allOrders]);
 
 
   const [orderType, setOrderType] = useState<OrderType>('takeaway');
@@ -157,6 +179,12 @@ export default function Counter() {
   const [serviceChargePercent, setServiceChargePercent] = useState(10);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
+  
+  // Cancel order state
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [activeOrdersOpen, setActiveOrdersOpen] = useState(false);
   
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -417,6 +445,36 @@ export default function Counter() {
     setServiceChargeEnabled(false);
     setServiceChargePercent(10);
     setCreatedOrder(null);
+  };
+
+  const handleCancelOrder = async (reason: string) => {
+    if (!orderToCancel) return;
+    
+    setIsCancelling(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          status: 'cancelled',
+          cancellation_reason: reason,
+          cancelled_by: user?.id,
+          cancelled_at: new Date().toISOString(),
+        })
+        .eq('id', orderToCancel.id);
+      
+      if (error) throw error;
+      
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast({ title: 'Pedido cancelado', description: `Motivo: ${reason}` });
+      setCancelDialogOpen(false);
+      setOrderToCancel(null);
+    } catch (error) {
+      toast({ title: 'Erro ao cancelar pedido', variant: 'destructive' });
+    } finally {
+      setIsCancelling(false);
+    }
   };
 
   const handleOpenPaymentModal = () => {
@@ -901,6 +959,74 @@ export default function Counter() {
             </div>
           </div>
 
+          {/* Active Orders Section */}
+          {canCancelOrder && todayActiveOrders.length > 0 && (
+            <Collapsible open={activeOrdersOpen} onOpenChange={setActiveOrdersOpen}>
+              <CollapsibleTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  className="w-full justify-between h-10 px-3 border-b rounded-none"
+                >
+                  <span className="flex items-center gap-2 text-sm">
+                    <History className="h-4 w-4" />
+                    Pedidos Ativos ({todayActiveOrders.length})
+                  </span>
+                  <ChevronRight className={cn(
+                    "h-4 w-4 transition-transform",
+                    activeOrdersOpen && "rotate-90"
+                  )} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <ScrollArea className="max-h-48 border-b">
+                  <div className="p-2 space-y-2">
+                    {todayActiveOrders.map(order => (
+                      <div 
+                        key={order.id}
+                        className="flex items-center justify-between p-2 bg-muted/50 rounded-lg text-sm"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium flex items-center gap-2">
+                            #{order.id.slice(-4).toUpperCase()}
+                            <Badge variant="outline" className={cn(
+                              "text-xs",
+                              order.order_type === 'delivery' 
+                                ? "bg-purple-500/10 text-purple-500 border-purple-500/30"
+                                : "bg-orange-500/10 text-orange-500 border-orange-500/30"
+                            )}>
+                              {order.order_type === 'delivery' ? (
+                                <><Truck className="h-3 w-3 mr-1" />Delivery</>
+                              ) : (
+                                <><Store className="h-3 w-3 mr-1" />Balcão</>
+                              )}
+                            </Badge>
+                          </p>
+                          {order.customer_name && (
+                            <p className="text-xs text-muted-foreground truncate">{order.customer_name}</p>
+                          )}
+                          <p className="text-xs text-primary font-medium">
+                            {formatCurrency(order.total || 0)}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
+                          onClick={() => {
+                            setOrderToCancel(order);
+                            setCancelDialogOpen(true);
+                          }}
+                        >
+                          <XCircle className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+
           {/* Customer Search */}
           <div className="p-3 border-b space-y-3">
             {/* Customer search with autocomplete */}
@@ -1309,6 +1435,19 @@ export default function Counter() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <CancelOrderDialog
+        open={cancelDialogOpen}
+        onOpenChange={setCancelDialogOpen}
+        onConfirm={handleCancelOrder}
+        orderInfo={orderToCancel ? 
+          `#${orderToCancel.id.slice(-4).toUpperCase()} - ${
+            orderToCancel.order_type === 'delivery' ? 'Delivery' : 'Balcão'
+          }${orderToCancel.customer_name ? ` - ${orderToCancel.customer_name}` : ''}` 
+          : undefined
+        }
+        isLoading={isCancelling}
+      />
     </PDVLayout>
   );
 }

@@ -8,8 +8,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { AccessDenied } from '@/components/auth/AccessDenied';
+import { CancelOrderDialog } from '@/components/order/CancelOrderDialog';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, Store, Truck, Clock, Package, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, Store, Truck, Clock, Package, CheckCircle2, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -64,6 +65,12 @@ export default function OrderManagement() {
   const queryClient = useQueryClient();
   const previousOrdersRef = useRef<Order[]>([]);
   const handledStatusChangesRef = useRef<Set<string>>(new Set());
+
+  // Cancel order state
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [selectedOrderToCancel, setSelectedOrderToCancel] = useState<Order | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const canCancelOrder = hasPermission('orders_cancel');
 
   if (!permissionsLoading && !hasPermission('orders_view')) {
     return <AccessDenied permission="orders_view" />;
@@ -125,6 +132,34 @@ export default function OrderManagement() {
       toast.success(`Pedido movido para ${columns.find(c => c.id === newStatus)?.title}`);
     } catch (error) {
       toast.error('Erro ao atualizar status do pedido');
+    }
+  };
+
+  const handleCancelOrder = async (reason: string) => {
+    if (!selectedOrderToCancel) return;
+    
+    setIsCancelling(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      await supabase
+        .from('orders')
+        .update({
+          status: 'cancelled',
+          cancellation_reason: reason,
+          cancelled_by: user?.id,
+          cancelled_at: new Date().toISOString(),
+        })
+        .eq('id', selectedOrderToCancel.id);
+      
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast.success('Pedido cancelado', { description: `Motivo: ${reason}` });
+      setCancelDialogOpen(false);
+      setSelectedOrderToCancel(null);
+    } catch (error) {
+      toast.error('Erro ao cancelar pedido');
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -200,10 +235,25 @@ export default function OrderManagement() {
             </div>
           </div>
           
-          <div className="border-t border-border pt-2 mt-2">
+          <div className="border-t border-border pt-2 mt-2 flex items-center justify-between">
             <span className="font-bold text-primary">
               R$ {(order.total || 0).toFixed(2)}
             </span>
+            {canCancelOrder && order.status !== 'delivered' && order.status !== 'cancelled' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:bg-destructive/10 h-7 px-2"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedOrderToCancel(order);
+                  setCancelDialogOpen(true);
+                }}
+              >
+                <XCircle className="h-4 w-4 mr-1" />
+                Cancelar
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -258,6 +308,19 @@ export default function OrderManagement() {
           })}
         </div>
       </div>
+
+      <CancelOrderDialog
+        open={cancelDialogOpen}
+        onOpenChange={setCancelDialogOpen}
+        onConfirm={handleCancelOrder}
+        orderInfo={selectedOrderToCancel ? 
+          `Pedido #${selectedOrderToCancel.id.slice(-4).toUpperCase()} - ${
+            selectedOrderToCancel.order_type === 'delivery' ? 'Delivery' : 'Balcão'
+          }${selectedOrderToCancel.customer_name ? ` - ${selectedOrderToCancel.customer_name}` : ''}` 
+          : undefined
+        }
+        isLoading={isCancelling}
+      />
     </PDVLayout>
   );
 }
