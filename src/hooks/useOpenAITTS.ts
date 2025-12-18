@@ -10,12 +10,19 @@ export interface OpenAIVoice {
 
 // Available OpenAI TTS voices
 export const OPENAI_VOICES: OpenAIVoice[] = [
-  { id: 'nova', name: 'Nova', description: 'Voz feminina expressiva e natural', gender: 'female' },
+  // Vozes originais
   { id: 'alloy', name: 'Alloy', description: 'Voz neutra e versátil', gender: 'neutral' },
   { id: 'echo', name: 'Echo', description: 'Voz masculina profunda e clara', gender: 'male' },
   { id: 'fable', name: 'Fable', description: 'Voz masculina expressiva e narrativa', gender: 'male' },
+  { id: 'nova', name: 'Nova', description: 'Voz feminina expressiva e natural', gender: 'female' },
   { id: 'onyx', name: 'Onyx', description: 'Voz masculina grave e profissional', gender: 'male' },
   { id: 'shimmer', name: 'Shimmer', description: 'Voz feminina suave e acolhedora', gender: 'female' },
+  // Novas vozes (Out/2024)
+  { id: 'ash', name: 'Ash', description: 'Voz masculina expressiva e dinâmica', gender: 'male' },
+  { id: 'ballad', name: 'Ballad', description: 'Voz feminina melódica e narrativa', gender: 'female' },
+  { id: 'coral', name: 'Coral', description: 'Voz feminina calorosa e acolhedora', gender: 'female' },
+  { id: 'sage', name: 'Sage', description: 'Voz masculina calma e sábia', gender: 'male' },
+  { id: 'verse', name: 'Verse', description: 'Voz masculina versátil e envolvente', gender: 'male' },
 ];
 
 export const OPENAI_MODELS = [
