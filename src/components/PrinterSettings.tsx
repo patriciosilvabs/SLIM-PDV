@@ -41,8 +41,11 @@ import {
   Trash2,
   Beer,
   UtensilsCrossed,
+  Image,
+  Upload,
   type LucideIcon
 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 // Available icons for sectors
@@ -113,8 +116,12 @@ export function PrinterSettings() {
     updateCharSpacing,
     topMargin,
     updateTopMargin,
-    bottomMargin,
-    updateBottomMargin
+    bottomMarginKitchen,
+    updateBottomMarginKitchen,
+    bottomMarginReceipt,
+    updateBottomMarginReceipt,
+    restaurantLogoUrl,
+    updateRestaurantLogoUrl
   } = useOrderSettings();
   const [testingPrinter, setTestingPrinter] = useState<string | null>(null);
   const [testingFont, setTestingFont] = useState<'kitchen' | 'receipt' | null>(null);
@@ -123,6 +130,69 @@ export function PrinterSettings() {
   const [sectorDialogOpen, setSectorDialogOpen] = useState(false);
   const [editingSector, setEditingSector] = useState<PrintSector | null>(null);
   const [sectorForm, setSectorForm] = useState({ name: '', description: '', printer_name: '', color: '#EF4444', icon: 'Flame' });
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type and size
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Formato inválido',
+        description: 'Selecione uma imagem (PNG, JPG, etc.)',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (file.size > 500 * 1024) {
+      toast({
+        title: 'Arquivo muito grande',
+        description: 'O tamanho máximo é 500KB',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `logo-${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('restaurant-logos')
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrl } = supabase.storage
+        .from('restaurant-logos')
+        .getPublicUrl(fileName);
+
+      updateRestaurantLogoUrl(publicUrl.publicUrl);
+      toast({
+        title: 'Logo atualizado!',
+        description: 'A logomarca foi salva com sucesso.',
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Erro no upload',
+        description: err?.message || 'Falha ao enviar a imagem.',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    updateRestaurantLogoUrl('');
+    toast({
+      title: 'Logo removido',
+      description: 'A logomarca foi removida.',
+    });
+  };
 
   const handleConnect = async () => {
     const success = await printerCtx.connect();
@@ -388,6 +458,78 @@ export function PrinterSettings() {
               </p>
             </div>
 
+            {/* Restaurant Logo */}
+            <div className="space-y-3 p-4 rounded-lg border bg-muted/30">
+              <Label className="flex items-center gap-2">
+                <Image className="w-4 h-4" />
+                Logomarca do Restaurante
+              </Label>
+              
+              <div className="flex items-center gap-4">
+                {restaurantLogoUrl ? (
+                  <div className="relative">
+                    <img 
+                      src={restaurantLogoUrl} 
+                      alt="Logo do restaurante" 
+                      className="w-20 h-20 object-contain rounded border bg-white"
+                    />
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="absolute -top-2 -right-2 h-6 w-6"
+                      onClick={handleRemoveLogo}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="w-20 h-20 rounded border-2 border-dashed flex items-center justify-center bg-muted/50">
+                    <Image className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                )}
+
+                <div className="flex-1 space-y-2">
+                  <input
+                    type="file"
+                    id="logo-upload"
+                    accept="image/png,image/jpeg,image/jpg"
+                    onChange={handleLogoUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => document.getElementById('logo-upload')?.click()}
+                    disabled={uploadingLogo}
+                    className="w-full"
+                  >
+                    {uploadingLogo ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4 mr-2" />
+                    )}
+                    {restaurantLogoUrl ? 'Trocar Logo' : 'Enviar Logo'}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Formatos: PNG, JPG • Máx: 500KB
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t">
+                <div className="space-y-0.5">
+                  <Label className="text-sm">Imprimir logo nos recibos</Label>
+                  <p className="text-xs text-muted-foreground">
+                    A logo aparecerá no cabeçalho dos recibos de clientes
+                  </p>
+                </div>
+                <Switch
+                  checked={showLogo}
+                  onCheckedChange={toggleShowLogo}
+                  disabled={!restaurantLogoUrl}
+                />
+              </div>
+            </div>
+
             {/* Paper Width */}
             <div className="space-y-2">
               <Label>Largura do Papel</Label>
@@ -491,12 +633,12 @@ export function PrinterSettings() {
               </p>
             </div>
 
-            {/* Bottom Margin */}
+            {/* Bottom Margin - Kitchen */}
             <div className="space-y-2">
-              <Label>Margem Inferior (antes do corte)</Label>
+              <Label>Margem Inferior - Comanda (cozinha)</Label>
               <Select
-                value={String(bottomMargin)}
-                onValueChange={(v) => updateBottomMargin(Number(v))}
+                value={String(bottomMarginKitchen)}
+                onValueChange={(v) => updateBottomMarginKitchen(Number(v))}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue />
@@ -505,13 +647,37 @@ export function PrinterSettings() {
                   <SelectItem value="0">Sem margem</SelectItem>
                   <SelectItem value="1">1 linha</SelectItem>
                   <SelectItem value="2">2 linhas</SelectItem>
-                  <SelectItem value="3">3 linhas (padrão comanda)</SelectItem>
-                  <SelectItem value="4">4 linhas (padrão recibo)</SelectItem>
+                  <SelectItem value="3">3 linhas (padrão)</SelectItem>
+                  <SelectItem value="4">4 linhas</SelectItem>
                   <SelectItem value="5">5 linhas</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Linhas em branco antes do corte do papel
+                Linhas em branco antes do corte (comanda de cozinha)
+              </p>
+            </div>
+
+            {/* Bottom Margin - Receipt */}
+            <div className="space-y-2">
+              <Label>Margem Inferior - Recibo (cliente)</Label>
+              <Select
+                value={String(bottomMarginReceipt)}
+                onValueChange={(v) => updateBottomMarginReceipt(Number(v))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Sem margem</SelectItem>
+                  <SelectItem value="1">1 linha</SelectItem>
+                  <SelectItem value="2">2 linhas</SelectItem>
+                  <SelectItem value="3">3 linhas</SelectItem>
+                  <SelectItem value="4">4 linhas (padrão)</SelectItem>
+                  <SelectItem value="5">5 linhas</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Linhas em branco antes do corte (recibo do cliente)
               </p>
             </div>
 
