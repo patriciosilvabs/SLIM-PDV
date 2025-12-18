@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { 
   UtensilsCrossed, 
@@ -8,8 +9,12 @@ import {
   Megaphone, 
   Smartphone, 
   Users, 
-  Shield 
+  Shield,
+  Search,
+  X,
+  LucideIcon
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 export type SettingsSection = 
   | 'tables' 
@@ -21,6 +26,19 @@ export type SettingsSection =
   | 'push' 
   | 'users' 
   | 'roles';
+
+// Export section info for reuse (breadcrumb, etc.)
+export const SECTION_INFO: Record<SettingsSection, { label: string; icon: LucideIcon }> = {
+  tables: { label: 'Mesas', icon: UtensilsCrossed },
+  kds: { label: 'KDS', icon: ChefHat },
+  orders: { label: 'Pedidos', icon: ShoppingCart },
+  printers: { label: 'Impressoras', icon: Printer },
+  notifications: { label: 'Sons', icon: Bell },
+  announcements: { label: 'Avisos Agendados', icon: Megaphone },
+  push: { label: 'Push', icon: Smartphone },
+  users: { label: 'Usuários', icon: Users },
+  roles: { label: 'Funções', icon: Shield },
+};
 
 interface SettingsSidebarProps {
   activeSection: SettingsSection;
@@ -54,10 +72,65 @@ const sections = [
   },
 ];
 
+// Highlight matching text
+const highlightMatch = (text: string, query: string) => {
+  if (!query) return text;
+  const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  const parts = text.split(regex);
+  return parts.map((part, i) => 
+    regex.test(part) ? <mark key={i} className="bg-primary/20 rounded px-0.5">{part}</mark> : part
+  );
+};
+
 export function SettingsSidebar({ activeSection, onSectionChange }: SettingsSidebarProps) {
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Filter sections based on search
+  const filteredSections = sections.map(section => ({
+    ...section,
+    items: section.items.filter(item => 
+      item.label.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  })).filter(section => section.items.length > 0);
+
   return (
-    <nav className="w-56 flex-shrink-0 space-y-6">
-      {sections.map((section) => (
+    <nav className="w-56 flex-shrink-0 space-y-4">
+      {/* Search input */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Buscar..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9 pr-9 h-9"
+        />
+        {searchQuery && (
+          <button 
+            onClick={() => setSearchQuery('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {/* No results */}
+      {filteredSections.length === 0 && (
+        <div className="text-center py-8 text-muted-foreground">
+          <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">Nenhuma configuração encontrada</p>
+          <button 
+            onClick={() => setSearchQuery('')}
+            className="text-xs text-primary hover:underline mt-1"
+          >
+            Limpar busca
+          </button>
+        </div>
+      )}
+
+      {/* Sections */}
+      <div className="space-y-6">
+      {filteredSections.map((section) => (
         <div key={section.group}>
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-3">
             {section.group}
@@ -74,14 +147,15 @@ export function SettingsSidebar({ activeSection, onSectionChange }: SettingsSide
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   )}
                 >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
+                  <item.icon className="h-4 w-4 flex-shrink-0" />
+                  <span>{highlightMatch(item.label, searchQuery)}</span>
                 </button>
               </li>
             ))}
           </ul>
         </div>
       ))}
+      </div>
     </nav>
   );
 }
