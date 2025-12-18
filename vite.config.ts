@@ -66,30 +66,46 @@ export default defineConfig(({ mode }) => ({
             short_name: 'Mesas',
             description: 'Gerenciar mesas do restaurante',
             url: '/tables?source=shortcut',
-            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }]
+            icons: [{ src: 'shortcut-tables.png', sizes: '192x192', type: 'image/png' }]
           },
           {
             name: 'Balcão',
             short_name: 'Balcão',
             description: 'Pedidos de balcão e delivery',
             url: '/counter?source=shortcut',
-            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }]
+            icons: [{ src: 'shortcut-counter.png', sizes: '192x192', type: 'image/png' }]
           },
           {
             name: 'Cozinha (KDS)',
             short_name: 'KDS',
             description: 'Display da cozinha',
             url: '/kds?source=shortcut',
-            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }]
+            icons: [{ src: 'shortcut-kds.png', sizes: '192x192', type: 'image/png' }]
           },
           {
             name: 'Configurações',
             short_name: 'Config',
             description: 'Configurações do sistema',
             url: '/settings?source=shortcut',
-            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }]
+            icons: [{ src: 'shortcut-settings.png', sizes: '192x192', type: 'image/png' }]
           }
         ],
+        share_target: {
+          action: '/share-receiver',
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: {
+            title: 'title',
+            text: 'text',
+            url: 'url',
+            files: [
+              {
+                name: 'files',
+                accept: ['image/*', 'text/*', 'application/pdf']
+              }
+            ]
+          }
+        },
         screenshots: [
           {
             src: 'screenshots/tables-wide.png',
