@@ -6,7 +6,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { useSalesReport, useProductsReport, usePeakHoursAnalysis, useCashRegisterHistory, DateRange, getDateRange } from '@/hooks/useReports';
+import { useCancellationHistory, useCancellationSummary } from '@/hooks/useCancellationHistory';
 import { useEmployees } from '@/hooks/useEmployees';
 import { useTableSwitches } from '@/hooks/useTableSwitches';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
@@ -35,11 +39,13 @@ import {
   Clock,
   Receipt,
   ArrowRightLeft,
-  User
+  User,
+  Ban,
+  XCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', 'hsl(var(--info))', 'hsl(var(--warning))'];
+const COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', 'hsl(var(--info))', 'hsl(var(--warning))', 'hsl(var(--destructive))'];
 const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 function formatCurrency(value: number) {
@@ -60,6 +66,7 @@ export default function Reports() {
   const [customStart, setCustomStart] = useState<Date>();
   const [customEnd, setCustomEnd] = useState<Date>();
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
+  const [reasonFilter, setReasonFilter] = useState('');
 
   if (!permissionsLoading && !hasPermission('reports_view')) {
     return <AccessDenied permission="reports_view" />;
@@ -75,6 +82,14 @@ export default function Reports() {
   
   const { start, end } = getDateRange(dateRange, customStart, customEnd);
   const { data: tableSwitches } = useTableSwitches(start, end);
+  
+  // Cancellation history
+  const { data: cancellations = [] } = useCancellationHistory({
+    dateFrom: start,
+    dateTo: end,
+    reason: reasonFilter || undefined,
+  });
+  const cancellationSummary = useCancellationSummary(cancellations);
 
   // Prepare peak hours heat map data
   const peakHoursGrid = () => {
@@ -158,6 +173,7 @@ export default function Reports() {
             <TabsTrigger value="peak">Horários de Pico</TabsTrigger>
             <TabsTrigger value="cash">Histórico de Caixa</TabsTrigger>
             <TabsTrigger value="switches">Trocas de Mesa</TabsTrigger>
+            <TabsTrigger value="cancellations">Cancelamentos</TabsTrigger>
           </TabsList>
 
           {/* Sales Tab */}
@@ -582,6 +598,185 @@ export default function Reports() {
                       Nenhuma troca de mesa registrada no período
                     </p>
                   )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Cancellations Tab */}
+          <TabsContent value="cancellations" className="mt-4 space-y-6">
+            {/* KPIs */}
+            <div className="grid sm:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-destructive/10 rounded-lg">
+                      <XCircle className="h-5 w-5 text-destructive" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Cancelados</p>
+                      <p className="text-2xl font-bold">{cancellationSummary.totalCancellations}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-destructive/10 rounded-lg">
+                      <DollarSign className="h-5 w-5 text-destructive" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Valor Perdido</p>
+                      <p className="text-2xl font-bold">{formatCurrency(cancellationSummary.totalValue)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="sm:col-span-2">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-warning/10 rounded-lg">
+                      <Ban className="h-5 w-5 text-warning" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Motivo Mais Comum</p>
+                      <p className="text-lg font-medium truncate">{cancellationSummary.mostCommonReason}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Charts */}
+            <div className="grid lg:grid-cols-2 gap-6">
+              {/* Breakdown by Reason */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Por Motivo</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[250px]">
+                    {cancellationSummary.reasonBreakdown.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={cancellationSummary.reasonBreakdown.map(([reason, count]) => ({
+                              name: reason.length > 25 ? reason.substring(0, 25) + '...' : reason,
+                              value: count
+                            }))}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={40}
+                            outerRadius={80}
+                            dataKey="value"
+                            label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                          >
+                            {cancellationSummary.reasonBreakdown.map((_, index) => (
+                              <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-muted-foreground">
+                        Nenhum cancelamento no período
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Breakdown by User */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Por Responsável</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[250px]">
+                    {cancellationSummary.userBreakdown.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={cancellationSummary.userBreakdown.slice(0, 5).map(([name, count]) => ({
+                          name: name.split(' ')[0],
+                          count
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
+                          <YAxis allowDecimals={false} />
+                          <Tooltip />
+                          <Bar dataKey="count" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-muted-foreground">
+                        Nenhum cancelamento no período
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Detailed Table */}
+            <Card>
+              <CardHeader className="flex-row items-center justify-between space-y-0">
+                <CardTitle>Histórico Detalhado</CardTitle>
+                <Input
+                  placeholder="Filtrar por motivo..."
+                  value={reasonFilter}
+                  onChange={(e) => setReasonFilter(e.target.value)}
+                  className="w-64"
+                />
+              </CardHeader>
+              <CardContent>
+                <div className="max-h-[400px] overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Data/Hora</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Motivo</TableHead>
+                        <TableHead>Cancelado Por</TableHead>
+                        <TableHead className="text-right">Valor</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {cancellations.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                            Nenhum cancelamento no período selecionado
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        cancellations.map((record) => (
+                          <TableRow key={record.id}>
+                            <TableCell className="whitespace-nowrap">
+                              {record.cancelled_at 
+                                ? format(new Date(record.cancelled_at), "dd/MM HH:mm", { locale: ptBR })
+                                : '-'
+                              }
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">
+                                {record.order_type === 'dine_in' ? `Mesa ${record.table_number || '?'}` :
+                                 record.order_type === 'delivery' ? '🚚 Delivery' : '📦 Balcão'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{record.customer_name || '-'}</TableCell>
+                            <TableCell className="max-w-[200px] truncate" title={record.cancellation_reason || ''}>
+                              {record.cancellation_reason || '-'}
+                            </TableCell>
+                            <TableCell>{record.cancelled_by_name || 'Desconhecido'}</TableCell>
+                            <TableCell className="text-right font-medium text-destructive">
+                              {formatCurrency(record.total || 0)}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
               </CardContent>
             </Card>

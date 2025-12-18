@@ -346,15 +346,20 @@ export default function KDS() {
             cancelled: 'Cancelado'
           };
           
-          // Check for cancellation and play sound
+          // Check for cancellation and play sound - only notify if order was still in production
+          // Orders that were ready/delivered don't need to alert the kitchen anymore
           if (order.status === 'cancelled' && prevOrder.status !== 'cancelled') {
-            if (soundEnabled && settings.enabled) {
-              playOrderCancelledSound();
+            const wasInProduction = prevOrder.status === 'pending' || prevOrder.status === 'preparing';
+            
+            if (wasInProduction) {
+              if (soundEnabled && settings.enabled) {
+                playOrderCancelledSound();
+              }
+              toast.error(`🚫 Pedido #${order.id.slice(-4).toUpperCase()} CANCELADO!`, { 
+                description: (order as any).cancellation_reason || 'Motivo não informado',
+                duration: 10000 
+              });
             }
-            toast.error(`🚫 Pedido #${order.id.slice(-4).toUpperCase()} CANCELADO!`, { 
-              description: (order as any).cancellation_reason || 'Motivo não informado',
-              duration: 10000 
-            });
           } else if (!notifiedOrdersRef.current.has(`${order.id}-${order.status}`)) {
             // Only notify for non-cancellation status changes we didn't trigger
             toast.info(`Pedido #${order.id.slice(-4).toUpperCase()} → ${statusLabels[order.status] || order.status}`);
