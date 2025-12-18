@@ -6,6 +6,8 @@ const allowedOrigins = [
   'http://127.0.0.1:5173',
   'http://127.0.0.1:5174',
   'http://127.0.0.1:8080',
+  'https://pdvtotal.com',
+  'https://www.pdvtotal.com',
 ];
 
 // Match lovable domains dynamically
