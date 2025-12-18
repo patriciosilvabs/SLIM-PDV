@@ -5,8 +5,9 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useCustomSounds, SoundType, PREDEFINED_SOUNDS } from '@/hooks/useCustomSounds';
-import { Play, Upload, Trash2, Music } from 'lucide-react';
+import { Play, Upload, Trash2, Music, Mic } from 'lucide-react';
 import { toast } from 'sonner';
+import { AudioRecorder } from '@/components/AudioRecorder';
 
 interface SoundSelectorProps {
   soundType: SoundType;
@@ -19,6 +20,7 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
   const { customSounds, uploadSound, deleteSound, getSoundsForType, predefinedSounds } = useCustomSounds();
   const [isOpen, setIsOpen] = useState(false);
   const [uploadName, setUploadName] = useState('');
+  const [isRecordingMode, setIsRecordingMode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const customForType = getSoundsForType(soundType);
@@ -53,6 +55,27 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  const handleSaveRecording = async (blob: Blob) => {
+    if (!uploadName.trim()) {
+      toast.error('Digite um nome para a gravação');
+      return;
+    }
+
+    // Converter Blob para File
+    const file = new File([blob], `recording_${Date.now()}.webm`, { 
+      type: 'audio/webm' 
+    });
+
+    await uploadSound.mutateAsync({
+      file,
+      name: uploadName.trim(),
+      soundType
+    });
+
+    setUploadName('');
+    setIsRecordingMode(false);
   };
 
   const getCurrentSoundName = () => {
@@ -180,26 +203,45 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
             value={uploadName}
             onChange={(e) => setUploadName(e.target.value)}
           />
-          <div className="flex gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="audio/*"
-              className="hidden"
-              onChange={handleFileSelect}
+          
+          {isRecordingMode ? (
+            <AudioRecorder
+              onSave={handleSaveRecording}
+              onCancel={() => setIsRecordingMode(false)}
+              maxDuration={30}
             />
-            <Button
-              variant="outline"
-              className="w-full gap-2"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadSound.isPending || !uploadName.trim()}
-            >
-              <Upload className="h-4 w-4" />
-              {uploadSound.isPending ? 'Enviando...' : 'Enviar Áudio'}
-            </Button>
-          </div>
+          ) : (
+            <div className="flex gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="audio/*"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+              <Button
+                variant="outline"
+                className="flex-1 gap-2"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadSound.isPending || !uploadName.trim()}
+              >
+                <Upload className="h-4 w-4" />
+                {uploadSound.isPending ? 'Enviando...' : 'Enviar Arquivo'}
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 gap-2"
+                onClick={() => setIsRecordingMode(true)}
+                disabled={uploadSound.isPending || !uploadName.trim()}
+              >
+                <Mic className="h-4 w-4" />
+                Gravar Voz
+              </Button>
+            </div>
+          )}
+          
           <p className="text-xs text-muted-foreground">
-            Formatos: MP3, WAV, OGG • Máx: 1MB
+            Formatos: MP3, WAV, OGG • Máx: 1MB • Gravação: até 30s
           </p>
         </div>
       </DialogContent>

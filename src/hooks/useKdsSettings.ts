@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 
 interface KdsSettings {
   showPendingColumn: boolean;
+  cancellationAlertInterval: number; // Intervalo em segundos (1-10)
 }
 
 const STORAGE_KEY = 'pdv_kds_settings';
 
 const defaultSettings: KdsSettings = {
   showPendingColumn: true,
+  cancellationAlertInterval: 3, // 3 segundos (padrão)
 };
 
 export function useKdsSettings() {

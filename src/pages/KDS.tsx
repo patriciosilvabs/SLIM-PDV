@@ -402,12 +402,15 @@ export default function KDS() {
       // Play immediately
       playOrderCancelledSound();
       
-      // Start loop every 3 seconds
+      // Use configurable interval (convert seconds to ms)
+      const intervalMs = (kdsSettings.cancellationAlertInterval || 3) * 1000;
+      
+      // Start loop
       cancelledSoundIntervalRef.current = setInterval(() => {
         if (unconfirmedCancellations.size > 0) {
           playOrderCancelledSound();
         }
-      }, 3000);
+      }, intervalMs);
     }
     
     // Cleanup: stop sound when no more unconfirmed cancellations
@@ -417,7 +420,7 @@ export default function KDS() {
         cancelledSoundIntervalRef.current = null;
       }
     };
-  }, [unconfirmedCancellations.size, soundEnabled, settings.enabled, playOrderCancelledSound]);
+  }, [unconfirmedCancellations.size, soundEnabled, settings.enabled, playOrderCancelledSound, kdsSettings.cancellationAlertInterval]);
 
   // Handler to confirm cancellation was acknowledged
   const handleConfirmCancellation = (orderId: string) => {
