@@ -305,6 +305,7 @@ export interface CustomerReceiptData {
   createdAt: string;
   customMessage?: string;
   qrCodeContent?: string;
+  qrCodeSize?: number; // 1-8, default 5
   receiptType?: 'summary' | 'fiscal'; // Type of receipt: summary (before payment) or fiscal (after payment)
 }
 
@@ -532,7 +533,7 @@ export function buildCustomerReceipt(
   
   // QR Code if provided
   if (data.qrCodeContent) {
-    receipt += buildQRCode(data.qrCodeContent);
+    receipt += buildQRCode(data.qrCodeContent, data.qrCodeSize || 5);
     receipt += LF;
   }
   
@@ -546,14 +547,18 @@ export function buildCustomerReceipt(
 }
 
 // Build QR Code ESC/POS command
-export function buildQRCode(content: string): string {
+// moduleSize: 1-8 (default 5)
+export function buildQRCode(content: string, moduleSize: number = 5): string {
   let qr = '';
+  
+  // Clamp moduleSize to valid range
+  const size = Math.max(1, Math.min(8, moduleSize));
   
   // Select model 2
   qr += GS + '(k' + '\x04\x00\x31\x41\x32\x00';
   
-  // Set size (module size 5)
-  qr += GS + '(k' + '\x03\x00\x31\x43\x05';
+  // Set size (module size 1-8)
+  qr += GS + '(k' + '\x03\x00\x31\x43' + String.fromCharCode(size);
   
   // Set error correction level L
   qr += GS + '(k' + '\x03\x00\x31\x45\x30';
