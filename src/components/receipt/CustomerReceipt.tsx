@@ -14,6 +14,7 @@ interface CustomerReceiptProps {
   restaurantName?: string;
   restaurantAddress?: string;
   restaurantPhone?: string;
+  receiptType?: 'summary' | 'fiscal'; // Type of receipt: summary (before payment) or fiscal (after payment)
 }
 
 function formatCurrency(value: number) {
@@ -22,7 +23,7 @@ function formatCurrency(value: number) {
 
 // Convert props to ESC/POS CustomerReceiptData
 function propsToReceiptData(props: CustomerReceiptProps): CustomerReceiptData {
-  const { order, payments, discount, serviceCharge, splitBill, tableNumber, restaurantName, restaurantAddress, restaurantPhone } = props;
+  const { order, payments, discount, serviceCharge, splitBill, tableNumber, restaurantName, restaurantAddress, restaurantPhone, receiptType } = props;
   const subtotal = order.subtotal || 0;
   const total = order.total || 0;
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
@@ -68,6 +69,7 @@ function propsToReceiptData(props: CustomerReceiptProps): CustomerReceiptData {
       amountPerPerson: splitBill.amountPerPerson,
     } : undefined,
     createdAt: order.created_at,
+    receiptType,
   };
 }
 
@@ -81,7 +83,8 @@ function printWithBrowser({
   tableNumber,
   restaurantName = 'Restaurante',
   restaurantAddress = '',
-  restaurantPhone = ''
+  restaurantPhone = '',
+  receiptType
 }: CustomerReceiptProps) {
   const subtotal = order.subtotal || 0;
   const discountAmount = discount?.amount || order.discount || 0;
@@ -226,6 +229,23 @@ function printWithBrowser({
           font-weight: bold;
           margin-bottom: 1mm;
         }
+        .receipt-type-banner {
+          background: black;
+          color: white;
+          padding: 2mm;
+          text-align: center;
+          font-weight: bold;
+          font-size: 12px;
+          margin-bottom: 2mm;
+        }
+        .receipt-type-note {
+          text-align: center;
+          font-size: 9px;
+          font-style: italic;
+          margin-bottom: 3mm;
+          border-bottom: 1px dashed black;
+          padding-bottom: 2mm;
+        }
       </style>
     </head>
     <body>
@@ -234,6 +254,17 @@ function printWithBrowser({
         ${restaurantAddress ? `<div class="restaurant-info">${restaurantAddress}</div>` : ''}
         ${restaurantPhone ? `<div class="restaurant-info">Tel: ${restaurantPhone}</div>` : ''}
       </div>
+      
+      ${receiptType ? `
+        <div class="receipt-type-banner">
+          ${receiptType === 'summary' ? 'RESUMO DA CONTA' : 'CUPOM FISCAL'}
+        </div>
+        <div class="receipt-type-note">
+          ${receiptType === 'summary' 
+            ? '* Este não é um documento fiscal *' 
+            : '* Documento sem valor fiscal *'}
+        </div>
+      ` : ''}
       
       <div class="order-info">
         <div>Pedido: #${order.id.slice(0, 8).toUpperCase()}</div>
@@ -310,8 +341,11 @@ function printWithBrowser({
       ` : ''}
       
       <div class="footer">
-        <div class="footer-thanks">Obrigado pela preferência!</div>
-        <div>Volte sempre!</div>
+        ${receiptType === 'summary' 
+          ? `<div class="footer-thanks">Aguardamos seu pagamento!</div>`
+          : `<div class="footer-thanks">Obrigado pela preferência!</div>
+             <div>Volte sempre!</div>`
+        }
         <div style="margin-top: 2mm; font-size: 9px;">
           ${new Date().toLocaleString('pt-BR')}
         </div>

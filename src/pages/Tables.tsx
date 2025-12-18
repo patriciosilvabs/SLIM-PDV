@@ -894,6 +894,7 @@ export default function Tables() {
           serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
           splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
           tableNumber: selectedTable.number,
+          receiptType: 'summary',
         }, printer);
         toast.success('Resumo da conta impresso');
       } catch (err) {
@@ -992,8 +993,9 @@ export default function Tables() {
             serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
             splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
             tableNumber: selectedTable.number,
+            receiptType: 'fiscal',
           }, printer);
-          toast.success('Recibo impresso automaticamente');
+          toast.success('Cupom fiscal impresso');
         } catch (err) {
           console.error('Auto print receipt failed:', err);
         }
@@ -1287,26 +1289,20 @@ export default function Tables() {
                                   className="w-full"
                                   onClick={() => {
                                     if (!selectedOrder || !selectedTable) return;
-                                    printKitchenOrderTicket({
-                                      orderNumber: selectedOrder.id,
-                                      orderType: 'dine_in',
+                                    printCustomerReceipt({
+                                      order: selectedOrder,
+                                      payments: [],
+                                      discount: discountAmount > 0 ? { type: discountType, value: discountValue, amount: discountAmount } : undefined,
+                                      serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
+                                      splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
                                       tableNumber: selectedTable.number,
-                                      customerName: selectedOrder.customer_name,
-                                      items: selectedOrder.order_items?.map((item: any) => ({
-                                        id: item.id,
-                                        quantity: item.quantity,
-                                        notes: item.notes,
-                                        product: item.product,
-                                        variation: item.variation,
-                                        extras: item.extras,
-                                      })) || [],
-                                      notes: selectedOrder.notes,
-                                      createdAt: selectedOrder.created_at || new Date().toISOString(),
+                                      receiptType: 'summary',
                                     }, printer);
+                                    toast.success('Resumo da conta impresso');
                                   }}
                                 >
-                                  <Printer className="h-4 w-4 mr-2" />
-                                  Imprimir Comanda
+                                  <Receipt className="h-4 w-4 mr-2" />
+                                  Resumo da Conta
                                 </Button>
                               )}
                               {canSwitchTable && (
