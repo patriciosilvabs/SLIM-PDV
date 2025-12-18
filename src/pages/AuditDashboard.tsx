@@ -51,10 +51,6 @@ export default function AuditDashboard() {
   const [selectedUser, setSelectedUser] = useState<string>('all');
 
   const { data: employees } = useEmployees();
-
-  if (!permissionsLoading && !hasPermission('audit_view')) {
-    return <AccessDenied permission="audit_view" />;
-  }
   
   const types = selectedType === 'all' ? undefined : [selectedType as AuditEventType];
   const userId = selectedUser === 'all' ? undefined : selectedUser;
@@ -66,6 +62,10 @@ export default function AuditDashboard() {
     if (!events) return [];
     return events;
   }, [events]);
+
+  if (!permissionsLoading && !hasPermission('audit_view')) {
+    return <AccessDenied permission="audit_view" />;
+  }
 
   return (
     <PDVLayout>
