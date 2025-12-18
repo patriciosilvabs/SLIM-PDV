@@ -710,6 +710,14 @@ export function ScheduledAnnouncementsSettings() {
                     </div>
                   )}
                 </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>Áudio Atual</Label>
+                  <div className="flex items-center justify-between p-3 border rounded-lg bg-green-500/10 border-green-500/30">
+                    <div className="flex items-center gap-2">
+                      <Volume2 className="h-4 w-4 text-green-600" />
+                      <span className="text-sm text-green-600 dark:text-green-400">Áudio configurado</span>
+                    </div>
                     <Button
                       variant="ghost"
                       size="sm"
