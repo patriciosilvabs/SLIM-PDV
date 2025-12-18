@@ -91,8 +91,22 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
         .eq('is_active', true)
         .order('scheduled_time');
       
-      if (error) throw error;
+      if (error) {
+        // Handle RLS permission errors gracefully
+        if (error.code === 'PGRST301' || error.message?.includes('permission') || error.code === '42501') {
+          console.warn('Sem permissão para acessar anúncios programados');
+          return [];
+        }
+        throw error;
+      }
       return data as ScheduledAnnouncement[];
+    },
+    retry: (failureCount, error: any) => {
+      // Don't retry permission errors
+      if (error?.code === 'PGRST301' || error?.message?.includes('permission') || error?.code === '42501') {
+        return false;
+      }
+      return failureCount < 3;
     }
   });
 

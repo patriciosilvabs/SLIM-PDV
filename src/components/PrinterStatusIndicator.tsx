@@ -1,4 +1,4 @@
-import { Printer, PrinterCheck } from 'lucide-react';
+import { Printer, PrinterCheck, Loader2 } from 'lucide-react';
 import { usePrinterOptional } from '@/contexts/PrinterContext';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -9,9 +9,41 @@ export function PrinterStatusIndicator() {
   // Don't show if printer context not available
   if (!printer) return null;
   
-  const isConnected = printer.isConnected;
-  const hasKitchen = printer.canPrintToKitchen;
-  const hasCashier = printer.canPrintToCashier;
+  const { isConnected, waitingForAuth, connectionStatus, canPrintToKitchen, canPrintToCashier } = printer;
+  
+  const statusConfig = {
+    connected: {
+      Icon: PrinterCheck,
+      bgClass: 'bg-green-500/20 text-green-600 dark:text-green-400',
+      label: 'QZ',
+      tooltip: 'QZ Tray Conectado',
+      animate: false,
+    },
+    connecting: {
+      Icon: Loader2,
+      bgClass: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
+      label: 'Conectando...',
+      tooltip: 'Conectando ao QZ Tray...',
+      animate: true,
+    },
+    waiting_auth: {
+      Icon: Loader2,
+      bgClass: 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400',
+      label: 'Auth...',
+      tooltip: 'QZ Tray aguardando autenticação',
+      animate: true,
+    },
+    disconnected: {
+      Icon: Printer,
+      bgClass: 'bg-muted text-muted-foreground',
+      label: 'Offline',
+      tooltip: 'QZ Tray Desconectado',
+      animate: false,
+    },
+  };
+  
+  const config = statusConfig[connectionStatus];
+  const IconComponent = config.Icon;
   
   return (
     <TooltipProvider>
@@ -19,32 +51,29 @@ export function PrinterStatusIndicator() {
         <TooltipTrigger asChild>
           <div className={cn(
             "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs cursor-default",
-            isConnected 
-              ? "bg-green-500/20 text-green-600 dark:text-green-400" 
-              : "bg-muted text-muted-foreground"
+            config.bgClass
           )}>
-            {isConnected ? (
-              <PrinterCheck className="h-3.5 w-3.5" />
-            ) : (
-              <Printer className="h-3.5 w-3.5" />
-            )}
+            <IconComponent className={cn("h-3.5 w-3.5", config.animate && "animate-spin")} />
             <span className="hidden sm:inline">
-              {isConnected ? 'QZ' : 'Offline'}
+              {config.label}
             </span>
           </div>
         </TooltipTrigger>
         <TooltipContent side="bottom">
           <div className="text-xs space-y-1">
-            <p className="font-medium">
-              {isConnected ? 'QZ Tray Conectado' : 'QZ Tray Desconectado'}
-            </p>
+            <p className="font-medium">{config.tooltip}</p>
             {isConnected && (
               <>
-                <p>Cozinha: {hasKitchen ? '✅ Configurada' : '❌ Não configurada'}</p>
-                <p>Caixa: {hasCashier ? '✅ Configurada' : '❌ Não configurada'}</p>
+                <p>Cozinha: {canPrintToKitchen ? '✅ Configurada' : '❌ Não configurada'}</p>
+                <p>Caixa: {canPrintToCashier ? '✅ Configurada' : '❌ Não configurada'}</p>
               </>
             )}
-            {!isConnected && (
+            {waitingForAuth && (
+              <p className="text-muted-foreground">
+                Faça login para conectar a impressora
+              </p>
+            )}
+            {connectionStatus === 'disconnected' && (
               <p className="text-muted-foreground">
                 Vá em Configurações → Impressoras
               </p>

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, ReactNode } from 'react';
-import { useQzTray, PrinterConfig, PrintDataItem } from '@/hooks/useQzTray';
+import { useQzTray, PrinterConfig, PrintDataItem, QzConnectionStatus } from '@/hooks/useQzTray';
 import { 
   buildKitchenTicket, 
   buildCustomerReceipt, 
@@ -29,6 +29,8 @@ interface PrinterContextValue {
   // Connection state
   isConnected: boolean;
   isConnecting: boolean;
+  waitingForAuth: boolean;
+  connectionStatus: QzConnectionStatus;
   error: string | null;
   
   // Available printers
@@ -326,6 +328,8 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
   const value: PrinterContextValue = {
     isConnected: qz.isConnected,
     isConnecting: qz.isConnecting,
+    waitingForAuth: qz.waitingForAuth,
+    connectionStatus: qz.connectionStatus,
     error: qz.error,
     printers: qz.printers,
     config: qz.config,

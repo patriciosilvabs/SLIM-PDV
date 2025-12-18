@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
+// QZ Tray connection status
+export type QzConnectionStatus = 'disconnected' | 'waiting_auth' | 'connecting' | 'connected';
+
 // QZ Tray types
 declare global {
   interface Window {
@@ -88,6 +91,7 @@ const STORAGE_KEY = 'pdv_printer_config';
 export function useQzTray() {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [waitingForAuth, setWaitingForAuth] = useState(false);
   const [printers, setPrinters] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<PrinterConfig>(() => {
@@ -102,6 +106,15 @@ export function useQzTray() {
   const qzLoadedRef = useRef(false);
   const connectAttemptedRef = useRef(false);
 
+  // Get connection status for UI
+  const connectionStatus: QzConnectionStatus = isConnected 
+    ? 'connected' 
+    : isConnecting 
+      ? 'connecting' 
+      : waitingForAuth 
+        ? 'waiting_auth' 
+        : 'disconnected';
+
   // Load QZ Tray script
   useEffect(() => {
     if (qzLoadedRef.current) return;
@@ -111,12 +124,23 @@ export function useQzTray() {
     script.async = true;
     script.onload = () => {
       qzLoadedRef.current = true;
-      // Auto-connect on load if QZ is available
+      // Auto-connect on load if QZ is available AND user is authenticated
       if (window.qz && !connectAttemptedRef.current) {
         connectAttemptedRef.current = true;
-        // Small delay to ensure qz is fully initialized
-        setTimeout(() => {
-          connect().catch(console.error);
+        setTimeout(async () => {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.access_token) {
+              setWaitingForAuth(false);
+              connect().catch(console.error);
+            } else {
+              console.log('QZ Tray: Aguardando autenticação do usuário');
+              setWaitingForAuth(true);
+            }
+          } catch (err) {
+            console.error('Error checking auth for QZ:', err);
+            setWaitingForAuth(true);
+          }
         }, 500);
       }
     };
@@ -242,6 +266,29 @@ export function useQzTray() {
     }
   }, []);
 
+  // Listen for auth state changes to auto-connect when user logs in
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === 'SIGNED_IN' && session?.access_token) {
+          // User just logged in, try to connect to QZ Tray
+          setWaitingForAuth(false);
+          if (window.qz && !window.qz.websocket.isActive()) {
+            setTimeout(() => {
+              connect().catch(console.error);
+            }, 500);
+          }
+        } else if (event === 'SIGNED_OUT') {
+          // Disconnect when user logs out
+          setWaitingForAuth(false);
+          disconnect().catch(console.error);
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, [connect, disconnect]);
+
   const refreshPrinters = useCallback(async () => {
     if (!window.qz || !isConnected) {
       setError('Não conectado ao QZ Tray');
@@ -351,6 +398,8 @@ export function useQzTray() {
   return {
     isConnected,
     isConnecting,
+    waitingForAuth,
+    connectionStatus,
     printers,
     error,
     config,
