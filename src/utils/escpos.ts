@@ -243,9 +243,12 @@ export function buildKitchenTicket(
     }
 
     if (item.notes) {
-      ticket += TEXT_BOLD;
-      ticket += `  OBS: ${processText(item.notes)}` + LF;
-      ticket += TEXT_BOLD_OFF;
+      // Tarja preta com fonte grande para destaque visual
+      ticket += TEXT_DOUBLE_SIZE;
+      ticket += GS + 'B' + '\x01'; // INVERT ON (tarja preta)
+      ticket += ` OBS: ${processText(item.notes)} ` + LF;
+      ticket += GS + 'B' + '\x00'; // INVERT OFF
+      ticket += fontCmd; // Volta para fonte configurada
     }
 
     ticket += LF;
@@ -255,14 +258,22 @@ export function buildKitchenTicket(
   if (data.notes) {
     ticket += TEXT_NORMAL;
     ticket += DASHED_LINE(width);
-    ticket += fontCmd;
-    ticket += TEXT_BOLD;
-    ticket += processText('OBSERVAÇÕES GERAIS:') + LF;
-    ticket += TEXT_BOLD_OFF;
-    const wrappedNotes = wrapText(processText(data.notes), width);
+    
+    // Tarja preta com fonte grande para observações gerais
+    ticket += ALIGN_CENTER;
+    ticket += TEXT_DOUBLE_SIZE;
+    ticket += GS + 'B' + '\x01'; // INVERT ON (tarja preta)
+    ticket += ' OBS GERAIS ' + LF;
+    ticket += GS + 'B' + '\x00'; // INVERT OFF
+    ticket += ALIGN_LEFT;
+    
+    // Texto das observações também com fonte grande
+    ticket += TEXT_DOUBLE_HEIGHT;
+    const wrappedNotes = wrapText(processText(data.notes), Math.floor(width / 2));
     for (const line of wrappedNotes) {
       ticket += line + LF;
     }
+    ticket += fontCmd; // Volta para fonte configurada
   }
 
   // Footer
@@ -366,11 +377,12 @@ export function buildCustomerReceipt(
     receipt += TEXT_BOLD;
     
     if (data.receiptType === 'summary') {
-      // Inverted text effect (white on black) for "RESUMO DA CONTA"
-      receipt += GS + 'B' + '\x01'; // Invert ON
+      // Tarja preta com fonte grande para "RESUMO DA CONTA"
+      receipt += TEXT_DOUBLE_SIZE;
+      receipt += GS + 'B' + '\x01'; // INVERT ON (tarja preta)
       receipt += ' RESUMO DA CONTA ' + LF;
-      receipt += GS + 'B' + '\x00'; // Invert OFF
-      receipt += TEXT_BOLD_OFF;
+      receipt += GS + 'B' + '\x00'; // INVERT OFF
+      receipt += TEXT_NORMAL;
       receipt += fontCmd;
       receipt += processText('* Este não é um documento fiscal *') + LF;
     } else {
