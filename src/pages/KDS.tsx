@@ -10,7 +10,7 @@ import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { AccessDenied } from '@/components/auth/AccessDenied';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
+import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp, Ban } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
@@ -61,6 +61,10 @@ export default function KDS() {
   const { settings: kdsSettings } = useKdsSettings();
   const notifiedOrdersRef = useRef<Set<string>>(new Set());
   const previousOrdersRef = useRef<Order[]>([]);
+  
+  // Unconfirmed cancellations tracking - persists until kitchen confirms
+  const [unconfirmedCancellations, setUnconfirmedCancellations] = useState<Map<string, Order>>(new Map());
+  const cancelledSoundIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const canChangeStatus = hasPermission('kds_change_status');
 
@@ -346,18 +350,24 @@ export default function KDS() {
             cancelled: 'Cancelado'
           };
           
-          // Check for cancellation and play sound - only notify if order was still in production
+          // Check for cancellation - only notify if order was still in production
           // Orders that were ready/delivered don't need to alert the kitchen anymore
           if (order.status === 'cancelled' && prevOrder.status !== 'cancelled') {
             const wasInProduction = prevOrder.status === 'pending' || prevOrder.status === 'preparing';
             
             if (wasInProduction) {
-              if (soundEnabled && settings.enabled) {
-                playOrderCancelledSound();
-              }
-              toast.error(`🚫 Pedido #${order.id.slice(-4).toUpperCase()} CANCELADO!`, { 
-                description: (order as any).cancellation_reason || 'Motivo não informado',
-                duration: 10000 
+              // Add to unconfirmed cancellations map - will persist until confirmed
+              setUnconfirmedCancellations(prev => {
+                const newMap = new Map(prev);
+                newMap.set(order.id, order);
+                return newMap;
+              });
+              
+              // Persistent toast until confirmed
+              toast.error(`🚫 PEDIDO #${order.id.slice(-4).toUpperCase()} CANCELADO!`, { 
+                description: (order as any).cancellation_reason || 'Confirme que viu este cancelamento',
+                duration: Infinity,
+                id: `cancel-${order.id}`,
               });
             }
           } else if (!notifiedOrdersRef.current.has(`${order.id}-${order.status}`)) {
@@ -383,7 +393,44 @@ export default function KDS() {
     }
 
     previousOrdersRef.current = [...orders];
-  }, [orders, soundEnabled, settings.enabled, playKdsNewOrderSound, playOrderCancelledSound, kdsSettings.showPendingColumn]);
+  }, [orders, soundEnabled, settings.enabled, playKdsNewOrderSound, kdsSettings.showPendingColumn]);
+
+  // Sound loop for unconfirmed cancellations
+  useEffect(() => {
+    // If there are unconfirmed cancellations and sound is enabled
+    if (unconfirmedCancellations.size > 0 && soundEnabled && settings.enabled) {
+      // Play immediately
+      playOrderCancelledSound();
+      
+      // Start loop every 3 seconds
+      cancelledSoundIntervalRef.current = setInterval(() => {
+        if (unconfirmedCancellations.size > 0) {
+          playOrderCancelledSound();
+        }
+      }, 3000);
+    }
+    
+    // Cleanup: stop sound when no more unconfirmed cancellations
+    return () => {
+      if (cancelledSoundIntervalRef.current) {
+        clearInterval(cancelledSoundIntervalRef.current);
+        cancelledSoundIntervalRef.current = null;
+      }
+    };
+  }, [unconfirmedCancellations.size, soundEnabled, settings.enabled, playOrderCancelledSound]);
+
+  // Handler to confirm cancellation was acknowledged
+  const handleConfirmCancellation = (orderId: string) => {
+    setUnconfirmedCancellations(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(orderId);
+      return newMap;
+    });
+    
+    // Dismiss the corresponding toast
+    toast.dismiss(`cancel-${orderId}`);
+    toast.success('Cancelamento confirmado', { duration: 2000 });
+  };
 
   const handleStartPreparation = async (orderId: string) => {
     try {
@@ -526,6 +573,69 @@ export default function KDS() {
               </Button>
             )}
           </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  // Cancelled Order Card with blinking animation
+  const CancelledOrderCard = ({ order, onConfirm }: { order: Order; onConfirm: () => void }) => {
+    const origin = getOrderOrigin(order);
+    const OriginIcon = origin.icon;
+
+    return (
+      <Card className="mb-3 shadow-lg border-2 border-destructive animate-blink-cancel">
+        <CardHeader className="pb-2 pt-3 px-4 bg-destructive/20">
+          <div className="flex items-center justify-between">
+            <Badge className="bg-destructive text-destructive-foreground py-1 px-2 text-xs font-bold">
+              <Ban className="h-3.5 w-3.5 mr-1" />
+              CANCELADO
+            </Badge>
+            <Badge className={cn("py-1 px-2 text-xs font-bold", origin.color)}>
+              <OriginIcon className="h-3.5 w-3.5 mr-1" />
+              {origin.label}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-2 mt-1 text-xs">
+            <span className="font-mono font-bold">#{order.id.slice(-4).toUpperCase()}</span>
+            {order.customer_name && (
+              <span className="font-medium">• {order.customer_name}</span>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="px-4 pb-3">
+          {/* Cancellation reason */}
+          <div className="text-sm text-destructive bg-destructive/10 rounded p-2 mb-3">
+            <strong>Motivo:</strong> {(order as any).cancellation_reason || 'Não informado'}
+          </div>
+          
+          {/* Cancelled items */}
+          <div className="space-y-1 mb-3 border rounded-lg p-2 bg-background/50 text-sm opacity-75">
+            <p className="text-xs text-muted-foreground mb-1">Itens cancelados:</p>
+            {order.order_items?.slice(0, 4).map((item, idx) => (
+              <div key={idx} className="flex items-center gap-1">
+                <span className="font-bold text-muted-foreground">{item.quantity}x</span>
+                <span>{item.product?.name || 'Produto'}</span>
+                {item.variation?.name && (
+                  <span className="text-muted-foreground">({item.variation.name})</span>
+                )}
+              </div>
+            ))}
+            {(order.order_items?.length || 0) > 4 && (
+              <p className="text-xs text-muted-foreground">
+                +{(order.order_items?.length || 0) - 4} mais...
+              </p>
+            )}
+          </div>
+          
+          {/* Confirmation button */}
+          <Button 
+            size="lg" 
+            className="w-full bg-destructive hover:bg-destructive/90 text-destructive-foreground font-bold"
+            onClick={onConfirm}
+          >
+            ✓ CIENTE - CONFIRMAR
+          </Button>
         </CardContent>
       </Card>
     );
@@ -712,6 +822,30 @@ export default function KDS() {
           </Badge>
         </Button>
       </div>
+
+      {/* Unconfirmed Cancellations Alert - Urgent Section */}
+      {unconfirmedCancellations.size > 0 && (
+        <div className="mb-4 p-3 bg-destructive/10 border-2 border-destructive rounded-lg animate-pulse">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle className="h-6 w-6 text-destructive animate-bounce" />
+            <h2 className="text-lg font-bold text-destructive">
+              ⚠️ PEDIDO(S) CANCELADO(S) - ATENÇÃO!
+            </h2>
+            <Badge variant="destructive" className="ml-auto text-base">
+              {unconfirmedCancellations.size}
+            </Badge>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {Array.from(unconfirmedCancellations.values()).map(order => (
+              <CancelledOrderCard 
+                key={order.id} 
+                order={order}
+                onConfirm={() => handleConfirmCancellation(order.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Kanban Board */}
       {isLoading ? (
