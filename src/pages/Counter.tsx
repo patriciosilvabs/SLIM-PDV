@@ -105,6 +105,7 @@ interface OrderItem {
 type OrderType = 'takeaway' | 'delivery';
 
 export default function Counter() {
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const queryClient = useQueryClient();
   const { data: products } = useProducts();
@@ -129,22 +130,7 @@ export default function Counter() {
   const canProcessPayment = hasPermission('counter_process_payment');
   const canCancelOrder = hasPermission('orders_cancel');
 
-  if (!permissionsLoading && !hasPermission('counter_view')) {
-    return <AccessDenied permission="counter_view" />;
-  }
-
-  // Filter active takeaway/delivery orders from today
-  const todayActiveOrders = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
-    return allOrders.filter(order => 
-      (order.order_type === 'takeaway' || order.order_type === 'delivery') &&
-      order.status !== 'delivered' && 
-      order.status !== 'cancelled' &&
-      order.created_at?.startsWith(today)
-    );
-  }, [allOrders]);
-
-
+  // State hooks - must be before conditional return
   const [orderType, setOrderType] = useState<OrderType>('takeaway');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
@@ -188,10 +174,6 @@ export default function Counter() {
   
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const activeCategories = categories?.filter(c => c.is_active !== false) || [];
-  const activeProducts = products?.filter(p => p.is_available !== false) || [];
-  const activeCombos = combos?.filter(c => c.is_active !== false) || [];
-
   // Check if tablet (768px-1024px)
   const [isTablet, setIsTablet] = useState(false);
   
@@ -205,6 +187,26 @@ export default function Counter() {
     window.addEventListener('resize', checkTablet);
     return () => window.removeEventListener('resize', checkTablet);
   }, []);
+
+  // Filter active takeaway/delivery orders from today
+  const todayActiveOrders = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return allOrders.filter(order => 
+      (order.order_type === 'takeaway' || order.order_type === 'delivery') &&
+      order.status !== 'delivered' && 
+      order.status !== 'cancelled' &&
+      order.created_at?.startsWith(today)
+    );
+  }, [allOrders]);
+
+  // Permission check AFTER all hooks
+  if (!permissionsLoading && !hasPermission('counter_view')) {
+    return <AccessDenied permission="counter_view" />;
+  }
+
+  const activeCategories = categories?.filter(c => c.is_active !== false) || [];
+  const activeProducts = products?.filter(p => p.is_available !== false) || [];
+  const activeCombos = combos?.filter(c => c.is_active !== false) || [];
 
   // Auto-collapse sidebar on tablet
   useEffect(() => {

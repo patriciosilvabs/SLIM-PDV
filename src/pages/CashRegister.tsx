@@ -41,6 +41,7 @@ function formatCurrency(value: number) {
 }
 
 export default function CashRegister() {
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   
   // Granular permission checks
@@ -50,10 +51,7 @@ export default function CashRegister() {
   const canSupply = hasPermission('cash_supply');
   const canManage = hasPermission('cash_register_manage');
 
-  if (!permissionsLoading && !hasPermission('cash_register_view')) {
-    return <AccessDenied permission="cash_register_view" />;
-  }
-
+  // State hooks
   const [isOpenDialogOpen, setIsOpenDialogOpen] = useState(false);
   const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false);
   const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false);
@@ -68,12 +66,18 @@ export default function CashRegister() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [paymentAmount, setPaymentAmount] = useState('');
 
+  // Query hooks
   const { data: openRegister, isLoading } = useOpenCashRegister();
   const { data: movements } = useCashMovements(openRegister?.id);
   const { data: readyOrders } = useOrders(['ready']);
   const { openCashRegister, closeCashRegister, createPayment } = useCashRegisterMutations();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  // Permission check AFTER all hooks
+  if (!permissionsLoading && !hasPermission('cash_register_view')) {
+    return <AccessDenied permission="cash_register_view" />;
+  }
 
   // Calculate totals for the open register
   const calculateTotals = () => {

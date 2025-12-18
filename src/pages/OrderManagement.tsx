@@ -59,6 +59,7 @@ const columns: KanbanColumnConfig[] = [
 ];
 
 export default function OrderManagement() {
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const { data: orders = [], isLoading, refetch } = useOrders();
   const { updateOrder } = useOrderMutations();
@@ -71,10 +72,6 @@ export default function OrderManagement() {
   const [selectedOrderToCancel, setSelectedOrderToCancel] = useState<Order | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const canCancelOrder = hasPermission('orders_cancel');
-
-  if (!permissionsLoading && !hasPermission('orders_view')) {
-    return <AccessDenied permission="orders_view" />;
-  }
 
   // Filter only takeaway and delivery orders (not dine_in)
   const filteredOrders = orders.filter(
@@ -101,6 +98,29 @@ export default function OrderManagement() {
     }
     previousOrdersRef.current = [...orders];
   }, [orders]);
+
+  // Setup realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel('order-management-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders' },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['orders'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
+  // Permission check AFTER all hooks
+  if (!permissionsLoading && !hasPermission('orders_view')) {
+    return <AccessDenied permission="orders_view" />;
+  }
 
   // Group orders by status
   const getOrdersByStatus = (status: KanbanColumn) => {

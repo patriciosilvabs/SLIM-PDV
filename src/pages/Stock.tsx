@@ -46,6 +46,7 @@ function getStockStatus(current: number, min: number): 'critical' | 'low' | 'nor
 }
 
 export default function Stock() {
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const [activeTab, setActiveTab] = useState('ingredients');
   const [isNewIngredientOpen, setIsNewIngredientOpen] = useState(false);
@@ -59,10 +60,6 @@ export default function Stock() {
   const canAddIngredient = hasPermission('stock_add');
   const canAdjustStock = hasPermission('stock_adjust');
   const canViewMovements = hasPermission('stock_view_movements');
-
-  if (!permissionsLoading && !hasPermission('stock_view')) {
-    return <AccessDenied permission="stock_view" />;
-  }
 
   // Form states
   const [newIngredient, setNewIngredient] = useState({
@@ -78,6 +75,7 @@ export default function Stock() {
     quantity: ''
   });
 
+  // Query hooks
   const { data: ingredients, isLoading } = useIngredients();
   const { data: lowStockIngredients } = useLowStockIngredients();
   const { data: productsWithIngredients } = useAllProductsWithIngredients();
@@ -101,6 +99,11 @@ export default function Stock() {
       return data;
     }
   });
+
+  // Permission check AFTER all hooks
+  if (!permissionsLoading && !hasPermission('stock_view')) {
+    return <AccessDenied permission="stock_view" />;
+  }
 
   const handleCreateIngredient = async () => {
     await createIngredient.mutateAsync(newIngredient);
