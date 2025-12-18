@@ -6,7 +6,7 @@ interface VoiceTextHistoryItem {
   createdAt: string;
 }
 
-const STORAGE_KEY = 'elevenlabs_text_history';
+const STORAGE_KEY = 'web_speech_text_history';
 const MAX_ITEMS = 20;
 
 export function useVoiceTextHistory() {
@@ -43,18 +43,5 @@ export function useVoiceTextHistory() {
 
   return { getHistory, addToHistory, clearHistory };
 }
-
-export const ELEVENLABS_VOICES = [
-  // Português
-  { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', gender: 'male' as const, lang: 'pt', flag: '🇧🇷' },
-  { id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura', gender: 'female' as const, lang: 'pt', flag: '🇧🇷' },
-  { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam', gender: 'male' as const, lang: 'pt', flag: '🇧🇷' },
-  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', gender: 'female' as const, lang: 'pt', flag: '🇧🇷' },
-  // English
-  { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'George', gender: 'male' as const, lang: 'en', flag: '🇺🇸' },
-  { id: 'Xb7hH8MSUJpSbSDYk0k2', name: 'Alice', gender: 'female' as const, lang: 'en', flag: '🇺🇸' },
-  { id: 'nPczCjzI2devNBz1zQrb', name: 'Brian', gender: 'male' as const, lang: 'en', flag: '🇺🇸' },
-  { id: 'cgSgspJ2msm6clMCkdW9', name: 'Jessica', gender: 'female' as const, lang: 'en', flag: '🇺🇸' },
-];
 
 export type { VoiceTextHistoryItem };

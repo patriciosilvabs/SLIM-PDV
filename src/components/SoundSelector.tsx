@@ -1,13 +1,14 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useCustomSounds, SoundType, PREDEFINED_SOUNDS } from '@/hooks/useCustomSounds';
-import { useVoiceTextHistory, ELEVENLABS_VOICES } from '@/hooks/useVoiceTextHistory';
-import { Play, Upload, Trash2, Music, Mic, Sparkles, RefreshCw, Check, Volume2, History } from 'lucide-react';
+import { useCustomSounds, SoundType } from '@/hooks/useCustomSounds';
+import { useVoiceTextHistory } from '@/hooks/useVoiceTextHistory';
+import { useWebSpeechTTS, DEFAULT_VOICES } from '@/hooks/useWebSpeechTTS';
+import { Play, Upload, Trash2, Music, Mic, Sparkles, RefreshCw, Check, Volume2, History, Square } from 'lucide-react';
 import { toast } from 'sonner';
 import { AudioRecorder } from '@/components/AudioRecorder';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,12 +25,14 @@ interface SoundSelectorProps {
 export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: SoundSelectorProps) {
   const { customSounds, uploadSound, deleteSound, getSoundsForType, predefinedSounds } = useCustomSounds();
   const { getHistory, addToHistory, clearHistory } = useVoiceTextHistory();
+  const { voices, ptVoices, enVoices, isSupported, isSpeaking, speak, cancelSpeech } = useWebSpeechTTS();
+  
   const [isOpen, setIsOpen] = useState(false);
   const [uploadName, setUploadName] = useState('');
   const [isRecordingMode, setIsRecordingMode] = useState(false);
   const [voiceText, setVoiceText] = useState('Pedido cancelado, atenção cozinha');
   const [isGeneratingVoice, setIsGeneratingVoice] = useState(false);
-  const [selectedVoiceId, setSelectedVoiceId] = useState(ELEVENLABS_VOICES[0].id);
+  const [selectedVoiceURI, setSelectedVoiceURI] = useState('');
   const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -37,10 +40,21 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
 
   const customForType = getSoundsForType(soundType);
   const predefinedList = Object.entries(predefinedSounds);
-  const selectedVoice = ELEVENLABS_VOICES.find(v => v.id === selectedVoiceId) || ELEVENLABS_VOICES[0];
   const history = getHistory();
-  const ptVoices = ELEVENLABS_VOICES.filter(v => v.lang === 'pt');
-  const enVoices = ELEVENLABS_VOICES.filter(v => v.lang === 'en');
+
+  // Use available voices or defaults
+  const availablePtVoices = ptVoices.length > 0 ? ptVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('pt'));
+  const availableEnVoices = enVoices.length > 0 ? enVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('en'));
+  const allVoices = [...availablePtVoices, ...availableEnVoices];
+  
+  // Set default voice when voices load
+  useEffect(() => {
+    if (!selectedVoiceURI && allVoices.length > 0) {
+      setSelectedVoiceURI(allVoices[0].voiceURI);
+    }
+  }, [allVoices, selectedVoiceURI]);
+
+  const selectedVoice = allVoices.find(v => v.voiceURI === selectedVoiceURI) || allVoices[0];
 
   const playSound = (url: string) => {
     const audio = new Audio(url);
@@ -79,7 +93,6 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
       return;
     }
 
-    // Converter Blob para File
     const file = new File([blob], `recording_${Date.now()}.webm`, { 
       type: 'audio/webm' 
     });
@@ -94,13 +107,31 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
     setIsRecordingMode(false);
   };
 
+  const handlePreviewVoice = () => {
+    if (!voiceText.trim()) {
+      toast.error('Digite o texto para ouvir');
+      return;
+    }
+
+    if (isSpeaking) {
+      cancelSpeech();
+    } else {
+      speak(voiceText, selectedVoiceURI);
+    }
+  };
+
   const handleGenerateVoice = async () => {
     if (!voiceText.trim() || !uploadName.trim()) {
       toast.error('Preencha o nome do som e o texto para gerar');
       return;
     }
 
-    // Limpar preview anterior
+    if (!isSupported) {
+      toast.error('Síntese de voz não suportada neste navegador');
+      return;
+    }
+
+    // Clean previous preview
     if (previewAudioUrl) {
       URL.revokeObjectURL(previewAudioUrl);
       setPreviewAudioUrl(null);
@@ -108,36 +139,61 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
     }
 
     setIsGeneratingVoice(true);
+    
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ 
-            text: voiceText, 
-            voiceId: selectedVoiceId
-          }),
-        }
-      );
+      // Use MediaRecorder to capture system audio
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const chunks: BlobPart[] = [];
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Erro ao gerar áudio');
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+
+      const recordingPromise = new Promise<Blob>((resolve, reject) => {
+        mediaRecorder.onstop = () => {
+          stream.getTracks().forEach(track => track.stop());
+          const blob = new Blob(chunks, { type: 'audio/webm' });
+          resolve(blob);
+        };
+        mediaRecorder.onerror = () => reject(new Error('Erro na gravação'));
+      });
+
+      // Start recording before speech
+      mediaRecorder.start();
+
+      // Create utterance
+      const utterance = new SpeechSynthesisUtterance(voiceText);
+      if (selectedVoiceURI) {
+        const availableVoices = window.speechSynthesis.getVoices();
+        const voice = availableVoices.find(v => v.voiceURI === selectedVoiceURI);
+        if (voice) utterance.voice = voice;
       }
 
-      const audioBlob = await response.blob();
+      // Wait for speech to end
+      await new Promise<void>((resolve, reject) => {
+        utterance.onend = () => {
+          setTimeout(() => {
+            mediaRecorder.stop();
+            resolve();
+          }, 300);
+        };
+        utterance.onerror = () => {
+          mediaRecorder.stop();
+          reject(new Error('Erro na síntese'));
+        };
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(utterance);
+      });
+
+      const audioBlob = await recordingPromise;
       const tempUrl = URL.createObjectURL(audioBlob);
       setPreviewAudioUrl(tempUrl);
       setPreviewBlob(audioBlob);
-      toast.success('Preview gerado! Ouça antes de salvar.');
+      toast.success('Áudio gravado! Ouça o preview.');
     } catch (error) {
       console.error('Error generating voice:', error);
-      toast.error('Erro ao gerar áudio: ' + (error as Error).message);
+      toast.error('Erro ao gerar áudio. Permita acesso ao microfone.');
     } finally {
       setIsGeneratingVoice(false);
     }
@@ -147,10 +203,9 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
     if (!previewBlob || !uploadName.trim()) return;
     
     try {
-      // Salvar no histórico
-      addToHistory(voiceText, selectedVoiceId, selectedVoice.name);
+      addToHistory(voiceText, selectedVoiceURI, selectedVoice?.name || 'Voz');
       
-      const file = new File([previewBlob], `voice_${Date.now()}.mp3`, { type: 'audio/mpeg' });
+      const file = new File([previewBlob], `voice_${Date.now()}.webm`, { type: 'audio/webm' });
 
       await uploadSound.mutateAsync({
         file,
@@ -158,7 +213,6 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
         soundType
       });
 
-      // Limpar estados
       if (previewAudioUrl) URL.revokeObjectURL(previewAudioUrl);
       setPreviewAudioUrl(null);
       setPreviewBlob(null);
@@ -178,6 +232,12 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
     if (custom) return custom.name;
 
     return 'Beep Clássico';
+  };
+
+  const getVoiceFlag = (lang: string) => {
+    if (lang.startsWith('pt')) return '🇧🇷';
+    if (lang.startsWith('en')) return '🇺🇸';
+    return '🌐';
   };
 
   return (
@@ -337,39 +397,49 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
           </p>
         </div>
 
-        {/* Voice Generation with AI */}
+        {/* Voice Generation with Web Speech API */}
         <div className="space-y-3 pt-4 border-t">
           <Label className="text-sm font-medium flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
-            Gerar Áudio com IA
+            Gerar Áudio com Voz
           </Label>
           
-          {/* Seleção de Voz */}
+          {!isSupported && (
+            <p className="text-xs text-destructive">
+              Síntese de voz não suportada neste navegador.
+            </p>
+          )}
+          
+          {/* Voice Selection */}
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Voz</Label>
-            <Select value={selectedVoiceId} onValueChange={setSelectedVoiceId}>
+            <Select value={selectedVoiceURI} onValueChange={setSelectedVoiceURI}>
               <SelectTrigger>
                 <SelectValue>
-                  {selectedVoice.flag} {selectedVoice.name} ({selectedVoice.gender === 'male' ? '♂' : '♀'})
+                  {selectedVoice ? `${getVoiceFlag(selectedVoice.lang)} ${selectedVoice.name}` : 'Selecione uma voz'}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>🇧🇷 Português</SelectLabel>
-                  {ptVoices.map(voice => (
-                    <SelectItem key={voice.id} value={voice.id}>
-                      {voice.flag} {voice.name} ({voice.gender === 'male' ? 'Masculina' : 'Feminina'})
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-                <SelectGroup>
-                  <SelectLabel>🇺🇸 English</SelectLabel>
-                  {enVoices.map(voice => (
-                    <SelectItem key={voice.id} value={voice.id}>
-                      {voice.flag} {voice.name} ({voice.gender === 'male' ? 'Male' : 'Female'})
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
+                {availablePtVoices.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>🇧🇷 Português</SelectLabel>
+                    {availablePtVoices.map(voice => (
+                      <SelectItem key={voice.voiceURI} value={voice.voiceURI}>
+                        🇧🇷 {voice.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+                {availableEnVoices.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>🇺🇸 English</SelectLabel>
+                    {availableEnVoices.map(voice => (
+                      <SelectItem key={voice.voiceURI} value={voice.voiceURI}>
+                        🇺🇸 {voice.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -384,20 +454,32 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
           
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>{voiceText.length} caracteres</span>
-            {history.length > 0 && (
+            <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-6 gap-1 text-xs"
-                onClick={() => setShowHistory(!showHistory)}
+                onClick={handlePreviewVoice}
+                disabled={!voiceText.trim() || !isSupported}
               >
-                <History className="h-3 w-3" />
-                Histórico ({history.length})
+                {isSpeaking ? <Square className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                {isSpeaking ? 'Parar' : 'Ouvir'}
               </Button>
-            )}
+              {history.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 gap-1 text-xs"
+                  onClick={() => setShowHistory(!showHistory)}
+                >
+                  <History className="h-3 w-3" />
+                  Histórico ({history.length})
+                </Button>
+              )}
+            </div>
           </div>
           
-          {/* Histórico de Textos */}
+          {/* Text History */}
           {showHistory && history.length > 0 && (
             <div className="space-y-2 p-2 border rounded-lg bg-background max-h-40 overflow-y-auto">
               <div className="flex items-center justify-between">
@@ -415,36 +497,33 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
                   Limpar
                 </Button>
               </div>
-              {history.slice(0, 5).map(item => {
-                const voice = ELEVENLABS_VOICES.find(v => v.id === item.voiceId);
-                return (
-                  <div
-                    key={item.id}
-                    className="flex items-start gap-2 p-2 rounded border hover:bg-muted/50 cursor-pointer"
-                    onClick={() => {
-                      setVoiceText(item.text);
-                      if (voice) setSelectedVoiceId(voice.id);
-                      setShowHistory(false);
-                    }}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm truncate">{item.text}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {voice?.flag || '🎤'} {item.voiceName} · {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true, locale: ptBR })}
-                      </p>
-                    </div>
+              {history.slice(0, 5).map(item => (
+                <div
+                  key={item.id}
+                  className="flex items-start gap-2 p-2 rounded border hover:bg-muted/50 cursor-pointer"
+                  onClick={() => {
+                    setVoiceText(item.text);
+                    if (item.voiceId) setSelectedVoiceURI(item.voiceId);
+                    setShowHistory(false);
+                  }}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm truncate">{item.text}</p>
+                    <p className="text-xs text-muted-foreground">
+                      🎤 {item.voiceName} · {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true, locale: ptBR })}
+                    </p>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           )}
           
-          {/* Preview do Áudio */}
+          {/* Audio Preview */}
           {previewAudioUrl && (
             <div className="p-3 border rounded-lg bg-green-500/10 border-green-500/30 space-y-2">
               <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400">
                 <Volume2 className="h-4 w-4" />
-                Preview Gerado
+                Preview Gravado
               </div>
               <div className="flex gap-2">
                 <Button
@@ -476,27 +555,23 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
             variant={previewAudioUrl ? 'outline' : 'default'}
             className="w-full gap-2"
             onClick={handleGenerateVoice}
-            disabled={isGeneratingVoice || !voiceText.trim() || !uploadName.trim()}
+            disabled={isGeneratingVoice || !voiceText.trim() || !uploadName.trim() || !isSupported}
           >
             {isGeneratingVoice ? (
               <>
                 <RefreshCw className="h-4 w-4 animate-spin" />
-                Gerando...
-              </>
-            ) : previewAudioUrl ? (
-              <>
-                <RefreshCw className="h-4 w-4" />
-                Regenerar
+                Gravando...
               </>
             ) : (
               <>
                 <Sparkles className="h-4 w-4" />
-                Gerar Preview
+                Gravar com Voz Sintetizada
               </>
             )}
           </Button>
+          
           <p className="text-xs text-muted-foreground">
-            Usa ElevenLabs para sintetizar voz natural em português ou inglês.
+            Usa a síntese de voz do navegador. Requer permissão de microfone para gravar.
           </p>
         </div>
       </DialogContent>
