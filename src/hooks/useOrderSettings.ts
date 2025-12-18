@@ -34,6 +34,7 @@ const PRINT_MESSAGE_STANDARD_KEY = 'pdv_print_message_standard';
 const PRINT_MESSAGE_TABLE_KEY = 'pdv_print_message_table';
 const PRINT_QR_STANDARD_KEY = 'pdv_print_qr_standard';
 const PRINT_QR_TABLE_KEY = 'pdv_print_qr_table';
+const LOGO_MAX_WIDTH_KEY = 'pdv_logo_max_width';
 
 export type PrintFontSize = 'normal' | 'large' | 'extra_large';
 
@@ -194,6 +195,11 @@ export function useOrderSettings() {
     return localStorage.getItem(PRINT_QR_TABLE_KEY) || '';
   });
 
+  const [logoMaxWidth, setLogoMaxWidth] = useState<number>(() => {
+    if (typeof window === 'undefined') return 300;
+    return parseInt(localStorage.getItem(LOGO_MAX_WIDTH_KEY) || '300');
+  });
+
   const toggleDuplicateItems = (value: boolean) => {
     localStorage.setItem(DUPLICATE_ITEMS_KEY, String(value));
     setDuplicateItems(value);
@@ -346,6 +352,11 @@ export function useOrderSettings() {
     setPrintQrTable(value);
   };
 
+  const updateLogoMaxWidth = (value: number) => {
+    localStorage.setItem(LOGO_MAX_WIDTH_KEY, String(value));
+    setLogoMaxWidth(value);
+  };
+
   // Sync across tabs
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
@@ -441,6 +452,9 @@ export function useOrderSettings() {
       if (e.key === PRINT_QR_TABLE_KEY) {
         setPrintQrTable(e.newValue || '');
       }
+      if (e.key === LOGO_MAX_WIDTH_KEY) {
+        setLogoMaxWidth(parseInt(e.newValue || '300'));
+      }
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
@@ -508,6 +522,8 @@ export function useOrderSettings() {
     printQrStandard,
     updatePrintQrStandard,
     printQrTable,
-    updatePrintQrTable
+    updatePrintQrTable,
+    logoMaxWidth,
+    updateLogoMaxWidth
   };
 }

@@ -70,7 +70,12 @@ export type PrintDataItem = string | {
   type: 'raw';
   format: 'image' | 'base64' | 'plain';
   data: string;
-  options?: { language?: string; dotDensity?: 'single' | 'double' };
+  options?: {
+    language?: string;
+    dotDensity?: 'single' | 'double';
+    scaleImage?: boolean;
+    imageWidth?: number;
+  };
 };
 
 const DEFAULT_CONFIG: PrinterConfig = {
