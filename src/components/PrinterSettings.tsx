@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { usePrinter } from '@/contexts/PrinterContext';
 import { useOrderSettings, PrintFontSize } from '@/hooks/useOrderSettings';
 import { usePrintSectors, usePrintSectorMutations, PrintSector } from '@/hooks/usePrintSectors';
-import { invalidateLogoCache } from '@/utils/imageToBase64';
+import { invalidateLogoCache, clearLogoCache } from '@/utils/imageToBase64';
 import { buildFontSizeTestPrint } from '@/utils/escpos';
 import {
   Printer, 
@@ -124,7 +124,9 @@ export function PrinterSettings() {
     restaurantLogoUrl,
     updateRestaurantLogoUrl,
     logoMaxWidth,
-    updateLogoMaxWidth
+    updateLogoMaxWidth,
+    qrCodeSize,
+    updateQrCodeSize
   } = useOrderSettings();
   const [testingPrinter, setTestingPrinter] = useState<string | null>(null);
   const [testingFont, setTestingFont] = useState<'kitchen' | 'receipt' | null>(null);
@@ -203,6 +205,14 @@ export function PrinterSettings() {
     toast({
       title: 'Logo removido',
       description: 'A logomarca foi removida.',
+    });
+  };
+
+  const handleClearLogoCache = () => {
+    clearLogoCache();
+    toast({
+      title: 'Cache limpo!',
+      description: 'A próxima impressão buscará a logo do servidor.',
     });
   };
 
@@ -543,26 +553,73 @@ export function PrinterSettings() {
 
               {/* Logo Max Width */}
               {restaurantLogoUrl && showLogo && (
-                <div className="space-y-2 pt-2">
-                  <Label className="text-sm">Largura máxima da logo (pixels)</Label>
-                  <Select
-                    value={String(logoMaxWidth)}
-                    onValueChange={(v) => updateLogoMaxWidth(parseInt(v))}
+                <div className="space-y-4 pt-2">
+                  <div className="space-y-2">
+                    <Label className="text-sm">Largura máxima da logo (pixels)</Label>
+                    <Select
+                      value={String(logoMaxWidth)}
+                      onValueChange={(v) => updateLogoMaxWidth(parseInt(v))}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="150">150px (pequena)</SelectItem>
+                        <SelectItem value="200">200px</SelectItem>
+                        <SelectItem value="250">250px</SelectItem>
+                        <SelectItem value="300">300px (padrão)</SelectItem>
+                        <SelectItem value="350">350px</SelectItem>
+                        <SelectItem value="400">400px (grande)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Ajuste de acordo com a largura do papel (58mm: 150-250px / 80mm: 250-400px)
+                    </p>
+                  </div>
+
+                  {/* Logo Preview */}
+                  <div className="space-y-2">
+                    <Label className="text-sm">Pré-visualização do tamanho</Label>
+                    <div className="p-4 bg-white dark:bg-black rounded-lg border flex flex-col items-center gap-2">
+                      <img 
+                        src={restaurantLogoUrl} 
+                        alt="Preview da logo" 
+                        style={{ 
+                          maxWidth: `${logoMaxWidth}px`, 
+                          width: '100%',
+                          height: 'auto' 
+                        }}
+                        className="object-contain"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Largura máxima: {logoMaxWidth}px
+                      </p>
+                    </div>
+                    {/* Width indicator bar */}
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div 
+                        className="h-2 bg-primary/50 rounded transition-all"
+                        style={{ 
+                          width: `${Math.min((logoMaxWidth / (printerCtx.config.paperWidth === '58mm' ? 384 : 576)) * 100, 100)}%`,
+                          maxWidth: '200px'
+                        }}
+                      />
+                      <span>{logoMaxWidth}px de {printerCtx.config.paperWidth === '58mm' ? '384' : '576'}px disponíveis</span>
+                    </div>
+                  </div>
+
+                  {/* Clear Cache Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleClearLogoCache}
+                    className="w-full"
                   >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="150">150px (pequena)</SelectItem>
-                      <SelectItem value="200">200px</SelectItem>
-                      <SelectItem value="250">250px</SelectItem>
-                      <SelectItem value="300">300px (padrão)</SelectItem>
-                      <SelectItem value="350">350px</SelectItem>
-                      <SelectItem value="400">400px (grande)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Limpar Cache da Logo
+                  </Button>
                   <p className="text-xs text-muted-foreground">
-                    Ajuste de acordo com a largura do papel (58mm: 150-250px / 80mm: 250-400px)
+                    Use se a logo foi alterada no servidor mas ainda imprime a versão antiga
                   </p>
                 </div>
               )}
@@ -1237,6 +1294,34 @@ export function PrinterSettings() {
                     O QR Code pode direcionar para link de avaliação ou chave Pix para gorjeta
                   </p>
                 </div>
+
+                {/* QR Code Size */}
+                {(printQrStandard || printQrTable) && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <Label className="text-sm flex items-center gap-2">
+                      <QrCode className="w-4 h-4" />
+                      Tamanho do QR Code
+                    </Label>
+                    <Select
+                      value={String(qrCodeSize)}
+                      onValueChange={(v) => updateQrCodeSize(parseInt(v))}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="3">Pequeno (3)</SelectItem>
+                        <SelectItem value="4">Médio-pequeno (4)</SelectItem>
+                        <SelectItem value="5">Médio (5) - Padrão</SelectItem>
+                        <SelectItem value="6">Médio-grande (6)</SelectItem>
+                        <SelectItem value="8">Grande (8)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Aumenta ou diminui o tamanho do QR Code impresso
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

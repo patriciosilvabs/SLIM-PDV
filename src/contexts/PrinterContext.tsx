@@ -223,6 +223,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const qrCodeContent = isTableOrder
         ? localStorage.getItem('pdv_print_qr_table') || ''
         : localStorage.getItem('pdv_print_qr_standard') || '';
+      const qrCodeSize = parseInt(localStorage.getItem('pdv_qr_code_size') || '5');
       
       // Check if we should print logo instead of text restaurant name
       const shouldPrintLogo = showLogo && !!logoUrl;
@@ -236,6 +237,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
         restaurantCnpj: currentRestaurantCnpj || undefined,
         customMessage: customMessage || undefined,
         qrCodeContent: qrCodeContent || undefined,
+        qrCodeSize,
       };
       
       // Build receipt text (skip restaurant name if logo will be printed)
