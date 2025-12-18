@@ -5,9 +5,11 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useCustomSounds, SoundType, PREDEFINED_SOUNDS } from '@/hooks/useCustomSounds';
-import { Play, Upload, Trash2, Music, Mic } from 'lucide-react';
+import { Play, Upload, Trash2, Music, Mic, Sparkles, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { AudioRecorder } from '@/components/AudioRecorder';
+import { Textarea } from '@/components/ui/textarea';
+import { supabase } from '@/integrations/supabase/client';
 
 interface SoundSelectorProps {
   soundType: SoundType;
@@ -21,6 +23,8 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
   const [isOpen, setIsOpen] = useState(false);
   const [uploadName, setUploadName] = useState('');
   const [isRecordingMode, setIsRecordingMode] = useState(false);
+  const [voiceText, setVoiceText] = useState('Pedido cancelado, atenção cozinha');
+  const [isGeneratingVoice, setIsGeneratingVoice] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const customForType = getSoundsForType(soundType);
@@ -76,6 +80,55 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
 
     setUploadName('');
     setIsRecordingMode(false);
+  };
+
+  const handleGenerateVoice = async () => {
+    if (!voiceText.trim() || !uploadName.trim()) {
+      toast.error('Preencha o nome do som e o texto para gerar');
+      return;
+    }
+
+    setIsGeneratingVoice(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ 
+            text: voiceText, 
+            voiceId: 'onwK4e9ZLuTAKqWW03F9' // Daniel - voz masculina PT-BR
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Erro ao gerar áudio');
+      }
+
+      const audioBlob = await response.blob();
+      const file = new File([audioBlob], `voice_${Date.now()}.mp3`, { type: 'audio/mpeg' });
+
+      await uploadSound.mutateAsync({
+        file,
+        name: uploadName.trim(),
+        soundType
+      });
+
+      setVoiceText('Pedido cancelado, atenção cozinha');
+      setUploadName('');
+      toast.success('Áudio de voz gerado e salvo!');
+    } catch (error) {
+      console.error('Error generating voice:', error);
+      toast.error('Erro ao gerar áudio: ' + (error as Error).message);
+    } finally {
+      setIsGeneratingVoice(false);
+    }
   };
 
   const getCurrentSoundName = () => {
@@ -196,8 +249,8 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
         </RadioGroup>
 
         {/* Upload Custom Sound */}
-        <div className="space-y-2 pt-4 border-t">
-          <Label className="text-sm">Adicionar Som Personalizado</Label>
+        <div className="space-y-3 pt-4 border-t">
+          <Label className="text-sm font-medium">Adicionar Som Personalizado</Label>
           <Input
             placeholder="Nome do som"
             value={uploadName}
@@ -226,7 +279,7 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
                 disabled={uploadSound.isPending || !uploadName.trim()}
               >
                 <Upload className="h-4 w-4" />
-                {uploadSound.isPending ? 'Enviando...' : 'Enviar Arquivo'}
+                {uploadSound.isPending ? 'Enviando...' : 'Arquivo'}
               </Button>
               <Button
                 variant="outline"
@@ -235,13 +288,49 @@ export function SoundSelector({ soundType, selectedSound, onSelect, disabled }: 
                 disabled={uploadSound.isPending || !uploadName.trim()}
               >
                 <Mic className="h-4 w-4" />
-                Gravar Voz
+                Gravar
               </Button>
             </div>
           )}
           
           <p className="text-xs text-muted-foreground">
             Formatos: MP3, WAV, OGG • Máx: 1MB • Gravação: até 30s
+          </p>
+        </div>
+
+        {/* Voice Generation with AI */}
+        <div className="space-y-3 pt-4 border-t">
+          <Label className="text-sm font-medium flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            Gerar Áudio com IA
+          </Label>
+          <Textarea
+            placeholder="Digite o texto para sintetizar (ex: 'Pedido cancelado, atenção cozinha!')"
+            value={voiceText}
+            onChange={(e) => setVoiceText(e.target.value)}
+            rows={2}
+            className="resize-none"
+          />
+          <Button
+            variant="default"
+            className="w-full gap-2"
+            onClick={handleGenerateVoice}
+            disabled={isGeneratingVoice || !voiceText.trim() || !uploadName.trim()}
+          >
+            {isGeneratingVoice ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Gerando...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4" />
+                Gerar Voz com ElevenLabs
+              </>
+            )}
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Usa ElevenLabs para sintetizar voz natural em português brasileiro.
           </p>
         </div>
       </DialogContent>
