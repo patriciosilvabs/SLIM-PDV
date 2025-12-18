@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,8 @@ import { OrderSettingsSection } from '@/components/settings/OrderSettingsSection
 import { UsersSettings } from '@/components/settings/UsersSettings';
 import { RolesSettings } from '@/components/settings/RolesSettings';
 
+const VALID_SECTIONS: SettingsSection[] = ['tables', 'kds', 'orders', 'printers', 'notifications', 'announcements', 'push', 'users', 'roles'];
+
 // Hook to check if system has any admins
 function useHasAdmins() {
   return useQuery({
@@ -39,12 +42,29 @@ function useHasAdmins() {
 }
 
 export default function Settings() {
+  const { section } = useParams<{ section?: string }>();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { data: hasAdmins, isLoading: checkingAdmins, refetch: refetchAdmins } = useHasAdmins();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isBootstrapping, setIsBootstrapping] = useState(false);
-  const [activeSection, setActiveSection] = useState<SettingsSection>('tables');
+  
+  // Validate section from URL or default to 'tables'
+  const activeSection: SettingsSection = VALID_SECTIONS.includes(section as SettingsSection) 
+    ? (section as SettingsSection) 
+    : 'tables';
+
+  // Redirect to valid URL if section is missing or invalid
+  useEffect(() => {
+    if (!section || !VALID_SECTIONS.includes(section as SettingsSection)) {
+      navigate('/settings/tables', { replace: true });
+    }
+  }, [section, navigate]);
+
+  const handleSectionChange = (newSection: SettingsSection) => {
+    navigate(`/settings/${newSection}`, { replace: true });
+  };
 
   // Check if current user can bootstrap (no admins exist)
   const canBootstrap = !checkingAdmins && hasAdmins === false && user?.id;
@@ -160,7 +180,7 @@ export default function Settings() {
             <div className="hidden md:block">
               <SettingsSidebar 
                 activeSection={activeSection} 
-                onSectionChange={setActiveSection} 
+                onSectionChange={handleSectionChange} 
               />
             </div>
 
@@ -168,7 +188,7 @@ export default function Settings() {
             <div className="md:hidden w-full">
               <select 
                 value={activeSection}
-                onChange={(e) => setActiveSection(e.target.value as SettingsSection)}
+                onChange={(e) => handleSectionChange(e.target.value as SettingsSection)}
                 className="w-full p-3 rounded-lg border bg-card text-card-foreground mb-4"
               >
                 <optgroup label="Sistema">
@@ -189,9 +209,11 @@ export default function Settings() {
               </select>
             </div>
 
-            {/* Content */}
+            {/* Content with transition animation */}
             <div className="flex-1 min-w-0">
-              {renderContent()}
+              <div key={activeSection} className="animate-fade-in">
+                {renderContent()}
+              </div>
             </div>
           </div>
         </div>
