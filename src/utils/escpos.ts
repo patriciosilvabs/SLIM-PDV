@@ -317,7 +317,8 @@ export function buildCustomerReceipt(
   asciiMode: boolean = false,
   charSpacing: number = 1,
   topMargin: number = 0,
-  bottomMargin: number = 4
+  bottomMargin: number = 4,
+  skipRestaurantName: boolean = false
 ): string {
   const width = paperWidth === '58mm' ? 32 : 48;
   let receipt = '';
@@ -347,10 +348,12 @@ export function buildCustomerReceipt(
     receipt += GS + 'L' + String.fromCharCode(leftMargin) + '\x00';
   }
 
-  // Header
+  // Header - skip restaurant name if logo is being printed separately
   receipt += ALIGN_CENTER;
-  receipt += TEXT_DOUBLE_SIZE;
-  receipt += processText(data.restaurantName) + LF;
+  if (!skipRestaurantName) {
+    receipt += TEXT_DOUBLE_SIZE;
+    receipt += processText(data.restaurantName) + LF;
+  }
   receipt += fontCmd;
   
   if (data.restaurantAddress) {

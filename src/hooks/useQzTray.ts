@@ -65,6 +65,14 @@ export interface PrinterConfig {
   paperWidth: '58mm' | '80mm';
 }
 
+// Type for mixed print data (strings or image objects)
+export type PrintDataItem = string | {
+  type: 'raw';
+  format: 'image' | 'base64' | 'plain';
+  data: string;
+  options?: { language?: string; dotDensity?: 'single' | 'double' };
+};
+
 const DEFAULT_CONFIG: PrinterConfig = {
   kitchenPrinter: null,
   cashierPrinter: null,
@@ -247,7 +255,11 @@ export function useQzTray() {
     }
   }, [isConnected]);
 
-  const print = useCallback(async (printerName: string | null, data: string, isRaw = true) => {
+  const print = useCallback(async (
+    printerName: string | null, 
+    data: string | PrintDataItem[], 
+    isRaw = true
+  ) => {
     if (!window.qz) {
       throw new Error('QZ Tray não está carregado');
     }
@@ -268,9 +280,20 @@ export function useQzTray() {
         encoding: 'UTF-8',
       });
 
-      const printData = isRaw 
-        ? [{ type: 'raw', format: 'plain', data }]
-        : [{ type: 'html', format: 'plain', data }];
+      // Handle mixed array of strings and image objects
+      let printData: any[];
+      
+      if (Array.isArray(data)) {
+        printData = data.map(item => 
+          typeof item === 'string' 
+            ? { type: 'raw', format: 'plain', data: item }
+            : item
+        );
+      } else {
+        printData = isRaw 
+          ? [{ type: 'raw', format: 'plain', data }]
+          : [{ type: 'html', format: 'plain', data }];
+      }
 
       await window.qz.print(printerConfig, printData);
       return true;
