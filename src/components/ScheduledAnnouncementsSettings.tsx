@@ -82,10 +82,13 @@ export function ScheduledAnnouncementsSettings() {
   const [showHistory, setShowHistory] = useState(false);
   
   // States for upload preview
-  // States for upload preview
   const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string | null>(null);
   const [uploadPreviewBlob, setUploadPreviewBlob] = useState<Blob | null>(null);
   const [uploadFileName, setUploadFileName] = useState<string>('');
+  
+  // States for audio preview playback
+  const [previewingAudio, setPreviewingAudio] = useState<HTMLAudioElement | null>(null);
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   
   const [form, setForm] = useState({
     name: '',
@@ -108,7 +111,37 @@ export function ScheduledAnnouncementsSettings() {
   const history = getHistory();
   const currentVoiceInfo = OPENAI_VOICES.find(v => v.id === selectedVoice);
 
+  const handlePlayPreview = () => {
+    if (previewingAudio) {
+      previewingAudio.pause();
+      previewingAudio.currentTime = 0;
+    }
+    
+    const audio = new Audio(form.file_path);
+    audio.volume = form.volume;
+    
+    audio.onplay = () => setIsPreviewPlaying(true);
+    audio.onended = () => {
+      setIsPreviewPlaying(false);
+      setPreviewingAudio(null);
+    };
+    audio.onpause = () => setIsPreviewPlaying(false);
+    
+    audio.play();
+    setPreviewingAudio(audio);
+  };
+
+  const handleStopPreview = () => {
+    if (previewingAudio) {
+      previewingAudio.pause();
+      previewingAudio.currentTime = 0;
+      setPreviewingAudio(null);
+    }
+    setIsPreviewPlaying(false);
+  };
+
   const resetForm = () => {
+    handleStopPreview();
     setForm({
       name: '',
       file_path: '',
@@ -297,6 +330,12 @@ export function ScheduledAnnouncementsSettings() {
   const handleSubmit = async () => {
     if (!form.name.trim() || !form.file_path) {
       toast.error('Preencha o nome e adicione um áudio');
+      return;
+    }
+
+    // Validação: data obrigatória para tipo "once"
+    if (form.trigger_type === 'scheduled' && form.schedule_type === 'once' && !form.scheduled_date) {
+      toast.error('Selecione uma data para o agendamento único');
       return;
     }
 
@@ -715,27 +754,44 @@ export function ScheduledAnnouncementsSettings() {
                   <Label>Áudio Atual</Label>
                   <div className="flex items-center justify-between p-3 border rounded-lg bg-green-500/10 border-green-500/30">
                     <div className="flex items-center gap-2">
-                      <Volume2 className="h-4 w-4 text-green-600" />
-                      <span className="text-sm text-green-600 dark:text-green-400">Áudio configurado</span>
+                      {isPreviewPlaying ? (
+                        <Volume2 className="h-4 w-4 text-green-600 animate-pulse" />
+                      ) : (
+                        <Volume2 className="h-4 w-4 text-green-600" />
+                      )}
+                      <span className="text-sm text-green-600 dark:text-green-400">
+                        {isPreviewPlaying ? 'Reproduzindo...' : 'Áudio configurado'}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1"
-                        onClick={() => {
-                          const audio = new Audio(form.file_path);
-                          audio.volume = form.volume;
-                          audio.play();
-                        }}
-                      >
-                        <Play className="h-4 w-4" />
-                        Ouvir
-                      </Button>
+                      {isPreviewPlaying ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1"
+                          onClick={handleStopPreview}
+                        >
+                          <Square className="h-4 w-4" />
+                          Parar
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1"
+                          onClick={handlePlayPreview}
+                        >
+                          <Play className="h-4 w-4" />
+                          Ouvir
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => setForm(prev => ({ ...prev, file_path: '' }))}
+                        onClick={() => {
+                          handleStopPreview();
+                          setForm(prev => ({ ...prev, file_path: '' }));
+                        }}
                       >
                         <X className="h-4 w-4" />
                       </Button>
