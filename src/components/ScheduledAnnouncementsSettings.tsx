@@ -6,19 +6,17 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { AudioRecorder } from '@/components/AudioRecorder';
 import { useScheduledAnnouncements, ScheduledAnnouncement } from '@/hooks/useScheduledAnnouncements';
-import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2, Activity, AlertTriangle, Timer, Sparkles, RefreshCw, Check, User } from 'lucide-react';
+import { useVoiceTextHistory, ELEVENLABS_VOICES } from '@/hooks/useVoiceTextHistory';
+import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2, Activity, AlertTriangle, Timer, Sparkles, RefreshCw, Check, History, X } from 'lucide-react';
 import { toast } from 'sonner';
-
-const ELEVENLABS_VOICES = {
-  male: { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel (Masculina)' },
-  female: { id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura (Feminina)' }
-};
+import { formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 const DAYS_OF_WEEK = [
   { value: 1, label: 'Dom' },
@@ -62,15 +60,18 @@ export function ScheduledAnnouncementsSettings() {
     playAnnouncement 
   } = useScheduledAnnouncements();
 
+  const { getHistory, addToHistory, clearHistory } = useVoiceTextHistory();
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState<ScheduledAnnouncement | null>(null);
   const [audioSource, setAudioSource] = useState<'record' | 'upload' | 'generate' | null>(null);
   const [voiceText, setVoiceText] = useState('');
   const [isGeneratingVoice, setIsGeneratingVoice] = useState(false);
-  const [selectedVoice, setSelectedVoice] = useState<'male' | 'female'>('male');
+  const [selectedVoiceId, setSelectedVoiceId] = useState(ELEVENLABS_VOICES[0].id);
   const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   
   const [form, setForm] = useState({
     name: '',
@@ -89,6 +90,11 @@ export function ScheduledAnnouncementsSettings() {
     volume: 1.0,
     is_active: true
   });
+
+  const selectedVoice = ELEVENLABS_VOICES.find(v => v.id === selectedVoiceId) || ELEVENLABS_VOICES[0];
+  const history = getHistory();
+  const ptVoices = ELEVENLABS_VOICES.filter(v => v.lang === 'pt');
+  const enVoices = ELEVENLABS_VOICES.filter(v => v.lang === 'en');
 
   const resetForm = () => {
     setForm({
@@ -111,9 +117,10 @@ export function ScheduledAnnouncementsSettings() {
     setEditingAnnouncement(null);
     setAudioSource(null);
     setVoiceText('');
-    setSelectedVoice('male');
+    setSelectedVoiceId(ELEVENLABS_VOICES[0].id);
     setPreviewAudioUrl(null);
     setPreviewBlob(null);
+    setShowHistory(false);
   };
 
   const handleOpenDialog = (announcement?: ScheduledAnnouncement) => {
@@ -208,7 +215,7 @@ export function ScheduledAnnouncementsSettings() {
           },
           body: JSON.stringify({ 
             text: voiceText,
-            voiceId: ELEVENLABS_VOICES[selectedVoice].id
+            voiceId: selectedVoiceId
           }),
         }
       );
@@ -235,6 +242,9 @@ export function ScheduledAnnouncementsSettings() {
     if (!previewBlob || !form.name.trim()) return;
     
     try {
+      // Salvar no histórico
+      addToHistory(voiceText, selectedVoiceId, selectedVoice.name);
+      
       const url = await uploadRecording(previewBlob, form.name);
       setForm(prev => ({ ...prev, file_path: url }));
       
@@ -441,29 +451,32 @@ export function ScheduledAnnouncementsSettings() {
                       
                       {/* Seleção de Voz */}
                       <div className="space-y-2">
-                        <Label className="text-xs">Tipo de Voz</Label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button
-                            type="button"
-                            variant={selectedVoice === 'male' ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => setSelectedVoice('male')}
-                            className="gap-2"
-                          >
-                            <User className="h-4 w-4" />
-                            Masculina
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={selectedVoice === 'female' ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => setSelectedVoice('female')}
-                            className="gap-2"
-                          >
-                            <User className="h-4 w-4" />
-                            Feminina
-                          </Button>
-                        </div>
+                        <Label className="text-xs">Voz</Label>
+                        <Select value={selectedVoiceId} onValueChange={setSelectedVoiceId}>
+                          <SelectTrigger>
+                            <SelectValue>
+                              {selectedVoice.flag} {selectedVoice.name} ({selectedVoice.gender === 'male' ? '♂' : '♀'})
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectLabel>🇧🇷 Português</SelectLabel>
+                              {ptVoices.map(voice => (
+                                <SelectItem key={voice.id} value={voice.id}>
+                                  {voice.flag} {voice.name} ({voice.gender === 'male' ? 'Masculina' : 'Feminina'})
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                            <SelectGroup>
+                              <SelectLabel>🇺🇸 English</SelectLabel>
+                              {enVoices.map(voice => (
+                                <SelectItem key={voice.id} value={voice.id}>
+                                  {voice.flag} {voice.name} ({voice.gender === 'male' ? 'Male' : 'Female'})
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
                       </div>
                       
                       <Textarea
@@ -475,7 +488,60 @@ export function ScheduledAnnouncementsSettings() {
                       />
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <span>{voiceText.length}/500 caracteres</span>
+                        {history.length > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 gap-1 text-xs"
+                            onClick={() => setShowHistory(!showHistory)}
+                          >
+                            <History className="h-3 w-3" />
+                            Histórico ({history.length})
+                          </Button>
+                        )}
                       </div>
+                      
+                      {/* Histórico de Textos */}
+                      {showHistory && history.length > 0 && (
+                        <div className="space-y-2 p-2 border rounded-lg bg-background max-h-40 overflow-y-auto">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-muted-foreground">Textos Recentes</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-xs text-destructive"
+                              onClick={() => {
+                                clearHistory();
+                                setShowHistory(false);
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3 mr-1" />
+                              Limpar
+                            </Button>
+                          </div>
+                          {history.slice(0, 5).map(item => {
+                            const voice = ELEVENLABS_VOICES.find(v => v.id === item.voiceId);
+                            return (
+                              <div
+                                key={item.id}
+                                className="flex items-start gap-2 p-2 rounded border hover:bg-muted/50 cursor-pointer"
+                                onClick={() => {
+                                  setVoiceText(item.text);
+                                  if (voice) setSelectedVoiceId(voice.id);
+                                  setShowHistory(false);
+                                }}
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm truncate">{item.text}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {voice?.flag || '🎤'} {item.voiceName} · {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true, locale: ptBR })}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                       
                       {/* Preview do Áudio */}
                       {previewAudioUrl && (
