@@ -19,14 +19,24 @@ export default defineConfig(({ mode }) => ({
       manifest: {
         name: 'slim - Sistema para Restaurante',
         short_name: 'slim',
-        description: 'Sistema completo de gestão para restaurantes',
-        theme_color: '#0EA5E9',
-        background_color: '#f9fafb',
+        description: 'Sistema completo de gestão para restaurantes com controle de pedidos, mesas, estoque e impressão térmica',
+        theme_color: '#1a9cb0',
+        background_color: '#0f172a',
         display: 'standalone',
-        orientation: 'portrait',
-        start_url: '/',
+        display_override: ['window-controls-overlay', 'standalone', 'minimal-ui'],
+        orientation: 'any',
+        start_url: '/?source=pwa',
         scope: '/',
+        id: '/slim-pdv',
+        categories: ['business', 'food', 'productivity'],
+        lang: 'pt-BR',
+        dir: 'ltr',
         icons: [
+          {
+            src: 'pwa-64x64.png',
+            sizes: '64x64',
+            type: 'image/png'
+          },
           {
             src: 'pwa-192x192.png',
             sizes: '192x192',
@@ -42,8 +52,45 @@ export default defineConfig(({ mode }) => ({
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable'
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any'
           }
-        ]
+        ],
+        shortcuts: [
+          {
+            name: 'Mesas',
+            short_name: 'Mesas',
+            description: 'Gerenciar mesas do restaurante',
+            url: '/tables?source=shortcut',
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }]
+          },
+          {
+            name: 'Balcão',
+            short_name: 'Balcão',
+            description: 'Pedidos de balcão e delivery',
+            url: '/counter?source=shortcut',
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }]
+          },
+          {
+            name: 'Cozinha (KDS)',
+            short_name: 'KDS',
+            description: 'Display da cozinha',
+            url: '/kds?source=shortcut',
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }]
+          },
+          {
+            name: 'Configurações',
+            short_name: 'Config',
+            description: 'Configurações do sistema',
+            url: '/settings?source=shortcut',
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }]
+          }
+        ],
+        prefer_related_applications: false
       },
       workbox: {
         importScripts: ['custom-sw.js'],
