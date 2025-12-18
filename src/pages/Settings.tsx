@@ -1,14 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { useAllUsers, useUserRole, AppRole, UserWithRoles } from '@/hooks/useUserRole';
-import { useTables, useTableMutations } from '@/hooks/useTables';
 import { RequireRole } from '@/components/auth/RequireRole';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { PushNotificationSettings } from '@/components/PushNotificationSettings';
@@ -16,31 +9,17 @@ import { ScheduledAnnouncementsSettings } from '@/components/ScheduledAnnounceme
 import { PrinterSettings } from '@/components/PrinterSettings';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Users, Shield, Plus, X, Crown, Sparkles, AlertTriangle, UtensilsCrossed, Edit, Trash2, ShoppingCart, ChefHat, UserPlus, Eye, EyeOff, Key } from 'lucide-react';
-import { UserPermissionsDialog } from '@/components/settings/UserPermissionsDialog';
-import { Switch } from '@/components/ui/switch';
-import { useOrderSettings } from '@/hooks/useOrderSettings';
-import { useTableWaitSettings } from '@/hooks/useTableWaitSettings';
-import { useIdleTableSettings } from '@/hooks/useIdleTableSettings';
-import { useKdsSettings } from '@/hooks/useKdsSettings';
+import { Crown, Sparkles, AlertTriangle } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useQueryClient, useQuery } from '@tanstack/react-query';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
-const roleLabels: Record<AppRole, string> = {
-  admin: 'Administrador',
-  cashier: 'Caixa',
-  waiter: 'Garçom',
-  kitchen: 'Cozinha',
-};
-
-const roleColors: Record<AppRole, string> = {
-  admin: 'bg-destructive text-destructive-foreground',
-  cashier: 'bg-primary text-primary-foreground',
-  waiter: 'bg-info text-info-foreground',
-  kitchen: 'bg-warning text-warning-foreground',
-};
+// Settings components
+import { SettingsSidebar, SettingsSection } from '@/components/settings/SettingsSidebar';
+import { TablesSettings } from '@/components/settings/TablesSettings';
+import { KdsSettingsSection } from '@/components/settings/KdsSettingsSection';
+import { OrderSettingsSection } from '@/components/settings/OrderSettingsSection';
+import { UsersSettings } from '@/components/settings/UsersSettings';
+import { RolesSettings } from '@/components/settings/RolesSettings';
 
 // Hook to check if system has any admins
 function useHasAdmins() {
@@ -61,49 +40,12 @@ function useHasAdmins() {
 
 export default function Settings() {
   const { user } = useAuth();
-  const { data: users, isLoading, refetch } = useAllUsers();
-  const { roles, isAdmin, refetch: refetchRoles } = useUserRole();
   const { data: hasAdmins, isLoading: checkingAdmins, refetch: refetchAdmins } = useHasAdmins();
-  const { data: tables } = useTables();
-  const { createTable, updateTable, deleteTable } = useTableMutations();
-  const { duplicateItems, toggleDuplicateItems } = useOrderSettings();
-  const { settings: tableWaitSettings, updateSettings: updateTableWaitSettings } = useTableWaitSettings();
-  const { settings: idleTableSettings, updateSettings: updateIdleTableSettings } = useIdleTableSettings();
-  const { settings: kdsSettings, updateSettings: updateKdsSettings } = useKdsSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedUser, setSelectedUser] = useState<string | null>(null);
-  const [selectedRole, setSelectedRole] = useState<AppRole | ''>('');
   const [isBootstrapping, setIsBootstrapping] = useState(false);
+  const [activeSection, setActiveSection] = useState<SettingsSection>('tables');
 
-  // Table management state
-  const [tablesToCreate, setTablesToCreate] = useState(5);
-  const [defaultCapacity, setDefaultCapacity] = useState(4);
-  const [isCreatingTables, setIsCreatingTables] = useState(false);
-  const [editingTable, setEditingTable] = useState<any>(null);
-  const [tableForm, setTableForm] = useState({ number: 0, capacity: 4 });
-  const [isTableDialogOpen, setIsTableDialogOpen] = useState(false);
-
-  // User creation state
-  const [isCreateUserDialogOpen, setIsCreateUserDialogOpen] = useState(false);
-  const [isCreatingUser, setIsCreatingUser] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [newUserForm, setNewUserForm] = useState({
-    email: '',
-    name: '',
-    password: '',
-    role: 'waiter' as AppRole,
-  });
-
-  // Edit user state
-  const [isEditUserDialogOpen, setIsEditUserDialogOpen] = useState(false);
-  const [userToEdit, setUserToEdit] = useState<UserWithRoles | null>(null);
-  const [editUserName, setEditUserName] = useState('');
-  const [isSavingUser, setIsSavingUser] = useState(false);
-
-  // Permissions dialog state
-  const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
-  const [userForPermissions, setUserForPermissions] = useState<UserWithRoles | null>(null);
   // Check if current user can bootstrap (no admins exist)
   const canBootstrap = !checkingAdmins && hasAdmins === false && user?.id;
 
@@ -123,8 +65,6 @@ export default function Settings() {
         description: 'Você agora é o administrador do sistema!' 
       });
       
-      refetch();
-      refetchRoles();
       refetchAdmins();
       queryClient.invalidateQueries({ queryKey: ['user-roles'] });
       queryClient.invalidateQueries({ queryKey: ['has-admins'] });
@@ -139,222 +79,6 @@ export default function Settings() {
     }
   };
 
-  const handleAddRole = async () => {
-    if (!selectedUser || !selectedRole) return;
-    
-    try {
-      const { error } = await supabase
-        .from('user_roles')
-        .insert({ user_id: selectedUser, role: selectedRole });
-      
-      if (error) throw error;
-      
-      toast({ title: 'Função adicionada com sucesso!' });
-      refetch();
-      queryClient.invalidateQueries({ queryKey: ['user-roles'] });
-      setSelectedUser(null);
-      setSelectedRole('');
-    } catch (error: any) {
-      toast({ 
-        title: 'Erro ao adicionar função', 
-        description: error.message, 
-        variant: 'destructive' 
-      });
-    }
-  };
-
-  const handleRemoveRole = async (userId: string, role: AppRole) => {
-    try {
-      const { error } = await supabase
-        .from('user_roles')
-        .delete()
-        .eq('user_id', userId)
-        .eq('role', role);
-      
-      if (error) throw error;
-      
-      toast({ title: 'Função removida!' });
-      refetch();
-      refetchAdmins();
-      queryClient.invalidateQueries({ queryKey: ['user-roles'] });
-      queryClient.invalidateQueries({ queryKey: ['has-admins'] });
-    } catch (error: any) {
-      toast({ 
-        title: 'Erro ao remover função', 
-        description: error.message, 
-        variant: 'destructive' 
-      });
-    }
-  };
-
-  // Edit user name handler
-  const handleOpenEditUser = (user: UserWithRoles) => {
-    setUserToEdit(user);
-    setEditUserName(user.name);
-    setIsEditUserDialogOpen(true);
-  };
-
-  const handleUpdateUserName = async () => {
-    if (!userToEdit || !editUserName.trim()) return;
-    
-    setIsSavingUser(true);
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ name: editUserName.trim().toUpperCase() })
-        .eq('id', userToEdit.id);
-      
-      if (error) throw error;
-      
-      toast({ title: 'Nome atualizado com sucesso!' });
-      refetch();
-      setIsEditUserDialogOpen(false);
-      setUserToEdit(null);
-    } catch (error: any) {
-      toast({ 
-        title: 'Erro ao atualizar nome', 
-        description: error.message, 
-        variant: 'destructive' 
-      });
-    } finally {
-      setIsSavingUser(false);
-    }
-  };
-
-  // Table management handlers
-  const handleCreateTables = async () => {
-    if (tablesToCreate <= 0) return;
-    
-    setIsCreatingTables(true);
-    try {
-      const existingNumbers = tables?.map(t => t.number) || [];
-      let startNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
-      
-      for (let i = 0; i < tablesToCreate; i++) {
-        await createTable.mutateAsync({ 
-          number: startNumber + i, 
-          capacity: defaultCapacity,
-          status: 'available',
-          position_x: 0,
-          position_y: 0
-        });
-      }
-      
-      toast({ title: `${tablesToCreate} mesa(s) criada(s) com sucesso!` });
-      setTablesToCreate(5);
-    } catch (error: any) {
-      toast({ 
-        title: 'Erro ao criar mesas', 
-        description: error.message, 
-        variant: 'destructive' 
-      });
-    } finally {
-      setIsCreatingTables(false);
-    }
-  };
-
-  const handleEditTable = (table: any) => {
-    setEditingTable(table);
-    setTableForm({ number: table.number, capacity: table.capacity || 4 });
-    setIsTableDialogOpen(true);
-  };
-
-  const handleSaveTable = async () => {
-    if (!editingTable) return;
-    
-    try {
-      await updateTable.mutateAsync({ 
-        id: editingTable.id, 
-        number: tableForm.number, 
-        capacity: tableForm.capacity 
-      });
-      toast({ title: 'Mesa atualizada!' });
-      setIsTableDialogOpen(false);
-      setEditingTable(null);
-    } catch (error: any) {
-      toast({ 
-        title: 'Erro ao atualizar mesa', 
-        description: error.message, 
-        variant: 'destructive' 
-      });
-    }
-  };
-
-  const handleDeleteTable = async (tableId: string) => {
-    const table = tables?.find(t => t.id === tableId);
-    if (table?.status === 'occupied') {
-      toast({ 
-        title: 'Mesa ocupada', 
-        description: 'Não é possível excluir uma mesa ocupada', 
-        variant: 'destructive' 
-      });
-      return;
-    }
-    
-    try {
-      await deleteTable.mutateAsync(tableId);
-      toast({ title: 'Mesa excluída!' });
-    } catch (error: any) {
-      toast({ 
-        title: 'Erro ao excluir mesa', 
-        description: error.message, 
-        variant: 'destructive' 
-      });
-    }
-  };
-
-  // Create new user
-  const handleCreateUser = async () => {
-    if (!newUserForm.email || !newUserForm.name || !newUserForm.password || !newUserForm.role) {
-      toast({
-        title: 'Preencha todos os campos',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    if (newUserForm.password.length < 6) {
-      toast({
-        title: 'Senha muito curta',
-        description: 'A senha deve ter pelo menos 6 caracteres',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    setIsCreatingUser(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('create-user', {
-        body: {
-          email: newUserForm.email,
-          name: newUserForm.name.toUpperCase(),
-          password: newUserForm.password,
-          role: newUserForm.role
-        }
-      });
-
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
-
-      toast({ 
-        title: 'Usuário criado com sucesso!',
-        description: `${newUserForm.name} foi adicionado como ${roleLabels[newUserForm.role]}`
-      });
-      
-      setIsCreateUserDialogOpen(false);
-      setNewUserForm({ email: '', name: '', password: '', role: 'waiter' });
-      refetch();
-      queryClient.invalidateQueries({ queryKey: ['all-users'] });
-    } catch (error: any) {
-      toast({
-        title: 'Erro ao criar usuário',
-        description: error.message,
-        variant: 'destructive'
-      });
-    } finally {
-      setIsCreatingUser(false);
-    }
-  };
   if (canBootstrap) {
     return (
       <PDVLayout>
@@ -397,6 +121,31 @@ export default function Settings() {
     );
   }
 
+  const renderContent = () => {
+    switch (activeSection) {
+      case 'tables':
+        return <TablesSettings />;
+      case 'kds':
+        return <KdsSettingsSection />;
+      case 'orders':
+        return <OrderSettingsSection />;
+      case 'printers':
+        return <PrinterSettings />;
+      case 'notifications':
+        return <NotificationSettings />;
+      case 'announcements':
+        return <ScheduledAnnouncementsSettings />;
+      case 'push':
+        return <PushNotificationSettings />;
+      case 'users':
+        return <UsersSettings />;
+      case 'roles':
+        return <RolesSettings />;
+      default:
+        return <TablesSettings />;
+    }
+  };
+
   return (
     <PDVLayout>
       <RequireRole roles={['admin']}>
@@ -406,676 +155,45 @@ export default function Settings() {
             <p className="text-muted-foreground">Gerencie usuários, permissões e mesas do sistema</p>
           </div>
 
-          {/* Table Management */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <UtensilsCrossed className="h-5 w-5" />
-                Configuração de Mesas
-              </CardTitle>
-              <CardDescription>
-                Gerencie as mesas do estabelecimento
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Create Tables in Batch */}
-              <div className="flex flex-col sm:flex-row gap-4 p-4 border rounded-lg bg-muted/30">
-                <div className="flex-1 space-y-2">
-                  <Label>Quantidade de Mesas</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={50}
-                    value={tablesToCreate}
-                    onChange={(e) => setTablesToCreate(Number(e.target.value))}
-                  />
-                </div>
-                <div className="flex-1 space-y-2">
-                  <Label>Capacidade Padrão</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={defaultCapacity}
-                    onChange={(e) => setDefaultCapacity(Number(e.target.value))}
-                  />
-                </div>
-                <div className="flex items-end">
-                  <Button onClick={handleCreateTables} disabled={isCreatingTables || tablesToCreate <= 0}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    {isCreatingTables ? 'Criando...' : 'Criar Mesas'}
-                  </Button>
-                </div>
-              </div>
+          <div className="flex gap-6">
+            {/* Sidebar */}
+            <div className="hidden md:block">
+              <SettingsSidebar 
+                activeSection={activeSection} 
+                onSectionChange={setActiveSection} 
+              />
+            </div>
 
-              {/* Existing Tables */}
-              <div>
-                <Label className="text-sm text-muted-foreground mb-2 block">
-                  Mesas Existentes ({tables?.length || 0})
-                </Label>
-                {tables && tables.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Mesa</TableHead>
-                        <TableHead>Capacidade</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {tables.map((table) => (
-                        <TableRow key={table.id}>
-                          <TableCell className="font-medium">Mesa {table.number}</TableCell>
-                          <TableCell>{table.capacity || 4} pessoas</TableCell>
-                          <TableCell>
-                            <Badge variant={table.status === 'available' ? 'secondary' : 'default'}>
-                              {table.status === 'available' ? 'Livre' : 
-                               table.status === 'occupied' ? 'Ocupada' : 
-                               table.status === 'reserved' ? 'Reservada' : 'Conta'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEditTable(table)}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeleteTable(table.id)}
-                                disabled={table.status === 'occupied'}
-                                className="text-destructive hover:text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground border rounded-lg">
-                    <UtensilsCrossed className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>Nenhuma mesa cadastrada</p>
-                    <p className="text-sm">Use o formulário acima para criar mesas</p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+            {/* Mobile select */}
+            <div className="md:hidden w-full">
+              <select 
+                value={activeSection}
+                onChange={(e) => setActiveSection(e.target.value as SettingsSection)}
+                className="w-full p-3 rounded-lg border bg-card text-card-foreground mb-4"
+              >
+                <optgroup label="Sistema">
+                  <option value="tables">Mesas</option>
+                  <option value="kds">KDS</option>
+                  <option value="orders">Pedidos</option>
+                  <option value="printers">Impressoras</option>
+                </optgroup>
+                <optgroup label="Notificações">
+                  <option value="notifications">Sons</option>
+                  <option value="announcements">Avisos Agendados</option>
+                  <option value="push">Push</option>
+                </optgroup>
+                <optgroup label="Usuários">
+                  <option value="users">Usuários</option>
+                  <option value="roles">Funções</option>
+                </optgroup>
+              </select>
+            </div>
 
-          {/* Edit Table Dialog */}
-          <Dialog open={isTableDialogOpen} onOpenChange={setIsTableDialogOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Editar Mesa</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <Label>Número da Mesa</Label>
-                  <Input
-                    type="number"
-                    value={tableForm.number}
-                    onChange={(e) => setTableForm({ ...tableForm, number: Number(e.target.value) })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Capacidade</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={tableForm.capacity}
-                    onChange={(e) => setTableForm({ ...tableForm, capacity: Number(e.target.value) })}
-                  />
-                </div>
-                <Button onClick={handleSaveTable} className="w-full">
-                  Salvar
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* KDS Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <ChefHat className="h-5 w-5" />
-                Configurações do KDS
-              </CardTitle>
-              <CardDescription>
-                Ajuste o comportamento do Kitchen Display System
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label className="font-medium">Exibir coluna "Pendente"</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Quando desativado, pedidos entram direto em preparo. Útil para restaurantes
-                    de alta demanda onde a produção inicia automaticamente.
-                  </p>
-                </div>
-                <Switch 
-                  checked={kdsSettings.showPendingColumn} 
-                  onCheckedChange={(showPendingColumn) => updateKdsSettings({ showPendingColumn })} 
-                />
-              </div>
-
-              <div className="border-t pt-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="font-medium">Alertas de Cancelamento</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Exibe notificações visuais e sonoras quando pedidos em produção são cancelados.
-                      Desative para restaurantes com alto volume de cancelamentos.
-                    </p>
-                  </div>
-                  <Switch 
-                    checked={kdsSettings.cancellationAlertsEnabled ?? true}
-                    onCheckedChange={(cancellationAlertsEnabled) => 
-                      updateKdsSettings({ cancellationAlertsEnabled })
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="border-t pt-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="font-medium">Intervalo do Alerta de Cancelamento</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Com que frequência o som de alerta toca quando há pedidos cancelados não confirmados.
-                    </p>
-                  </div>
-                  <Select
-                    value={String(kdsSettings.cancellationAlertInterval || 3)}
-                    onValueChange={(value) => updateKdsSettings({ cancellationAlertInterval: Number(value) })}
-                    disabled={!(kdsSettings.cancellationAlertsEnabled ?? true)}
-                  >
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">1 segundo</SelectItem>
-                      <SelectItem value="2">2 segundos</SelectItem>
-                      <SelectItem value="3">3 segundos</SelectItem>
-                      <SelectItem value="5">5 segundos</SelectItem>
-                      <SelectItem value="10">10 segundos</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Order Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <ShoppingCart className="h-5 w-5" />
-                Configurações de Pedido
-              </CardTitle>
-              <CardDescription>
-                Ajuste o comportamento do sistema de pedidos
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label className="font-medium">Duplicar itens em vez de somar quantidade</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Quando ativo, adicionar o mesmo produto cria um novo item separado no pedido.
-                    Facilita a visualização de múltiplos itens na comanda da cozinha.
-                  </p>
-                </div>
-                <Switch 
-                  checked={duplicateItems} 
-                  onCheckedChange={toggleDuplicateItems} 
-                />
-              </div>
-
-              <div className="border-t pt-6">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="font-medium">Alerta de tempo de espera de mesa</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Tocar som quando uma mesa ocupada ultrapassar o tempo limite configurado
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Select
-                      value={tableWaitSettings.thresholdMinutes.toString()}
-                      onValueChange={(v) => updateTableWaitSettings({ thresholdMinutes: Number(v) })}
-                      disabled={!tableWaitSettings.enabled}
-                    >
-                      <SelectTrigger className="w-24">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="15">15 min</SelectItem>
-                        <SelectItem value="20">20 min</SelectItem>
-                        <SelectItem value="25">25 min</SelectItem>
-                        <SelectItem value="30">30 min</SelectItem>
-                        <SelectItem value="45">45 min</SelectItem>
-                        <SelectItem value="60">60 min</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Switch 
-                      checked={tableWaitSettings.enabled} 
-                      onCheckedChange={(enabled) => updateTableWaitSettings({ enabled })} 
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t pt-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="font-medium">Mesa ociosa (sem itens)</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Alertar ou fechar mesas abertas sem pedidos após tempo limite
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Select
-                      value={idleTableSettings.thresholdMinutes.toString()}
-                      onValueChange={(v) => updateIdleTableSettings({ thresholdMinutes: Number(v) })}
-                      disabled={!idleTableSettings.enabled}
-                    >
-                      <SelectTrigger className="w-24">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="5">5 min</SelectItem>
-                        <SelectItem value="10">10 min</SelectItem>
-                        <SelectItem value="15">15 min</SelectItem>
-                        <SelectItem value="20">20 min</SelectItem>
-                        <SelectItem value="30">30 min</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <div className="flex items-center gap-2">
-                      <Label className="text-xs whitespace-nowrap">Auto-fechar</Label>
-                      <Switch 
-                        checked={idleTableSettings.autoClose} 
-                        onCheckedChange={(autoClose) => updateIdleTableSettings({ autoClose })}
-                        disabled={!idleTableSettings.enabled}
-                      />
-                    </div>
-                    <Switch 
-                      checked={idleTableSettings.enabled} 
-                      onCheckedChange={(enabled) => updateIdleTableSettings({ enabled })} 
-                    />
-                  </div>
-                </div>
-                
-                <div className="flex items-center justify-between pl-4 border-l-2 border-muted">
-                  <div className="space-y-0.5">
-                    <Label className="text-sm">Incluir pedidos entregues</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Também alertar quando o pedido já foi servido
-                    </p>
-                  </div>
-                  <Switch 
-                    checked={idleTableSettings.includeDeliveredOrders} 
-                    onCheckedChange={(includeDeliveredOrders) => updateIdleTableSettings({ includeDeliveredOrders })}
-                    disabled={!idleTableSettings.enabled}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Printer Settings */}
-          <PrinterSettings />
-
-          {/* Notification Settings */}
-          <NotificationSettings />
-
-          {/* Scheduled Announcements */}
-          <ScheduledAnnouncementsSettings />
-
-          {/* Push Notification Settings */}
-          <PushNotificationSettings />
-
-          {/* Role Legend */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Shield className="h-5 w-5" />
-                Funções do Sistema
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="p-4 border rounded-lg">
-                  <Badge className={roleColors.admin}>Admin</Badge>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Acesso total ao sistema. Pode gerenciar usuários, configurações e todos os módulos.
-                  </p>
-                </div>
-                <div className="p-4 border rounded-lg">
-                  <Badge className={roleColors.cashier}>Caixa</Badge>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Gerencia caixa, pagamentos e pode ver relatórios financeiros.
-                  </p>
-                </div>
-                <div className="p-4 border rounded-lg">
-                  <Badge className={roleColors.waiter}>Garçom</Badge>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Gerencia mesas, pedidos e reservas. Acesso ao cardápio.
-                  </p>
-                </div>
-                <div className="p-4 border rounded-lg">
-                  <Badge className={roleColors.kitchen}>Cozinha</Badge>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Visualiza e atualiza status dos pedidos. Acesso ao estoque.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Add Role */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Plus className="h-5 w-5" />
-                Atribuir Função
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Select value={selectedUser || ''} onValueChange={setSelectedUser}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Selecione um usuário" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {users?.map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
-                        {user.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={selectedRole} onValueChange={(v) => setSelectedRole(v as AppRole)}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Selecione uma função" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.keys(roleLabels) as AppRole[]).map((role) => (
-                      <SelectItem key={role} value={role}>
-                        {roleLabels[role]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button onClick={handleAddRole} disabled={!selectedUser || !selectedRole}>
-                  Adicionar
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Users Table */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Users className="h-5 w-5" />
-                  Usuários do Sistema
-                </CardTitle>
-                <Button onClick={() => setIsCreateUserDialogOpen(true)}>
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Novo Usuário
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="text-center py-8 text-muted-foreground">Carregando...</div>
-              ) : users?.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Nenhum usuário cadastrado</p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Funções</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {users?.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                              <span className="text-primary font-medium">
-                                {user.name?.charAt(0).toUpperCase()}
-                              </span>
-                            </div>
-                            <div>
-                              <p className="font-medium">{user.name}</p>
-                              <p className="text-xs text-muted-foreground">{user.id.slice(0, 8)}...</p>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-2">
-                            {user.user_roles.length === 0 ? (
-                              <span className="text-muted-foreground text-sm">Sem funções</span>
-                            ) : (
-                              user.user_roles.map((ur) => (
-                                <Badge key={ur.role} className={roleColors[ur.role]}>
-                                  {roleLabels[ur.role]}
-                                </Badge>
-                              ))
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            {/* Edit user button */}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleOpenEditUser(user)}
-                              title="Editar nome"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            {/* Permissions button */}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setUserForPermissions(user);
-                                setIsPermissionsDialogOpen(true);
-                              }}
-                              title="Gerenciar permissões"
-                            >
-                              <Key className="h-4 w-4" />
-                            </Button>
-                            {/* Role removal with confirmation */}
-                            {user.user_roles.map((ur) => (
-                              <AlertDialog key={ur.role}>
-                                <AlertDialogTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-destructive hover:text-destructive"
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Remover função?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Tem certeza que deseja remover a função "{roleLabels[ur.role]}" de {user.name}?
-                                      Esta ação não pode ser desfeita.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleRemoveRole(user.id, ur.role)}>
-                                      Confirmar
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            ))}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Edit User Dialog */}
-          <Dialog open={isEditUserDialogOpen} onOpenChange={setIsEditUserDialogOpen}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Edit className="h-5 w-5" />
-                  Editar Usuário
-                </DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <Label>Nome *</Label>
-                  <Input
-                    placeholder="NOME DO FUNCIONÁRIO"
-                    value={editUserName}
-                    onChange={(e) => setEditUserName(e.target.value.toUpperCase())}
-                  />
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  ID: {userToEdit?.id.slice(0, 8)}...
-                </p>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsEditUserDialogOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button 
-                  onClick={handleUpdateUserName} 
-                  disabled={isSavingUser || !editUserName.trim()}
-                >
-                  {isSavingUser ? 'Salvando...' : 'Salvar'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          {/* Create User Dialog */}
-          <Dialog open={isCreateUserDialogOpen} onOpenChange={setIsCreateUserDialogOpen}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <UserPlus className="h-5 w-5" />
-                  Novo Usuário
-                </DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <Label>E-mail *</Label>
-                  <Input
-                    type="email"
-                    placeholder="usuario@email.com"
-                    value={newUserForm.email}
-                    onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Nome *</Label>
-                  <Input
-                    placeholder="NOME DO FUNCIONÁRIO"
-                    value={newUserForm.name}
-                    onChange={(e) => setNewUserForm({ ...newUserForm, name: e.target.value.toUpperCase() })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Senha temporária *</Label>
-                  <div className="relative">
-                    <Input
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="Mínimo 6 caracteres"
-                      value={newUserForm.password}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-0 top-0 h-full px-3"
-                      onClick={() => setShowPassword(!showPassword)}
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Cargo *</Label>
-                  <Select 
-                    value={newUserForm.role} 
-                    onValueChange={(v) => setNewUserForm({ ...newUserForm, role: v as AppRole })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o cargo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(Object.keys(roleLabels) as AppRole[]).map((role) => (
-                        <SelectItem key={role} value={role}>
-                          {roleLabels[role]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  O usuário receberá acesso de acordo com o cargo selecionado.
-                </p>
-                <div className="flex gap-3 pt-4">
-                  <Button 
-                    variant="outline" 
-                    className="flex-1"
-                    onClick={() => setIsCreateUserDialogOpen(false)}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button 
-                    className="flex-1"
-                    onClick={handleCreateUser}
-                    disabled={isCreatingUser || !newUserForm.email || !newUserForm.name || !newUserForm.password}
-                  >
-                    {isCreatingUser ? 'Criando...' : 'Criar Usuário'}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* User Permissions Dialog */}
-          <UserPermissionsDialog
-            open={isPermissionsDialogOpen}
-            onOpenChange={setIsPermissionsDialogOpen}
-            user={userForPermissions}
-            allUsers={users || []}
-          />
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              {renderContent()}
+            </div>
+          </div>
         </div>
       </RequireRole>
     </PDVLayout>
