@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { usePrinter } from '@/contexts/PrinterContext';
 import { useOrderSettings, PrintFontSize } from '@/hooks/useOrderSettings';
 import { usePrintSectors, usePrintSectorMutations, PrintSector } from '@/hooks/usePrintSectors';
+import { invalidateLogoCache } from '@/utils/imageToBase64';
 import { buildFontSizeTestPrint } from '@/utils/escpos';
 import {
   Printer, 
@@ -121,7 +122,9 @@ export function PrinterSettings() {
     bottomMarginReceipt,
     updateBottomMarginReceipt,
     restaurantLogoUrl,
-    updateRestaurantLogoUrl
+    updateRestaurantLogoUrl,
+    logoMaxWidth,
+    updateLogoMaxWidth
   } = useOrderSettings();
   const [testingPrinter, setTestingPrinter] = useState<string | null>(null);
   const [testingFont, setTestingFont] = useState<'kitchen' | 'receipt' | null>(null);
@@ -170,6 +173,11 @@ export function PrinterSettings() {
         .from('restaurant-logos')
         .getPublicUrl(fileName);
 
+      // Invalidar cache da logo antiga
+      if (restaurantLogoUrl) {
+        invalidateLogoCache(restaurantLogoUrl);
+      }
+      
       updateRestaurantLogoUrl(publicUrl.publicUrl);
       toast({
         title: 'Logo atualizado!',
@@ -187,6 +195,10 @@ export function PrinterSettings() {
   };
 
   const handleRemoveLogo = () => {
+    // Invalidar cache da logo
+    if (restaurantLogoUrl) {
+      invalidateLogoCache(restaurantLogoUrl);
+    }
     updateRestaurantLogoUrl('');
     toast({
       title: 'Logo removido',
@@ -528,6 +540,32 @@ export function PrinterSettings() {
                   disabled={!restaurantLogoUrl}
                 />
               </div>
+
+              {/* Logo Max Width */}
+              {restaurantLogoUrl && showLogo && (
+                <div className="space-y-2 pt-2">
+                  <Label className="text-sm">Largura máxima da logo (pixels)</Label>
+                  <Select
+                    value={String(logoMaxWidth)}
+                    onValueChange={(v) => updateLogoMaxWidth(parseInt(v))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="150">150px (pequena)</SelectItem>
+                      <SelectItem value="200">200px</SelectItem>
+                      <SelectItem value="250">250px</SelectItem>
+                      <SelectItem value="300">300px (padrão)</SelectItem>
+                      <SelectItem value="350">350px</SelectItem>
+                      <SelectItem value="400">400px (grande)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Ajuste de acordo com a largura do papel (58mm: 150-250px / 80mm: 250-400px)
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Paper Width */}

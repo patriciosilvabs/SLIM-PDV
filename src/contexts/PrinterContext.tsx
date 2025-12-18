@@ -13,7 +13,7 @@ import {
 } from '@/utils/escpos';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { PrintSector } from '@/hooks/usePrintSectors';
-import { imageUrlToBase64 } from '@/utils/imageToBase64';
+import { imageUrlToBase64Cached } from '@/utils/imageToBase64';
 
 // Interface for items with sector info for sector-based printing
 export interface SectorPrintItem {
@@ -213,6 +213,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       // Logo settings
       const showLogo = localStorage.getItem('pdv_print_show_logo') === 'true';
       const logoUrl = localStorage.getItem('pdv_restaurant_logo_url') || '';
+      const logoMaxWidth = parseInt(localStorage.getItem('pdv_logo_max_width') || '300');
       
       // Get custom messages based on order type
       const isTableOrder = data.orderType === 'dine_in';
@@ -253,19 +254,24 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       
       // If logo is enabled, build mixed array with image + text
       if (shouldPrintLogo) {
-        const logoBase64 = await imageUrlToBase64(logoUrl);
+        const logoBase64 = await imageUrlToBase64Cached(logoUrl);
         
         if (logoBase64) {
           // Build print array: init + center + logo image + spacing + receipt text
           const printArray: PrintDataItem[] = [
             // Initialize and center align for logo
             INIT + ALIGN_CENTER,
-            // Logo image object
+            // Logo image object with configurable width
             {
-              type: 'raw' as const,
-              format: 'image' as const,
+              type: 'raw',
+              format: 'image',
               data: logoBase64,
-              options: { language: 'ESCPOS', dotDensity: 'double' as const }
+              options: {
+                language: 'ESCPOS',
+                dotDensity: 'double',
+                scaleImage: true,
+                imageWidth: logoMaxWidth
+              }
             },
             // Spacing after logo
             LF + LF,
