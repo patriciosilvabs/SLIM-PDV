@@ -571,6 +571,24 @@ export default function Settings() {
               <div className="border-t pt-4">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
+                    <Label className="font-medium">Alertas de Cancelamento</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Exibe notificações visuais e sonoras quando pedidos em produção são cancelados.
+                      Desative para restaurantes com alto volume de cancelamentos.
+                    </p>
+                  </div>
+                  <Switch 
+                    checked={kdsSettings.cancellationAlertsEnabled ?? true}
+                    onCheckedChange={(cancellationAlertsEnabled) => 
+                      updateKdsSettings({ cancellationAlertsEnabled })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
                     <Label className="font-medium">Intervalo do Alerta de Cancelamento</Label>
                     <p className="text-sm text-muted-foreground">
                       Com que frequência o som de alerta toca quando há pedidos cancelados não confirmados.
@@ -579,6 +597,7 @@ export default function Settings() {
                   <Select
                     value={String(kdsSettings.cancellationAlertInterval || 3)}
                     onValueChange={(value) => updateKdsSettings({ cancellationAlertInterval: Number(value) })}
+                    disabled={!(kdsSettings.cancellationAlertsEnabled ?? true)}
                   >
                     <SelectTrigger className="w-32">
                       <SelectValue />

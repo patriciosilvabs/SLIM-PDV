@@ -10,7 +10,7 @@ import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { AccessDenied } from '@/components/auth/AccessDenied';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp, Ban } from 'lucide-react';
+import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp, Ban, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
@@ -23,6 +23,17 @@ type OrderTypeFilter = 'all' | 'table' | 'takeaway' | 'delivery';
 interface MetricDataPoint {
   time: string;
   avgWait: number;
+}
+
+interface CancellationHistoryItem {
+  orderId: string;
+  orderNumber: string;
+  reason: string;
+  cancelledAt: Date;
+  confirmedAt: Date;
+  items: Array<{ name: string; quantity: number; variation?: string }>;
+  origin: string;
+  customerName?: string;
 }
 
 const FILTER_STORAGE_KEY = 'kds-order-type-filter';
@@ -65,6 +76,10 @@ export default function KDS() {
   // Unconfirmed cancellations tracking - persists until kitchen confirms
   const [unconfirmedCancellations, setUnconfirmedCancellations] = useState<Map<string, Order>>(new Map());
   const cancelledSoundIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Cancellation history (last 10 confirmed cancellations)
+  const [cancellationHistory, setCancellationHistory] = useState<CancellationHistoryItem[]>([]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   
   const canChangeStatus = hasPermission('kds_change_status');
 
@@ -355,7 +370,8 @@ export default function KDS() {
           if (order.status === 'cancelled' && prevOrder.status !== 'cancelled') {
             const wasInProduction = prevOrder.status === 'pending' || prevOrder.status === 'preparing';
             
-            if (wasInProduction) {
+            // Only show cancellation alerts if enabled in settings
+            if (wasInProduction && kdsSettings.cancellationAlertsEnabled !== false) {
               // Add to unconfirmed cancellations map - will persist until confirmed
               setUnconfirmedCancellations(prev => {
                 const newMap = new Map(prev);
@@ -397,8 +413,13 @@ export default function KDS() {
 
   // Sound loop for unconfirmed cancellations
   useEffect(() => {
-    // If there are unconfirmed cancellations and sound is enabled
-    if (unconfirmedCancellations.size > 0 && soundEnabled && settings.enabled) {
+    // If there are unconfirmed cancellations, alerts are enabled, and sound is enabled
+    if (
+      kdsSettings.cancellationAlertsEnabled !== false &&
+      unconfirmedCancellations.size > 0 && 
+      soundEnabled && 
+      settings.enabled
+    ) {
       // Play immediately
       playOrderCancelledSound();
       
@@ -420,10 +441,38 @@ export default function KDS() {
         cancelledSoundIntervalRef.current = null;
       }
     };
-  }, [unconfirmedCancellations.size, soundEnabled, settings.enabled, playOrderCancelledSound, kdsSettings.cancellationAlertInterval]);
+  }, [unconfirmedCancellations.size, soundEnabled, settings.enabled, playOrderCancelledSound, kdsSettings.cancellationAlertInterval, kdsSettings.cancellationAlertsEnabled]);
 
   // Handler to confirm cancellation was acknowledged
   const handleConfirmCancellation = (orderId: string) => {
+    const order = unconfirmedCancellations.get(orderId);
+    
+    // Save to history before removing
+    if (order) {
+      const origin = order.order_type === 'delivery' 
+        ? 'DELIVERY' 
+        : order.order_type === 'takeaway' 
+          ? 'BALCÃO' 
+          : `MESA ${order.table?.number || '?'}`;
+          
+      const historyItem: CancellationHistoryItem = {
+        orderId: order.id,
+        orderNumber: order.id.slice(-4).toUpperCase(),
+        reason: (order as any).cancellation_reason || 'Não informado',
+        cancelledAt: new Date(order.updated_at || order.created_at),
+        confirmedAt: new Date(),
+        items: order.order_items?.map(item => ({
+          name: item.product?.name || 'Produto',
+          quantity: item.quantity,
+          variation: item.variation?.name
+        })) || [],
+        origin,
+        customerName: order.customer_name || undefined
+      };
+      
+      setCancellationHistory(prev => [historyItem, ...prev].slice(0, 10));
+    }
+    
     setUnconfirmedCancellations(prev => {
       const newMap = new Map(prev);
       newMap.delete(orderId);
@@ -433,6 +482,66 @@ export default function KDS() {
     // Dismiss the corresponding toast
     toast.dismiss(`cancel-${orderId}`);
     toast.success('Cancelamento confirmado', { duration: 2000 });
+  };
+
+  // Cancellation History Panel Component
+  const CancellationHistoryPanel = () => {
+    if (cancellationHistory.length === 0) return null;
+    
+    return (
+      <Collapsible open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
+        <CollapsibleTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-2">
+            <History className="h-4 w-4" />
+            <span className="hidden sm:inline">Histórico</span>
+            <Badge variant="secondary" className="text-xs">
+              {cancellationHistory.length}
+            </Badge>
+            {isHistoryOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="absolute right-0 top-full mt-2 z-50 w-80 sm:w-96">
+          <Card className="border shadow-lg">
+            <CardHeader className="pb-2 pt-3 px-4">
+              <h3 className="font-semibold text-sm">Cancelamentos Confirmados</h3>
+            </CardHeader>
+            <CardContent className="px-4 pb-3">
+              <ScrollArea className="max-h-[300px]">
+                <div className="space-y-2">
+                  {cancellationHistory.map((item, idx) => (
+                    <div 
+                      key={`${item.orderId}-${idx}`}
+                      className="flex flex-col p-2 bg-muted/50 rounded text-sm border"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold">#{item.orderNumber}</span>
+                          <Badge variant="outline" className="text-xs">{item.origin}</Badge>
+                        </div>
+                        {item.customerName && (
+                          <span className="text-muted-foreground text-xs truncate">{item.customerName}</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-destructive mt-1 font-medium">
+                        Motivo: {item.reason}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {item.items.slice(0, 2).map(i => `${i.quantity}x ${i.name}${i.variation ? ` (${i.variation})` : ''}`).join(', ')}
+                        {item.items.length > 2 && ` +${item.items.length - 2}`}
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground mt-1 pt-1 border-t border-muted">
+                        <span>Cancelado: {item.cancelledAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span>Confirmado: {item.confirmedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </CollapsibleContent>
+      </Collapsible>
+    );
   };
 
   const handleStartPreparation = async (orderId: string) => {
@@ -723,7 +832,10 @@ export default function KDS() {
           </div>
         )}
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 relative">
+          {/* Cancellation History Panel */}
+          <CancellationHistoryPanel />
+          
           <Button
             variant="outline"
             size="sm"
