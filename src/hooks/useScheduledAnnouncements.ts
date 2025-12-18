@@ -114,9 +114,16 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
     mutationFn: async (data: Omit<ScheduledAnnouncement, 'id' | 'created_at' | 'last_played_at' | 'created_by'>) => {
       const { data: { user } } = await supabase.auth.getUser();
       
+      // Convert empty strings to null for date fields
+      const cleanData = {
+        ...data,
+        scheduled_date: data.scheduled_date || null,
+        created_by: user?.id
+      };
+      
       const { data: result, error } = await supabase
         .from('scheduled_announcements')
-        .insert({ ...data, created_by: user?.id })
+        .insert(cleanData)
         .select()
         .single();
       
@@ -134,9 +141,15 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
 
   const updateAnnouncement = useMutation({
     mutationFn: async ({ id, ...data }: Partial<ScheduledAnnouncement> & { id: string }) => {
+      // Convert empty strings to null for date fields
+      const cleanData = {
+        ...data,
+        scheduled_date: data.scheduled_date === '' ? null : data.scheduled_date
+      };
+      
       const { error } = await supabase
         .from('scheduled_announcements')
-        .update(data)
+        .update(cleanData)
         .eq('id', id);
       
       if (error) throw error;
