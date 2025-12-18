@@ -15,7 +15,9 @@ const DUPLICATE_KITCHEN_TICKET_KEY = 'pdv_duplicate_kitchen_ticket';
 const ASCII_MODE_KEY = 'pdv_ascii_mode';
 const CHAR_SPACING_KEY = 'pdv_char_spacing';
 const TOP_MARGIN_KEY = 'pdv_top_margin';
-const BOTTOM_MARGIN_KEY = 'pdv_bottom_margin';
+const BOTTOM_MARGIN_KITCHEN_KEY = 'pdv_bottom_margin_kitchen';
+const BOTTOM_MARGIN_RECEIPT_KEY = 'pdv_bottom_margin_receipt';
+const RESTAURANT_LOGO_URL_KEY = 'pdv_restaurant_logo_url';
 
 // General print settings keys
 const PRINT_SHOW_ITEM_NUMBER_KEY = 'pdv_print_show_item_number';
@@ -111,9 +113,19 @@ export function useOrderSettings() {
     return parseInt(localStorage.getItem(TOP_MARGIN_KEY) || '0');
   });
 
-  const [bottomMargin, setBottomMargin] = useState<number>(() => {
+  const [bottomMarginKitchen, setBottomMarginKitchen] = useState<number>(() => {
     if (typeof window === 'undefined') return 3;
-    return parseInt(localStorage.getItem(BOTTOM_MARGIN_KEY) || '3');
+    return parseInt(localStorage.getItem(BOTTOM_MARGIN_KITCHEN_KEY) || '3');
+  });
+
+  const [bottomMarginReceipt, setBottomMarginReceipt] = useState<number>(() => {
+    if (typeof window === 'undefined') return 4;
+    return parseInt(localStorage.getItem(BOTTOM_MARGIN_RECEIPT_KEY) || '4');
+  });
+
+  const [restaurantLogoUrl, setRestaurantLogoUrl] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem(RESTAURANT_LOGO_URL_KEY) || '';
   });
 
   // General print settings
@@ -257,9 +269,19 @@ export function useOrderSettings() {
     setTopMargin(value);
   };
 
-  const updateBottomMargin = (value: number) => {
-    localStorage.setItem(BOTTOM_MARGIN_KEY, String(value));
-    setBottomMargin(value);
+  const updateBottomMarginKitchen = (value: number) => {
+    localStorage.setItem(BOTTOM_MARGIN_KITCHEN_KEY, String(value));
+    setBottomMarginKitchen(value);
+  };
+
+  const updateBottomMarginReceipt = (value: number) => {
+    localStorage.setItem(BOTTOM_MARGIN_RECEIPT_KEY, String(value));
+    setBottomMarginReceipt(value);
+  };
+
+  const updateRestaurantLogoUrl = (value: string) => {
+    localStorage.setItem(RESTAURANT_LOGO_URL_KEY, value);
+    setRestaurantLogoUrl(value);
   };
 
   // General print settings toggles
@@ -372,8 +394,14 @@ export function useOrderSettings() {
       if (e.key === TOP_MARGIN_KEY) {
         setTopMargin(parseInt(e.newValue || '0'));
       }
-      if (e.key === BOTTOM_MARGIN_KEY) {
-        setBottomMargin(parseInt(e.newValue || '3'));
+      if (e.key === BOTTOM_MARGIN_KITCHEN_KEY) {
+        setBottomMarginKitchen(parseInt(e.newValue || '3'));
+      }
+      if (e.key === BOTTOM_MARGIN_RECEIPT_KEY) {
+        setBottomMarginReceipt(parseInt(e.newValue || '4'));
+      }
+      if (e.key === RESTAURANT_LOGO_URL_KEY) {
+        setRestaurantLogoUrl(e.newValue || '');
       }
       // General print settings
       if (e.key === PRINT_SHOW_ITEM_NUMBER_KEY) {
@@ -449,8 +477,12 @@ export function useOrderSettings() {
     updateCharSpacing,
     topMargin,
     updateTopMargin,
-    bottomMargin,
-    updateBottomMargin,
+    bottomMarginKitchen,
+    updateBottomMarginKitchen,
+    bottomMarginReceipt,
+    updateBottomMarginReceipt,
+    restaurantLogoUrl,
+    updateRestaurantLogoUrl,
     // General print settings
     showItemNumber,
     toggleShowItemNumber,
