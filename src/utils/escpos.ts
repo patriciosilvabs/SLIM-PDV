@@ -306,6 +306,7 @@ export interface CustomerReceiptData {
   createdAt: string;
   customMessage?: string;
   qrCodeContent?: string;
+  receiptType?: 'summary' | 'fiscal'; // Type of receipt: summary (before payment) or fiscal (after payment)
 }
 
 export function buildCustomerReceipt(
@@ -358,6 +359,32 @@ export function buildCustomerReceipt(
 
   receipt += TEXT_NORMAL;
   receipt += DASHED_LINE(width);
+
+  // Receipt type banner (RESUMO DA CONTA or CUPOM FISCAL)
+  if (data.receiptType) {
+    receipt += ALIGN_CENTER;
+    receipt += TEXT_BOLD;
+    
+    if (data.receiptType === 'summary') {
+      // Inverted text effect (white on black) for "RESUMO DA CONTA"
+      receipt += GS + 'B' + '\x01'; // Invert ON
+      receipt += ' RESUMO DA CONTA ' + LF;
+      receipt += GS + 'B' + '\x00'; // Invert OFF
+      receipt += TEXT_BOLD_OFF;
+      receipt += fontCmd;
+      receipt += processText('* Este não é um documento fiscal *') + LF;
+    } else {
+      // CUPOM FISCAL
+      receipt += TEXT_DOUBLE_SIZE;
+      receipt += 'CUPOM FISCAL' + LF;
+      receipt += TEXT_BOLD_OFF;
+      receipt += fontCmd;
+      receipt += processText('* Documento sem valor fiscal *') + LF;
+    }
+    
+    receipt += TEXT_NORMAL;
+    receipt += DASHED_LINE(width);
+  }
 
   // Order info
   receipt += ALIGN_LEFT;
@@ -468,7 +495,7 @@ export function buildCustomerReceipt(
     receipt += ALIGN_LEFT;
   }
 
-  // Footer with custom message
+  // Footer with custom message or receipt-type-specific message
   receipt += TEXT_NORMAL;
   receipt += DASHED_LINE(width);
   receipt += ALIGN_CENTER;
@@ -480,7 +507,11 @@ export function buildCustomerReceipt(
     for (const line of messageLines) {
       receipt += line + LF;
     }
+  } else if (data.receiptType === 'summary') {
+    // For bill summary (before payment)
+    receipt += processText('Aguardamos seu pagamento!') + LF;
   } else {
+    // For fiscal receipt (after payment) or default
     receipt += processText('Obrigado pela preferência!') + LF;
     receipt += TEXT_BOLD_OFF;
     receipt += 'Volte sempre!' + LF;
