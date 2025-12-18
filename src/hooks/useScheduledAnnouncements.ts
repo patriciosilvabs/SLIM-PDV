@@ -168,11 +168,27 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
     if (!user) throw new Error('Usuário não autenticado');
 
     const safeName = sanitizeFileName(name);
-    const fileName = `${user.id}/${safeName}_${Date.now()}.webm`;
+    
+    // Detectar tipo de arquivo e extensão apropriada
+    const mimeType = blob.type || 'audio/webm';
+    const extensionMap: Record<string, string> = {
+      'audio/webm': 'webm',
+      'audio/mpeg': 'mp3',
+      'audio/mp3': 'mp3',
+      'audio/wav': 'wav',
+      'audio/wave': 'wav',
+      'audio/ogg': 'ogg',
+      'audio/x-wav': 'wav',
+      'audio/x-m4a': 'm4a',
+      'audio/mp4': 'm4a',
+    };
+    const extension = extensionMap[mimeType] || 'webm';
+    
+    const fileName = `${user.id}/${safeName}_${Date.now()}.${extension}`;
 
     const { error: uploadError } = await supabase.storage
       .from('announcements')
-      .upload(fileName, blob, { contentType: 'audio/webm' });
+      .upload(fileName, blob, { contentType: mimeType });
 
     if (uploadError) throw uploadError;
 
