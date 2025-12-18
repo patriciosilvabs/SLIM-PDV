@@ -13,7 +13,7 @@ import {
 } from '@/utils/escpos';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { PrintSector } from '@/hooks/usePrintSectors';
-import { imageUrlToBase64Cached, extractBase64Data, resizeImage } from '@/utils/imageToBase64';
+import { imageUrlToBase64Cached, extractBase64Data, resizeImage, convertToGrayscale, convertToDithered } from '@/utils/imageToBase64';
 
 // Interface for items with sector info for sector-based printing
 export interface SectorPrintItem {
@@ -260,7 +260,16 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
         
         if (logoBase64) {
           // Resize image to configured max width before sending to printer
-          const resizedLogo = await resizeImage(logoBase64, logoMaxWidth);
+          let resizedLogo = await resizeImage(logoBase64, logoMaxWidth);
+          
+          // Apply color mode conversion (grayscale or dithering)
+          const currentLogoPrintMode = localStorage.getItem('pdv_logo_print_mode') || 'original';
+          if (currentLogoPrintMode === 'grayscale') {
+            resizedLogo = await convertToGrayscale(resizedLogo);
+          } else if (currentLogoPrintMode === 'dithered') {
+            resizedLogo = await convertToDithered(resizedLogo);
+          }
+          
           const pureBase64 = extractBase64Data(resizedLogo);
           
           // Build print array: init + center + logo image + spacing + receipt text

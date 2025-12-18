@@ -62,6 +62,117 @@ export async function resizeImage(dataUrl: string, maxWidth: number): Promise<st
 }
 
 /**
+ * Converte imagem para escala de cinza
+ */
+export async function convertToGrayscale(dataUrl: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+      
+      ctx.drawImage(img, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      
+      for (let i = 0; i < data.length; i += 4) {
+        // Luminosity method for better grayscale conversion
+        const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+        data[i] = gray;     // Red
+        data[i + 1] = gray; // Green
+        data[i + 2] = gray; // Blue
+        // Alpha channel remains unchanged
+      }
+      
+      ctx.putImageData(imageData, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error('Failed to load image for grayscale conversion'));
+    img.src = dataUrl;
+  });
+}
+
+/**
+ * Converte imagem para preto e branco usando Floyd-Steinberg dithering
+ * Melhor qualidade para impressoras térmicas
+ */
+export async function convertToDithered(dataUrl: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+      
+      ctx.drawImage(img, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      const width = canvas.width;
+      const height = canvas.height;
+      
+      // Convert to grayscale array for dithering
+      const gray: number[] = [];
+      for (let i = 0; i < data.length; i += 4) {
+        gray.push(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+      }
+      
+      // Floyd-Steinberg dithering
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = y * width + x;
+          const oldPixel = gray[idx];
+          const newPixel = oldPixel < 128 ? 0 : 255;
+          gray[idx] = newPixel;
+          const error = oldPixel - newPixel;
+          
+          // Distribute error to neighboring pixels
+          if (x + 1 < width) {
+            gray[idx + 1] += error * 7 / 16;
+          }
+          if (y + 1 < height) {
+            if (x > 0) {
+              gray[(y + 1) * width + (x - 1)] += error * 3 / 16;
+            }
+            gray[(y + 1) * width + x] += error * 5 / 16;
+            if (x + 1 < width) {
+              gray[(y + 1) * width + (x + 1)] += error * 1 / 16;
+            }
+          }
+        }
+      }
+      
+      // Apply dithered values back to image data
+      for (let i = 0; i < gray.length; i++) {
+        const val = Math.max(0, Math.min(255, gray[i]));
+        const dataIdx = i * 4;
+        data[dataIdx] = val;     // Red
+        data[dataIdx + 1] = val; // Green
+        data[dataIdx + 2] = val; // Blue
+        // Alpha remains unchanged
+      }
+      
+      ctx.putImageData(imageData, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error('Failed to load image for dithering'));
+    img.src = dataUrl;
+  });
+}
+
+/**
  * Fetches an image from URL and converts it to base64 data URI
  * Used for printing images via ESC/POS on thermal printers
  */

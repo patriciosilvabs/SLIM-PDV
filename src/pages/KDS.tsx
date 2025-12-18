@@ -57,7 +57,7 @@ export default function KDS() {
       return 'all';
     }
   });
-  const { playKdsNewOrderSound, playMaxWaitAlertSound, settings } = useAudioNotification();
+  const { playKdsNewOrderSound, playMaxWaitAlertSound, playOrderCancelledSound, settings } = useAudioNotification();
   const { settings: kdsSettings } = useKdsSettings();
   const notifiedOrdersRef = useRef<Set<string>>(new Set());
   const previousOrdersRef = useRef<Order[]>([]);
@@ -331,7 +331,7 @@ export default function KDS() {
     };
   }, [queryClient]);
 
-  // Sound notification for new orders + visual sync notifications
+  // Sound notification for new orders + visual sync notifications + cancellation alerts
   useEffect(() => {
     // Detect status changes from other screens
     if (previousOrdersRef.current.length > 0) {
@@ -342,10 +342,21 @@ export default function KDS() {
             pending: 'Novo',
             preparing: 'Em Preparo',
             ready: 'Pronto',
-            delivered: 'Entregue'
+            delivered: 'Entregue',
+            cancelled: 'Cancelado'
           };
-          // Only notify if we didn't trigger this change ourselves
-          if (!notifiedOrdersRef.current.has(`${order.id}-${order.status}`)) {
+          
+          // Check for cancellation and play sound
+          if (order.status === 'cancelled' && prevOrder.status !== 'cancelled') {
+            if (soundEnabled && settings.enabled) {
+              playOrderCancelledSound();
+            }
+            toast.error(`🚫 Pedido #${order.id.slice(-4).toUpperCase()} CANCELADO!`, { 
+              description: (order as any).cancellation_reason || 'Motivo não informado',
+              duration: 10000 
+            });
+          } else if (!notifiedOrdersRef.current.has(`${order.id}-${order.status}`)) {
+            // Only notify for non-cancellation status changes we didn't trigger
             toast.info(`Pedido #${order.id.slice(-4).toUpperCase()} → ${statusLabels[order.status] || order.status}`);
           }
         }
@@ -367,7 +378,7 @@ export default function KDS() {
     }
 
     previousOrdersRef.current = [...orders];
-  }, [orders, soundEnabled, settings.enabled, playKdsNewOrderSound, kdsSettings.showPendingColumn]);
+  }, [orders, soundEnabled, settings.enabled, playKdsNewOrderSound, playOrderCancelledSound, kdsSettings.showPendingColumn]);
 
   const handleStartPreparation = async (orderId: string) => {
     try {

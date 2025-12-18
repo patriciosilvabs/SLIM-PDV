@@ -608,6 +608,9 @@ export type Database = {
       }
       orders: {
         Row: {
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
           created_at: string | null
           created_by: string | null
           customer_address: string | null
@@ -624,6 +627,9 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           created_at?: string | null
           created_by?: string | null
           customer_address?: string | null
@@ -640,6 +646,9 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           created_at?: string | null
           created_by?: string | null
           customer_address?: string | null
