@@ -60,6 +60,7 @@ const paymentMethodLabels: Record<string, string> = {
 };
 
 export default function Reports() {
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const [activeTab, setActiveTab] = useState('sales');
   const [dateRange, setDateRange] = useState<DateRange>('today');
@@ -67,10 +68,6 @@ export default function Reports() {
   const [customEnd, setCustomEnd] = useState<Date>();
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
   const [reasonFilter, setReasonFilter] = useState('');
-
-  if (!permissionsLoading && !hasPermission('reports_view')) {
-    return <AccessDenied permission="reports_view" />;
-  }
 
   const { data: employees } = useEmployees();
   const employeeId = selectedEmployee === 'all' ? undefined : selectedEmployee;
@@ -90,6 +87,11 @@ export default function Reports() {
     reason: reasonFilter || undefined,
   });
   const cancellationSummary = useCancellationSummary(cancellations);
+
+  // Permission check AFTER all hooks
+  if (!permissionsLoading && !hasPermission('reports_view')) {
+    return <AccessDenied permission="reports_view" />;
+  }
 
   // Prepare peak hours heat map data
   const peakHoursGrid = () => {

@@ -117,6 +117,7 @@ const KPICard = ({ title, value, variation, format: formatType, icon, loading }:
 };
 
 export default function Performance() {
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const [dateRange, setDateRange] = useState<DateRange>({
     start: startOfDay(new Date()),
@@ -130,16 +131,17 @@ export default function Performance() {
   const [segmentBy, setSegmentBy] = useState<'payment' | 'orderType'>('payment');
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
-  if (!permissionsLoading && !hasPermission('performance_view')) {
-    return <AccessDenied permission="performance_view" />;
-  }
-
-  // Queries
+  // Queries - must be before conditional return
   const { data: kpis, isLoading: kpisLoading } = usePerformanceKPIs(dateRange, filters);
   const { data: hourlyData, isLoading: hourlyLoading } = useHourlyRevenue(dateRange, groupBy);
   const { data: revenueDetails, isLoading: detailsLoading } = useRevenueDetails(dateRange);
   const { data: segments, isLoading: segmentsLoading } = useSegmentAnalysis(dateRange, segmentBy);
   const { data: employees, isLoading: employeesLoading } = useEmployeePerformance(dateRange);
+
+  // Permission check AFTER all hooks
+  if (!permissionsLoading && !hasPermission('performance_view')) {
+    return <AccessDenied permission="performance_view" />;
+  }
 
   const handleDatePreset = (days: number) => {
     const end = endOfDay(new Date());

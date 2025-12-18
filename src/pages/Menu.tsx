@@ -91,10 +91,7 @@ export default function Menu() {
   
   const canManageMenu = hasPermission('menu_manage');
   
-  if (!permissionsLoading && !hasPermission('menu_view')) {
-    return <AccessDenied permission="menu_view" />;
-  }
-  
+  // ALL STATE HOOKS MUST BE BEFORE CONDITIONAL RETURN
   const [mainTab, setMainTab] = useState('products');
   const [search, setSearch] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
@@ -165,6 +162,11 @@ export default function Menu() {
       fetchCounts();
     }
   }, [complementGroups]);
+
+  // Permission check AFTER all hooks
+  if (!permissionsLoading && !hasPermission('menu_view')) {
+    return <AccessDenied permission="menu_view" />;
+  }
 
   // Filter products by category and search
   const filteredProducts = products?.filter(p => {

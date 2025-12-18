@@ -51,6 +51,7 @@ const formatTimeDisplay = (minutes: number): string => {
 };
 
 export default function KDS() {
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const { data: orders = [], isLoading, refetch } = useOrders();
   const { updateOrder, updateOrderItem } = useOrderMutations();
@@ -82,11 +83,12 @@ export default function KDS() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   
   const canChangeStatus = hasPermission('kds_change_status');
+  const lastMetricUpdateRef = useRef<string>('');
 
+  // Permission check AFTER all hooks
   if (!permissionsLoading && !hasPermission('kds_view')) {
     return <AccessDenied permission="kds_view" />;
   }
-  const lastMetricUpdateRef = useRef<string>('');
 
   // Calculate order counts for condition-based announcements
   const getWaitTimeMinutes = (createdAt: string | null): number => {
