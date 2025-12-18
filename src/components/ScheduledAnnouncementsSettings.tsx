@@ -6,14 +6,14 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { AudioRecorder } from '@/components/AudioRecorder';
 import { useScheduledAnnouncements, ScheduledAnnouncement } from '@/hooks/useScheduledAnnouncements';
 import { useVoiceTextHistory } from '@/hooks/useVoiceTextHistory';
-import { useWebSpeechTTS, DEFAULT_VOICES, getLanguageFlag } from '@/hooks/useWebSpeechTTS';
+import { useOpenAITTS, OPENAI_VOICES } from '@/hooks/useOpenAITTS';
 import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2, Activity, AlertTriangle, Timer, Sparkles, RefreshCw, Check, History, X, Square } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
@@ -63,35 +63,25 @@ export function ScheduledAnnouncementsSettings() {
 
   const { getHistory, addToHistory, clearHistory } = useVoiceTextHistory();
   const { 
-    voices, 
-    ptVoices, 
-    enVoices, 
-    esVoices, 
-    frVoices, 
-    deVoices, 
-    itVoices,
-    jaVoices,
-    zhVoices,
-    koVoices,
-    ruVoices,
-    otherVoices,
-    isSupported, 
-    isSpeaking, 
-    speak, 
-    cancelSpeech 
-  } = useWebSpeechTTS();
+    voices: openAIVoices,
+    isLoading: isGeneratingVoice,
+    isPlaying,
+    generateAudio,
+    previewAudio,
+    stopAudio
+  } = useOpenAITTS();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState<ScheduledAnnouncement | null>(null);
   const [audioSource, setAudioSource] = useState<'record' | 'upload' | 'generate' | null>(null);
   const [voiceText, setVoiceText] = useState('');
-  const [isGeneratingVoice, setIsGeneratingVoice] = useState(false);
-  const [selectedVoiceURI, setSelectedVoiceURI] = useState('');
+  const [selectedVoice, setSelectedVoice] = useState('nova');
   const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   
+  // States for upload preview
   // States for upload preview
   const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string | null>(null);
   const [uploadPreviewBlob, setUploadPreviewBlob] = useState<Blob | null>(null);
@@ -116,32 +106,7 @@ export function ScheduledAnnouncementsSettings() {
   });
 
   const history = getHistory();
-  
-  // Use available voices grouped by language
-  const voiceGroups = [
-    { key: 'pt', label: '🇧🇷 Português', voices: ptVoices.length > 0 ? ptVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('pt')) },
-    { key: 'en', label: '🇺🇸 English', voices: enVoices.length > 0 ? enVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('en')) },
-    { key: 'es', label: '🇪🇸 Español', voices: esVoices.length > 0 ? esVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('es')) },
-    { key: 'fr', label: '🇫🇷 Français', voices: frVoices.length > 0 ? frVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('fr')) },
-    { key: 'de', label: '🇩🇪 Deutsch', voices: deVoices.length > 0 ? deVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('de')) },
-    { key: 'it', label: '🇮🇹 Italiano', voices: itVoices.length > 0 ? itVoices : DEFAULT_VOICES.filter(v => v.lang.startsWith('it')) },
-    { key: 'ja', label: '🇯🇵 日本語', voices: jaVoices },
-    { key: 'zh', label: '🇨🇳 中文', voices: zhVoices },
-    { key: 'ko', label: '🇰🇷 한국어', voices: koVoices },
-    { key: 'ru', label: '🇷🇺 Русский', voices: ruVoices },
-    { key: 'other', label: '🌐 Outros', voices: otherVoices },
-  ].filter(g => g.voices.length > 0);
-
-  const allVoices = voiceGroups.flatMap(g => g.voices);
-  
-  // Set default voice when voices load
-  useEffect(() => {
-    if (!selectedVoiceURI && allVoices.length > 0) {
-      setSelectedVoiceURI(allVoices[0].voiceURI);
-    }
-  }, [allVoices, selectedVoiceURI]);
-
-  const selectedVoice = allVoices.find(v => v.voiceURI === selectedVoiceURI) || allVoices[0];
+  const currentVoiceInfo = OPENAI_VOICES.find(v => v.id === selectedVoice);
 
   const resetForm = () => {
     setForm({
@@ -267,16 +232,16 @@ export function ScheduledAnnouncementsSettings() {
     }
   };
 
-  const handlePreviewVoice = () => {
+  const handlePreviewVoice = async () => {
     if (!voiceText.trim()) {
       toast.error('Digite o texto para ouvir');
       return;
     }
 
-    if (isSpeaking) {
-      cancelSpeech();
+    if (isPlaying) {
+      stopAudio();
     } else {
-      speak(voiceText, selectedVoiceURI);
+      await previewAudio(voiceText, selectedVoice);
     }
   };
 
@@ -290,11 +255,6 @@ export function ScheduledAnnouncementsSettings() {
       return;
     }
 
-    if (!isSupported) {
-      toast.error('Síntese de voz não suportada neste navegador');
-      return;
-    }
-
     // Clear previous preview
     if (previewAudioUrl) {
       URL.revokeObjectURL(previewAudioUrl);
@@ -302,63 +262,12 @@ export function ScheduledAnnouncementsSettings() {
       setPreviewBlob(null);
     }
 
-    setIsGeneratingVoice(true);
-    try {
-      // Use MediaRecorder to capture system audio
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      const chunks: BlobPart[] = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-
-      const recordingPromise = new Promise<Blob>((resolve, reject) => {
-        mediaRecorder.onstop = () => {
-          stream.getTracks().forEach(track => track.stop());
-          const blob = new Blob(chunks, { type: 'audio/webm' });
-          resolve(blob);
-        };
-        mediaRecorder.onerror = () => reject(new Error('Erro na gravação'));
-      });
-
-      // Start recording before speech
-      mediaRecorder.start();
-
-      // Create utterance
-      const utterance = new SpeechSynthesisUtterance(voiceText);
-      if (selectedVoiceURI) {
-        const availableVoices = window.speechSynthesis.getVoices();
-        const voice = availableVoices.find(v => v.voiceURI === selectedVoiceURI);
-        if (voice) utterance.voice = voice;
-      }
-
-      // Wait for speech to end
-      await new Promise<void>((resolve, reject) => {
-        utterance.onend = () => {
-          setTimeout(() => {
-            mediaRecorder.stop();
-            resolve();
-          }, 300);
-        };
-        utterance.onerror = () => {
-          mediaRecorder.stop();
-          reject(new Error('Erro na síntese'));
-        };
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(utterance);
-      });
-
-      const audioBlob = await recordingPromise;
-      const tempUrl = URL.createObjectURL(audioBlob);
+    const blob = await generateAudio(voiceText, selectedVoice);
+    if (blob) {
+      const tempUrl = URL.createObjectURL(blob);
       setPreviewAudioUrl(tempUrl);
-      setPreviewBlob(audioBlob);
-      toast.success('Áudio gravado! Ouça o preview.');
-    } catch (error: any) {
-      console.error('Erro ao gerar voz:', error);
-      toast.error('Erro ao gerar áudio. Permita acesso ao microfone.');
-    } finally {
-      setIsGeneratingVoice(false);
+      setPreviewBlob(blob);
+      toast.success('Áudio gerado! Ouça o preview.');
     }
   };
 
@@ -367,7 +276,7 @@ export function ScheduledAnnouncementsSettings() {
     
     try {
       // Save to history
-      addToHistory(voiceText, selectedVoiceURI, selectedVoice?.name || 'Voz');
+      addToHistory(voiceText, selectedVoice, currentVoiceInfo?.name || 'Voz OpenAI');
       
       const url = await uploadRecording(previewBlob, form.name);
       setForm(prev => ({ ...prev, file_path: url }));
@@ -640,34 +549,26 @@ export function ScheduledAnnouncementsSettings() {
                     <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
                       <div className="flex items-center gap-2 text-sm font-medium">
                         <Sparkles className="h-4 w-4 text-primary" />
-                        Gerar Áudio com Voz Sintetizada
+                        Gerar Áudio com IA (OpenAI)
                       </div>
-                      
-                      {!isSupported && (
-                        <p className="text-xs text-destructive">
-                          Síntese de voz não suportada neste navegador.
-                        </p>
-                      )}
                       
                       {/* Voice Selection */}
                       <div className="space-y-2">
-                        <Label className="text-xs">Voz ({allVoices.length} disponíveis)</Label>
-                        <Select value={selectedVoiceURI} onValueChange={setSelectedVoiceURI}>
+                        <Label className="text-xs">Voz Natural</Label>
+                        <Select value={selectedVoice} onValueChange={setSelectedVoice}>
                           <SelectTrigger>
                             <SelectValue>
-                              {selectedVoice ? `${getLanguageFlag(selectedVoice.lang)} ${selectedVoice.name}` : 'Selecione uma voz'}
+                              {currentVoiceInfo ? `${currentVoiceInfo.name} - ${currentVoiceInfo.description}` : 'Selecione uma voz'}
                             </SelectValue>
                           </SelectTrigger>
-                          <SelectContent className="max-h-80">
-                            {voiceGroups.map(group => (
-                              <SelectGroup key={group.key}>
-                                <SelectLabel>{group.label}</SelectLabel>
-                                {group.voices.map(voice => (
-                                  <SelectItem key={voice.voiceURI} value={voice.voiceURI}>
-                                    {getLanguageFlag(voice.lang)} {voice.name} {voice.localService ? '(local)' : ''}
-                                  </SelectItem>
-                                ))}
-                              </SelectGroup>
+                          <SelectContent>
+                            {OPENAI_VOICES.map(voice => (
+                              <SelectItem key={voice.id} value={voice.id}>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{voice.name}</span>
+                                  <span className="text-xs text-muted-foreground">{voice.description}</span>
+                                </div>
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -678,20 +579,20 @@ export function ScheduledAnnouncementsSettings() {
                         value={voiceText}
                         onChange={(e) => setVoiceText(e.target.value)}
                         rows={3}
-                        maxLength={500}
+                        maxLength={4096}
                       />
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>{voiceText.length}/500 caracteres</span>
+                        <span>{voiceText.length}/4096 caracteres</span>
                         <div className="flex items-center gap-2">
                           <Button
                             variant="ghost"
                             size="sm"
                             className="h-6 gap-1 text-xs"
                             onClick={handlePreviewVoice}
-                            disabled={!voiceText.trim() || !isSupported}
+                            disabled={!voiceText.trim() || isGeneratingVoice}
                           >
-                            {isSpeaking ? <Square className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-                            {isSpeaking ? 'Parar' : 'Ouvir'}
+                            {isPlaying ? <Square className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                            {isPlaying ? 'Parar' : isGeneratingVoice ? 'Gerando...' : 'Ouvir'}
                           </Button>
                           {history.length > 0 && (
                             <Button
@@ -731,7 +632,7 @@ export function ScheduledAnnouncementsSettings() {
                               className="flex items-start gap-2 p-2 rounded border hover:bg-muted/50 cursor-pointer"
                               onClick={() => {
                                 setVoiceText(item.text);
-                                if (item.voiceId) setSelectedVoiceURI(item.voiceId);
+                                if (item.voiceId) setSelectedVoice(item.voiceId);
                                 setShowHistory(false);
                               }}
                             >
@@ -751,7 +652,7 @@ export function ScheduledAnnouncementsSettings() {
                         <div className="p-3 border rounded-lg bg-green-500/10 border-green-500/30 space-y-2">
                           <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400">
                             <Volume2 className="h-4 w-4" />
-                            Preview Gravado
+                            Preview Gerado
                           </div>
                           <div className="flex gap-2">
                             <Button
@@ -784,17 +685,17 @@ export function ScheduledAnnouncementsSettings() {
                           className="flex-1 gap-2"
                           variant={previewAudioUrl ? 'outline' : 'default'}
                           onClick={handleGenerateVoice}
-                          disabled={isGeneratingVoice || !voiceText.trim() || !form.name.trim() || !isSupported}
+                          disabled={isGeneratingVoice || !voiceText.trim() || !form.name.trim()}
                         >
                           {isGeneratingVoice ? (
                             <>
                               <RefreshCw className="h-4 w-4 animate-spin" />
-                              Gravando...
+                              Gerando com IA...
                             </>
                           ) : (
                             <>
                               <Sparkles className="h-4 w-4" />
-                              Gravar com Voz
+                              Gerar com Voz Natural
                             </>
                           )}
                         </Button>
@@ -804,27 +705,11 @@ export function ScheduledAnnouncementsSettings() {
                       </div>
                       
                       <p className="text-xs text-muted-foreground">
-                        Usa a síntese de voz do navegador. Requer permissão de microfone para gravar.
+                        Usa OpenAI TTS para vozes naturais e expressivas. Suporta português.
                       </p>
                     </div>
                   )}
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <Label>Áudio</Label>
-                  <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted/30">
-                    <Volume2 className="h-4 w-4 text-primary" />
-                    <span className="flex-1 text-sm truncate">{form.file_path.split('/').pop()}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        const audio = new Audio(form.file_path);
-                        audio.play();
-                      }}
-                    >
-                      <Play className="h-4 w-4" />
-                    </Button>
                     <Button
                       variant="ghost"
                       size="sm"
