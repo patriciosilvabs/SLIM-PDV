@@ -27,7 +27,7 @@ import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsMo
 import { CancelOrderDialog } from '@/components/order/CancelOrderDialog';
 import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus, ArrowRightLeft, Edit, XCircle, Printer, RotateCcw, Ban, ArrowRight } from 'lucide-react';
 import { printKitchenOrderTicket } from '@/components/kitchen/KitchenOrderTicket';
-import { printCustomerReceipt } from '@/components/receipt/CustomerReceipt';
+import { printCustomerReceipt, printPartialPaymentReceipt } from '@/components/receipt/CustomerReceipt';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
@@ -421,8 +421,9 @@ export default function Tables() {
     try {
       await updateOrder.mutateAsync({ 
         id: orderId, 
-        status: 'delivered' 
-      });
+        status: 'delivered',
+        delivered_at: new Date().toISOString()
+      } as any);
       toast.success('Pedido marcado como entregue!', {
         description: 'O pedido foi entregue na mesa.',
       });
@@ -1053,6 +1054,23 @@ export default function Tables() {
         is_partial: true,
       });
 
+      // Print partial payment receipt
+      try {
+        await printPartialPaymentReceipt({
+          orderTotal: finalTotal,
+          paymentAmount: amount,
+          paymentMethod: selectedPaymentMethod,
+          existingPayments: existingPayments || [],
+          tableNumber: selectedTable?.number,
+          customerName: selectedOrder.customer_name || undefined,
+          orderId: selectedOrder.id,
+        }, printer);
+        toast.success('Pagamento parcial registrado e comprovante impresso!');
+      } catch (printError) {
+        console.error('Error printing partial payment receipt:', printError);
+        toast.success('Pagamento parcial registrado!');
+      }
+
       setPaymentModalOpen(false);
       setPaymentAmount('');
       setPaymentObservation('');
@@ -1322,6 +1340,12 @@ export default function Tables() {
                             <div className="flex items-center justify-between">
                               <span className="opacity-70">Pronto às:</span>
                               <span>{format(new Date(selectedOrder.ready_at), 'HH:mm', { locale: ptBR })}</span>
+                            </div>
+                          )}
+                          {selectedOrder.delivered_at && (
+                            <div className="flex items-center justify-between">
+                              <span className="opacity-70">Entregue às:</span>
+                              <span>{format(new Date(selectedOrder.delivered_at), 'HH:mm', { locale: ptBR })}</span>
                             </div>
                           )}
                         </div>
