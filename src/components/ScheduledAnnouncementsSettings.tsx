@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
+import { Progress } from '@/components/ui/progress';
 import { AudioRecorder } from '@/components/AudioRecorder';
 import { useScheduledAnnouncements, ScheduledAnnouncement } from '@/hooks/useScheduledAnnouncements';
 import { useVoiceTextHistory } from '@/hooks/useVoiceTextHistory';
@@ -89,6 +90,10 @@ export function ScheduledAnnouncementsSettings() {
   // States for audio preview playback
   const [previewingAudio, setPreviewingAudio] = useState<HTMLAudioElement | null>(null);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+  const [audioProgress, setAudioProgress] = useState(0);
+  
+  // State for date validation
+  const [showDateError, setShowDateError] = useState(false);
   
   const [form, setForm] = useState({
     name: '',
@@ -121,9 +126,15 @@ export function ScheduledAnnouncementsSettings() {
     audio.volume = form.volume;
     
     audio.onplay = () => setIsPreviewPlaying(true);
+    audio.ontimeupdate = () => {
+      if (audio.duration > 0) {
+        setAudioProgress((audio.currentTime / audio.duration) * 100);
+      }
+    };
     audio.onended = () => {
       setIsPreviewPlaying(false);
       setPreviewingAudio(null);
+      setAudioProgress(0);
     };
     audio.onpause = () => setIsPreviewPlaying(false);
     
@@ -138,6 +149,7 @@ export function ScheduledAnnouncementsSettings() {
       setPreviewingAudio(null);
     }
     setIsPreviewPlaying(false);
+    setAudioProgress(0);
   };
 
   const resetForm = () => {
@@ -165,6 +177,7 @@ export function ScheduledAnnouncementsSettings() {
     setPreviewAudioUrl(null);
     setPreviewBlob(null);
     setShowHistory(false);
+    setShowDateError(false);
     // Clear upload preview states
     if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
     setUploadPreviewUrl(null);
@@ -335,6 +348,7 @@ export function ScheduledAnnouncementsSettings() {
 
     // Validação: data obrigatória para tipo "once"
     if (form.trigger_type === 'scheduled' && form.schedule_type === 'once' && !form.scheduled_date) {
+      setShowDateError(true);
       toast.error('Selecione uma data para o agendamento único');
       return;
     }
@@ -752,50 +766,62 @@ export function ScheduledAnnouncementsSettings() {
               ) : (
                 <div className="space-y-2">
                   <Label>Áudio Atual</Label>
-                  <div className="flex items-center justify-between p-3 border rounded-lg bg-green-500/10 border-green-500/30">
-                    <div className="flex items-center gap-2">
-                      {isPreviewPlaying ? (
-                        <Volume2 className="h-4 w-4 text-green-600 animate-pulse" />
-                      ) : (
-                        <Volume2 className="h-4 w-4 text-green-600" />
-                      )}
-                      <span className="text-sm text-green-600 dark:text-green-400">
-                        {isPreviewPlaying ? 'Reproduzindo...' : 'Áudio configurado'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {isPreviewPlaying ? (
+                  <div className="space-y-2 p-3 border rounded-lg bg-green-500/10 border-green-500/30">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {isPreviewPlaying ? (
+                          <Volume2 className="h-4 w-4 text-green-600 animate-pulse" />
+                        ) : (
+                          <Volume2 className="h-4 w-4 text-green-600" />
+                        )}
+                        <span className="text-sm text-green-600 dark:text-green-400">
+                          {isPreviewPlaying ? 'Reproduzindo...' : 'Áudio configurado'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isPreviewPlaying ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            onClick={handleStopPreview}
+                          >
+                            <Square className="h-4 w-4" />
+                            Parar
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            onClick={handlePlayPreview}
+                          >
+                            <Play className="h-4 w-4" />
+                            Ouvir
+                          </Button>
+                        )}
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="gap-1"
-                          onClick={handleStopPreview}
+                          onClick={() => {
+                            handleStopPreview();
+                            setForm(prev => ({ ...prev, file_path: '' }));
+                          }}
                         >
-                          <Square className="h-4 w-4" />
-                          Parar
+                          <X className="h-4 w-4" />
                         </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1"
-                          onClick={handlePlayPreview}
-                        >
-                          <Play className="h-4 w-4" />
-                          Ouvir
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          handleStopPreview();
-                          setForm(prev => ({ ...prev, file_path: '' }));
-                        }}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
+                      </div>
                     </div>
+                    
+                    {/* Progress bar during playback */}
+                    {isPreviewPlaying && (
+                      <div className="flex items-center gap-2">
+                        <Progress value={audioProgress} className="flex-1 h-2" />
+                        <span className="text-xs text-muted-foreground min-w-[40px] text-right">
+                          {Math.floor(audioProgress)}%
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -854,12 +880,21 @@ export function ScheduledAnnouncementsSettings() {
 
                   {form.schedule_type === 'once' && (
                     <div className="space-y-2">
-                      <Label>Data</Label>
+                      <Label className={showDateError ? 'text-destructive' : ''}>
+                        Data {showDateError && <span className="text-destructive">*</span>}
+                      </Label>
                       <Input
                         type="date"
                         value={form.scheduled_date}
-                        onChange={(e) => setForm({ ...form, scheduled_date: e.target.value })}
+                        onChange={(e) => {
+                          setForm({ ...form, scheduled_date: e.target.value });
+                          if (e.target.value) setShowDateError(false);
+                        }}
+                        className={showDateError ? 'border-destructive focus-visible:ring-destructive' : ''}
                       />
+                      {showDateError && (
+                        <p className="text-xs text-destructive">Data é obrigatória para agendamento único</p>
+                      )}
                     </div>
                   )}
 
