@@ -16,7 +16,7 @@ import { useScheduledAnnouncements, ScheduledAnnouncement } from '@/hooks/useSch
 import { useVoiceTextHistory } from '@/hooks/useVoiceTextHistory';
 import { useOpenAITTS, OPENAI_VOICES } from '@/hooks/useOpenAITTS';
 import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2, Activity, AlertTriangle, Timer, Sparkles, RefreshCw, Check, History, X, Square, Pause, TriangleAlert, Loader2 } from 'lucide-react';
-import { convertWavToMp3, isWavFile, replaceFileExtension } from '@/utils/audioConverter';
+import { convertWavToMp3, isWavFile, replaceFileExtension, detectAudioFormat } from '@/utils/audioConverter';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
@@ -298,21 +298,27 @@ export function ScheduledAnnouncementsSettings() {
     let processedBlob: Blob = file;
     let processedFileName = file.name;
 
-    // If WAV file, convert to MP3 for better compatibility
-    if (isWavFile(file)) {
+    // Detect actual file format using magic bytes
+    const detectedFormat = await detectAudioFormat(file);
+    console.log('Formato detectado:', detectedFormat, 'MIME type:', file.type);
+
+    // If WAV file, try to convert to MP3 for better compatibility
+    if (detectedFormat === 'wav' || (detectedFormat === 'unknown' && await isWavFile(file))) {
       setIsConverting(true);
       try {
         toast.info('Convertendo WAV para MP3 para melhor compatibilidade...');
         processedBlob = await convertWavToMp3(file);
         processedFileName = replaceFileExtension(file.name, '.mp3');
         toast.success('Conversão concluída!');
-      } catch (error) {
-        console.error('Erro na conversão WAV para MP3:', error);
-        toast.error('Erro ao converter WAV para MP3. Tente converter manualmente.');
+      } catch (error: any) {
+        console.warn('Conversão WAV para MP3 falhou:', error.message);
+        // FALLBACK: try using the original file instead of blocking
+        toast.warning('Não foi possível converter o arquivo. Testando formato original...');
+        processedBlob = file;
+        processedFileName = file.name;
+      } finally {
         setIsConverting(false);
-        return;
       }
-      setIsConverting(false);
     }
 
     // Test if audio can be loaded before accepting
@@ -320,10 +326,15 @@ export function ScheduledAnnouncementsSettings() {
     const testAudio = new Audio(testUrl);
     
     const canPlay = await new Promise<boolean>((resolve) => {
-      testAudio.onloadedmetadata = () => resolve(true);
-      testAudio.onerror = () => resolve(false);
-      // Timeout of 5 seconds
-      setTimeout(() => resolve(false), 5000);
+      const timeout = setTimeout(() => resolve(false), 15000); // Increased to 15s for larger files
+      testAudio.onloadedmetadata = () => {
+        clearTimeout(timeout);
+        resolve(true);
+      };
+      testAudio.onerror = () => {
+        clearTimeout(timeout);
+        resolve(false);
+      };
     });
     
     if (!canPlay) {
