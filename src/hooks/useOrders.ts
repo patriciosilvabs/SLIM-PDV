@@ -58,9 +58,34 @@ export function useOrders(status?: OrderStatus[]) {
         q = q.in('status', status);
       }
       
-      const { data, error } = await q;
+      const { data: ordersData, error } = await q;
       if (error) throw error;
-      return data as Order[];
+      
+      // Fetch profiles for created_by users
+      const createdByIds = [...new Set(ordersData?.map(o => o.created_by).filter(Boolean) as string[])];
+      let profilesMap: Record<string, { name: string }> = {};
+      
+      if (createdByIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, name')
+          .in('id', createdByIds);
+        
+        if (profiles) {
+          profilesMap = profiles.reduce((acc, p) => {
+            acc[p.id] = { name: p.name };
+            return acc;
+          }, {} as Record<string, { name: string }>);
+        }
+      }
+      
+      // Merge profiles into orders
+      const ordersWithProfiles = ordersData?.map(order => ({
+        ...order,
+        created_by_profile: order.created_by ? profilesMap[order.created_by] || null : null
+      }));
+      
+      return ordersWithProfiles as Order[];
     },
   });
 
