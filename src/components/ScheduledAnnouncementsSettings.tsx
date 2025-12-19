@@ -15,7 +15,7 @@ import { AudioRecorder } from '@/components/AudioRecorder';
 import { useScheduledAnnouncements, ScheduledAnnouncement } from '@/hooks/useScheduledAnnouncements';
 import { useVoiceTextHistory } from '@/hooks/useVoiceTextHistory';
 import { useOpenAITTS, OPENAI_VOICES } from '@/hooks/useOpenAITTS';
-import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2, Activity, AlertTriangle, Timer, Sparkles, RefreshCw, Check, History, X, Square } from 'lucide-react';
+import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2, Activity, AlertTriangle, Timer, Sparkles, RefreshCw, Check, History, X, Square, Pause } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -91,6 +91,8 @@ export function ScheduledAnnouncementsSettings() {
   const [previewingAudio, setPreviewingAudio] = useState<HTMLAudioElement | null>(null);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
+  const [audioCurrentTime, setAudioCurrentTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
   
   // State for date validation
   const [showDateError, setShowDateError] = useState(false);
@@ -116,6 +118,12 @@ export function ScheduledAnnouncementsSettings() {
   const history = getHistory();
   const currentVoiceInfo = OPENAI_VOICES.find(v => v.id === selectedVoice);
 
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const handlePlayPreview = () => {
     if (previewingAudio) {
       previewingAudio.pause();
@@ -126,20 +134,33 @@ export function ScheduledAnnouncementsSettings() {
     audio.volume = form.volume;
     
     audio.onplay = () => setIsPreviewPlaying(true);
+    audio.onloadedmetadata = () => setAudioDuration(audio.duration);
     audio.ontimeupdate = () => {
       if (audio.duration > 0) {
         setAudioProgress((audio.currentTime / audio.duration) * 100);
+        setAudioCurrentTime(audio.currentTime);
       }
     };
     audio.onended = () => {
       setIsPreviewPlaying(false);
       setPreviewingAudio(null);
       setAudioProgress(0);
+      setAudioCurrentTime(0);
     };
     audio.onpause = () => setIsPreviewPlaying(false);
     
     audio.play();
     setPreviewingAudio(audio);
+  };
+
+  const handlePauseResume = () => {
+    if (!previewingAudio) return;
+    
+    if (isPreviewPlaying) {
+      previewingAudio.pause();
+    } else {
+      previewingAudio.play();
+    }
   };
 
   const handleStopPreview = () => {
@@ -150,6 +171,8 @@ export function ScheduledAnnouncementsSettings() {
     }
     setIsPreviewPlaying(false);
     setAudioProgress(0);
+    setAudioCurrentTime(0);
+    setAudioDuration(0);
   };
 
   const resetForm = () => {
@@ -775,20 +798,38 @@ export function ScheduledAnnouncementsSettings() {
                           <Volume2 className="h-4 w-4 text-green-600" />
                         )}
                         <span className="text-sm text-green-600 dark:text-green-400">
-                          {isPreviewPlaying ? 'Reproduzindo...' : 'Áudio configurado'}
+                          {previewingAudio ? (isPreviewPlaying ? 'Reproduzindo...' : 'Pausado') : 'Áudio configurado'}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        {isPreviewPlaying ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="gap-1"
-                            onClick={handleStopPreview}
-                          >
-                            <Square className="h-4 w-4" />
-                            Parar
-                          </Button>
+                        {previewingAudio ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1"
+                              onClick={handlePauseResume}
+                            >
+                              {isPreviewPlaying ? (
+                                <>
+                                  <Pause className="h-4 w-4" />
+                                  Pausar
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="h-4 w-4" />
+                                  Retomar
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={handleStopPreview}
+                            >
+                              <Square className="h-4 w-4" />
+                            </Button>
+                          </>
                         ) : (
                           <Button
                             variant="outline"
@@ -813,12 +854,15 @@ export function ScheduledAnnouncementsSettings() {
                       </div>
                     </div>
                     
-                    {/* Progress bar during playback */}
-                    {isPreviewPlaying && (
+                    {/* Progress bar with time indicator */}
+                    {previewingAudio && (
                       <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground min-w-[40px]">
+                          {formatTime(audioCurrentTime)}
+                        </span>
                         <Progress value={audioProgress} className="flex-1 h-2" />
                         <span className="text-xs text-muted-foreground min-w-[40px] text-right">
-                          {Math.floor(audioProgress)}%
+                          {formatTime(audioDuration)}
                         </span>
                       </div>
                     )}
