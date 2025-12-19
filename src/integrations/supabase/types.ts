@@ -683,6 +683,7 @@ export type Database = {
           cash_register_id: string | null
           created_at: string | null
           id: string
+          is_partial: boolean | null
           order_id: string
           payment_method: Database["public"]["Enums"]["payment_method"]
           received_by: string | null
@@ -692,6 +693,7 @@ export type Database = {
           cash_register_id?: string | null
           created_at?: string | null
           id?: string
+          is_partial?: boolean | null
           order_id: string
           payment_method: Database["public"]["Enums"]["payment_method"]
           received_by?: string | null
@@ -701,6 +703,7 @@ export type Database = {
           cash_register_id?: string | null
           created_at?: string | null
           id?: string
+          is_partial?: boolean | null
           order_id?: string
           payment_method?: Database["public"]["Enums"]["payment_method"]
           received_by?: string | null
