@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Slider } from '@/components/ui/slider';
@@ -494,6 +494,9 @@ export function ScheduledAnnouncementsSettings() {
               <DialogTitle>
                 {editingAnnouncement ? 'Editar Anúncio' : 'Novo Anúncio'}
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                Configure o nome, áudio, horário e condições do anúncio
+              </DialogDescription>
             </DialogHeader>
             
             <div className="space-y-4 pt-4">
