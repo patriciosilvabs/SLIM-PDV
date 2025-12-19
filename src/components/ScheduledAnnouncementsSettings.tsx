@@ -300,7 +300,10 @@ export function ScheduledAnnouncementsSettings() {
     
     if (!canPlay) {
       URL.revokeObjectURL(testUrl);
-      toast.error('Este arquivo de áudio não pode ser reproduzido pelo navegador. Tente converter para MP3.');
+      toast.error(
+        'Este arquivo de áudio não é compatível com o navegador. Use formato MP3 (recomendado), WebM ou OGG.',
+        { duration: 5000 }
+      );
       return;
     }
 
@@ -564,24 +567,29 @@ export function ScheduledAnnouncementsSettings() {
                       
                       {/* File selector */}
                       {!uploadPreviewUrl && (
-                        <div className="flex gap-2">
-                          <Label className="flex-1">
-                            <Button variant="outline" className="w-full gap-2" asChild>
-                              <span>
-                                <Upload className="h-4 w-4" />
-                                Selecionar Arquivo (MP3, WAV, WebM)
-                              </span>
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <Label className="flex-1">
+                              <Button variant="outline" className="w-full gap-2" asChild>
+                                <span>
+                                  <Upload className="h-4 w-4" />
+                                  Selecionar Arquivo
+                                </span>
+                              </Button>
+                              <input
+                                type="file"
+                                accept="audio/mpeg,audio/mp3,audio/webm,audio/ogg,.mp3,.webm,.ogg"
+                                className="hidden"
+                                onChange={handleFileUpload}
+                              />
+                            </Label>
+                            <Button variant="ghost" onClick={() => setAudioSource(null)}>
+                              Cancelar
                             </Button>
-                            <input
-                              type="file"
-                              accept="audio/mpeg,audio/mp3,audio/webm,audio/wav,audio/ogg,.mp3,.wav,.webm,.ogg,.m4a"
-                              className="hidden"
-                              onChange={handleFileUpload}
-                            />
-                          </Label>
-                          <Button variant="ghost" onClick={() => setAudioSource(null)}>
-                            Cancelar
-                          </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground text-center">
+                            Formatos aceitos: MP3 (recomendado), WebM, OGG
+                          </p>
                         </div>
                       )}
                       
