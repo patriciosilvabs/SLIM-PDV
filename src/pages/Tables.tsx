@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,7 +25,7 @@ import { useAudioNotification } from '@/hooks/useAudioNotification';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
 import { CancelOrderDialog } from '@/components/order/CancelOrderDialog';
-import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus, ArrowRightLeft, Edit, XCircle, Printer, RotateCcw, Ban } from 'lucide-react';
+import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus, ArrowRightLeft, Edit, XCircle, Printer, RotateCcw, Ban, ArrowRight } from 'lucide-react';
 import { printKitchenOrderTicket } from '@/components/kitchen/KitchenOrderTicket';
 import { printCustomerReceipt } from '@/components/receipt/CustomerReceipt';
 import { Switch } from '@/components/ui/switch';
@@ -867,6 +867,27 @@ export default function Tables() {
 
   const selectedOrder = selectedTable ? getTableOrder(selectedTable.id) : null;
 
+  // Fetch existing partial payments for the selected order
+  const { data: existingPayments } = useQuery({
+    queryKey: ['payments', selectedOrder?.id],
+    queryFn: async () => {
+      if (!selectedOrder?.id) return [];
+      const { data, error } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('order_id', selectedOrder.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!selectedOrder?.id,
+  });
+
+  // Calculate total already paid (from database)
+  const existingPaymentsTotal = useMemo(() => 
+    (existingPayments || []).reduce((sum, p) => sum + Number(p.amount), 0),
+    [existingPayments]
+  );
+
   // Payment calculations with discount and service charge
   const subtotal = selectedOrder?.total || 0;
   
@@ -886,10 +907,13 @@ export default function Tables() {
   
   const finalTotal = afterDiscount + serviceAmount;
   
-  const totalPaid = useMemo(() => 
+  // Total paid includes existing payments from DB + new payments in this session
+  const sessionPaid = useMemo(() => 
     registeredPayments.reduce((sum, p) => sum + p.amount, 0), 
     [registeredPayments]
   );
+  
+  const totalPaid = existingPaymentsTotal + sessionPaid;
   
   const remainingAmount = Math.max(0, finalTotal - totalPaid);
   const changeAmount = totalPaid > finalTotal ? totalPaid - finalTotal : 0;
@@ -984,7 +1008,7 @@ export default function Tables() {
     setPaymentModalOpen(true);
   };
 
-  // Confirm individual payment
+  // Confirm individual payment (adds to session list, not DB yet)
   const handleConfirmPayment = () => {
     const amount = parseFloat(paymentAmount.replace(',', '.'));
     if (isNaN(amount) || amount <= 0) {
@@ -1002,10 +1026,42 @@ export default function Tables() {
     setRegisteredPayments(updatedPayments);
     setPaymentModalOpen(false);
     
-    // Check if payment is complete
-    const newTotalPaid = updatedPayments.reduce((sum, p) => sum + p.amount, 0);
+    // Check if payment is complete (including existing payments)
+    const newSessionPaid = updatedPayments.reduce((sum, p) => sum + p.amount, 0);
+    const newTotalPaid = existingPaymentsTotal + newSessionPaid;
     if (newTotalPaid >= finalTotal) {
       setConfirmCloseModalOpen(true);
+    }
+  };
+
+  // Handle partial payment - saves to DB immediately, table stays open
+  const handlePartialPayment = async () => {
+    if (!selectedOrder || !selectedPaymentMethod) return;
+    
+    const amount = parseFloat(paymentAmount.replace(',', '.'));
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Informe um valor válido');
+      return;
+    }
+
+    try {
+      await createPayment.mutateAsync({
+        order_id: selectedOrder.id,
+        cash_register_id: openCashRegister?.id || null,
+        payment_method: selectedPaymentMethod,
+        amount: amount,
+        is_partial: true,
+      });
+
+      setPaymentModalOpen(false);
+      setPaymentAmount('');
+      setPaymentObservation('');
+      
+      // Invalidate payments query to refresh
+      queryClient.invalidateQueries({ queryKey: ['payments', selectedOrder.id] });
+    } catch (error) {
+      console.error('Error creating partial payment:', error);
+      toast.error('Erro ao registrar pagamento parcial');
     }
   };
   
@@ -1029,14 +1085,33 @@ export default function Tables() {
     if (!selectedOrder || !selectedTable) return;
     
     try {
-      // Register all payments in database
+      // Register any pending session payments in database (non-partial)
       for (const payment of registeredPayments) {
         await createPayment.mutateAsync({
           order_id: selectedOrder.id,
           cash_register_id: openCashRegister?.id || null,
           payment_method: payment.method,
           amount: payment.amount,
+          is_partial: false, // Final payment closes the table
         });
+      }
+
+      // If no session payments but we have existing partial payments, we need to close the table manually
+      if (registeredPayments.length === 0 && existingPaymentsTotal > 0) {
+        // Update order status to delivered
+        await supabase
+          .from('orders')
+          .update({ status: 'delivered' })
+          .eq('id', selectedOrder.id);
+
+        // Update table status to available
+        await supabase
+          .from('tables')
+          .update({ status: 'available' })
+          .eq('id', selectedTable.id);
+        
+        queryClient.invalidateQueries({ queryKey: ['orders'] });
+        queryClient.invalidateQueries({ queryKey: ['tables'] });
       }
 
       // Auto-print customer receipt if enabled
@@ -1116,6 +1191,7 @@ export default function Tables() {
                     const reservation = getTableReservation(table.id);
                     const isSelected = selectedTable?.id === table.id;
                     const isOrderReady = order?.status === 'ready';
+                    const isOrderDelivered = order?.status === 'delivered';
                     return (
                       <Card
                         key={table.id}
@@ -1123,7 +1199,8 @@ export default function Tables() {
                           'cursor-pointer transition-all hover:scale-105 relative',
                           statusColors[table.status],
                           isSelected && 'ring-2 ring-primary ring-offset-2',
-                          isOrderReady && 'ring-2 ring-green-500 ring-offset-2 animate-pulse'
+                          isOrderReady && 'ring-2 ring-green-500 ring-offset-2 animate-pulse',
+                          isOrderDelivered && !isOrderReady && 'ring-2 ring-blue-500 ring-offset-2'
                         )}
                         onClick={() => handleTableClick(table)}
                       >
@@ -1132,6 +1209,14 @@ export default function Tables() {
                             <Badge className="bg-green-500 text-white shadow-lg animate-bounce">
                               <Bell className="h-3 w-3 mr-1" />
                               Pronto!
+                            </Badge>
+                          </div>
+                        )}
+                        {isOrderDelivered && !isOrderReady && (
+                          <div className="absolute -top-2 -right-2 z-10">
+                            <Badge className="bg-blue-500 text-white shadow-lg">
+                              <Check className="h-3 w-3 mr-1" />
+                              Entregue
                             </Badge>
                           </div>
                         )}
@@ -1750,22 +1835,51 @@ export default function Tables() {
                           ))}
                         </div>
 
-                        {/* Registered Payments */}
+                        {/* Existing Payments from DB (partial payments already saved) */}
+                        {existingPayments && existingPayments.length > 0 && (
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-medium flex items-center gap-2">
+                              <Check className="h-4 w-4 text-green-600" />
+                              Pagamentos já registrados
+                            </h4>
+                            <div className="space-y-1">
+                              {existingPayments.map((payment: any) => (
+                                <div 
+                                  key={payment.id}
+                                  className="flex items-center justify-between p-2 bg-green-600/10 rounded text-sm border border-green-600/20"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {paymentMethodIcons[payment.payment_method as PaymentMethod]}
+                                    <span>{paymentMethodLabels[payment.payment_method as PaymentMethod]}</span>
+                                    {payment.is_partial && (
+                                      <Badge variant="outline" className="text-xs">Parcial</Badge>
+                                    )}
+                                  </div>
+                                  <span className="font-medium text-green-600">
+                                    {formatCurrency(Number(payment.amount))}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Session Payments (pending, not saved to DB yet) */}
                         {registeredPayments.length > 0 && (
                           <div className="space-y-2">
-                            <h4 className="text-sm font-medium">Pagamentos registrados</h4>
+                            <h4 className="text-sm font-medium">Pagamentos pendentes</h4>
                             <div className="space-y-1">
                               {registeredPayments.map((payment, index) => (
                                 <div 
                                   key={index}
-                                  className="flex items-center justify-between p-2 bg-green-500/10 rounded text-sm"
+                                  className="flex items-center justify-between p-2 bg-amber-500/10 rounded text-sm"
                                 >
                                   <div className="flex items-center gap-2">
                                     {paymentMethodIcons[payment.method]}
                                     <span>{paymentMethodLabels[payment.method]}</span>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    <span className="font-medium text-green-600">
+                                    <span className="font-medium text-amber-600">
                                       {formatCurrency(payment.amount)}
                                     </span>
                                     <Button
@@ -1796,7 +1910,7 @@ export default function Tables() {
                           <Button 
                             className="flex-1"
                             onClick={() => setConfirmCloseModalOpen(true)}
-                            disabled={registeredPayments.length === 0}
+                            disabled={totalPaid <= 0 && registeredPayments.length === 0}
                           >
                             <Check className="h-4 w-4 mr-2" />
                             Finalizar
@@ -2254,21 +2368,48 @@ export default function Tables() {
                 ))}
               </div>
 
-              {/* Registered Payments */}
+              {/* Existing Payments from DB - Mobile */}
+              {existingPayments && existingPayments.length > 0 && (
+                <div className="space-y-1">
+                  <h4 className="text-sm font-medium flex items-center gap-2">
+                    <Check className="h-4 w-4 text-green-600" />
+                    Pagamentos registrados
+                  </h4>
+                  {existingPayments.map((payment: any) => (
+                    <div 
+                      key={payment.id}
+                      className="flex items-center justify-between p-2 bg-green-600/10 rounded text-sm border border-green-600/20"
+                    >
+                      <div className="flex items-center gap-2">
+                        {paymentMethodIcons[payment.payment_method as PaymentMethod]}
+                        <span className="text-xs">{paymentMethodLabels[payment.payment_method as PaymentMethod]}</span>
+                        {payment.is_partial && (
+                          <Badge variant="outline" className="text-xs">Parcial</Badge>
+                        )}
+                      </div>
+                      <span className="font-medium text-green-600">
+                        {formatCurrency(Number(payment.amount))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Session Payments - Mobile */}
               {registeredPayments.length > 0 && (
                 <div className="space-y-1">
-                  <h4 className="text-sm font-medium">Pagamentos</h4>
+                  <h4 className="text-sm font-medium">Pagamentos pendentes</h4>
                   {registeredPayments.map((payment, index) => (
                     <div 
                       key={index}
-                      className="flex items-center justify-between p-2 bg-green-500/10 rounded text-sm"
+                      className="flex items-center justify-between p-2 bg-amber-500/10 rounded text-sm"
                     >
                       <div className="flex items-center gap-2">
                         {paymentMethodIcons[payment.method]}
-                        <span>{paymentMethodLabels[payment.method]}</span>
+                        <span className="text-xs">{paymentMethodLabels[payment.method]}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-green-600">
+                        <span className="font-medium text-amber-600">
                           {formatCurrency(payment.amount)}
                         </span>
                         <Button
@@ -2297,7 +2438,7 @@ export default function Tables() {
                 <Button 
                   className="flex-1"
                   onClick={() => setConfirmCloseModalOpen(true)}
-                  disabled={registeredPayments.length === 0}
+                  disabled={totalPaid <= 0 && registeredPayments.length === 0}
                 >
                   Finalizar
                 </Button>
@@ -2404,12 +2545,21 @@ export default function Tables() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex flex-col gap-2 sm:flex-row">
             <Button variant="outline" onClick={() => setPaymentModalOpen(false)}>
               Cancelar
             </Button>
+            <Button 
+              variant="secondary" 
+              onClick={handlePartialPayment}
+              disabled={createPayment.isPending}
+              className="flex items-center gap-2"
+            >
+              <ArrowRight className="h-4 w-4" />
+              Pagar e continuar
+            </Button>
             <Button onClick={handleConfirmPayment}>
-              Confirmar
+              Adicionar
             </Button>
           </DialogFooter>
         </DialogContent>

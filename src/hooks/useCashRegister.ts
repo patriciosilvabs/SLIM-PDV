@@ -26,6 +26,7 @@ export interface Payment {
   amount: number;
   received_by: string | null;
   created_at: string;
+  is_partial?: boolean;
 }
 
 export function useOpenCashRegister() {
@@ -127,7 +128,11 @@ export function useCashRegisterMutations() {
       const { data, error } = await supabase
         .from('payments')
         .insert({
-          ...payment,
+          order_id: payment.order_id,
+          cash_register_id: payment.cash_register_id,
+          payment_method: payment.payment_method,
+          amount: payment.amount,
+          is_partial: payment.is_partial || false,
           received_by: userData.user?.id
         })
         .select()
@@ -135,33 +140,41 @@ export function useCashRegisterMutations() {
       
       if (error) throw error;
 
-      // Update order status to delivered
-      await supabase
-        .from('orders')
-        .update({ status: 'delivered' })
-        .eq('id', payment.order_id);
-
-      // Update table status if it's a dine-in order
-      const { data: order } = await supabase
-        .from('orders')
-        .select('table_id')
-        .eq('id', payment.order_id)
-        .single();
-      
-      if (order?.table_id) {
+      // Only close the order/table if NOT a partial payment
+      if (!payment.is_partial) {
+        // Update order status to delivered
         await supabase
-          .from('tables')
-          .update({ status: 'available' })
-          .eq('id', order.table_id);
+          .from('orders')
+          .update({ status: 'delivered' })
+          .eq('id', payment.order_id);
+
+        // Update table status if it's a dine-in order
+        const { data: order } = await supabase
+          .from('orders')
+          .select('table_id')
+          .eq('id', payment.order_id)
+          .single();
+        
+        if (order?.table_id) {
+          await supabase
+            .from('tables')
+            .update({ status: 'available' })
+            .eq('id', order.table_id);
+        }
       }
 
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['tables'] });
       queryClient.invalidateQueries({ queryKey: ['cash-register'] });
-      toast({ title: 'Pagamento registrado!' });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      if (variables.is_partial) {
+        toast({ title: 'Pagamento parcial registrado!', description: 'A mesa continua aberta.' });
+      } else {
+        toast({ title: 'Pagamento registrado!' });
+      }
     },
     onError: (error: Error) => {
       toast({ title: 'Erro ao registrar pagamento', description: error.message, variant: 'destructive' });
