@@ -1212,11 +1212,33 @@ export default function Tables() {
                     
                     {/* Delivered Banner - Awaiting bill closure */}
                     {selectedOrder?.status === 'delivered' && !isClosingBill && (
-                      <div className="bg-blue-500/10 border border-blue-500/30 text-blue-700 dark:text-blue-400 p-3 rounded-lg flex items-center gap-2">
-                        <Check className="h-5 w-5" />
-                        <div>
+                      <div className="bg-blue-500/10 border border-blue-500/30 text-blue-700 dark:text-blue-400 p-4 rounded-lg space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Check className="h-5 w-5" />
                           <p className="font-medium">Pedido Entregue</p>
-                          <p className="text-xs opacity-80">Aguardando fechamento da conta</p>
+                        </div>
+                        <p className="text-xs opacity-80">Aguardando fechamento da conta</p>
+                        
+                        {/* Waiter and time info */}
+                        <div className="mt-3 pt-3 border-t border-blue-500/20 space-y-1 text-sm">
+                          {selectedOrder.created_by_profile?.name && (
+                            <div className="flex items-center justify-between">
+                              <span className="opacity-70">Garçom:</span>
+                              <span className="font-medium">{selectedOrder.created_by_profile.name}</span>
+                            </div>
+                          )}
+                          {selectedOrder.created_at && (
+                            <div className="flex items-center justify-between">
+                              <span className="opacity-70">Lançado às:</span>
+                              <span>{format(new Date(selectedOrder.created_at), 'HH:mm', { locale: ptBR })}</span>
+                            </div>
+                          )}
+                          {selectedOrder.ready_at && (
+                            <div className="flex items-center justify-between">
+                              <span className="opacity-70">Pronto às:</span>
+                              <span>{format(new Date(selectedOrder.ready_at), 'HH:mm', { locale: ptBR })}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -1235,6 +1257,13 @@ export default function Tables() {
                               <div className="flex items-center justify-between text-sm">
                                 <span className="text-muted-foreground">Aberto há</span>
                                 <span>{formatDistanceToNow(new Date(selectedOrder.created_at), { locale: ptBR })}</span>
+                              </div>
+                            )}
+                            {/* Waiter who created the order */}
+                            {selectedOrder.created_by_profile?.name && (
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-muted-foreground">Garçom</span>
+                                <span>{selectedOrder.created_by_profile.name}</span>
                               </div>
                             )}
                             {/* Editable Customer Name */}
@@ -2048,16 +2077,38 @@ export default function Tables() {
                 </button>
               )}
               
-              {/* Delivered Banner - Mobile */}
-              {selectedOrder?.status === 'delivered' && (
-                <div className="bg-blue-500/10 border border-blue-500/30 text-blue-700 dark:text-blue-400 p-3 rounded-lg flex items-center gap-2">
-                  <Check className="h-5 w-5" />
-                  <div>
-                    <p className="font-medium text-sm">Pedido Entregue</p>
-                    <p className="text-xs opacity-80">Aguardando fechamento da conta</p>
-                  </div>
-                </div>
-              )}
+                              {/* Delivered Banner - Mobile */}
+                              {selectedOrder?.status === 'delivered' && (
+                                <div className="bg-blue-500/10 border border-blue-500/30 text-blue-700 dark:text-blue-400 p-4 rounded-lg space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <Check className="h-5 w-5" />
+                                    <p className="font-medium text-sm">Pedido Entregue</p>
+                                  </div>
+                                  <p className="text-xs opacity-80">Aguardando fechamento da conta</p>
+                                  
+                                  {/* Waiter and time info - Mobile */}
+                                  <div className="mt-2 pt-2 border-t border-blue-500/20 space-y-1 text-xs">
+                                    {selectedOrder.created_by_profile?.name && (
+                                      <div className="flex items-center justify-between">
+                                        <span className="opacity-70">Garçom:</span>
+                                        <span className="font-medium">{selectedOrder.created_by_profile.name}</span>
+                                      </div>
+                                    )}
+                                    {selectedOrder.created_at && (
+                                      <div className="flex items-center justify-between">
+                                        <span className="opacity-70">Lançado às:</span>
+                                        <span>{format(new Date(selectedOrder.created_at), 'HH:mm', { locale: ptBR })}</span>
+                                      </div>
+                                    )}
+                                    {selectedOrder.ready_at && (
+                                      <div className="flex items-center justify-between">
+                                        <span className="opacity-70">Pronto às:</span>
+                                        <span>{format(new Date(selectedOrder.ready_at), 'HH:mm', { locale: ptBR })}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
               {selectedOrder && selectedOrder.order_items && selectedOrder.order_items.length > 0 ? (
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium">Itens do Pedido</h4>

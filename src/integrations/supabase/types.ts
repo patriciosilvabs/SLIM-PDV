@@ -620,6 +620,7 @@ export type Database = {
           id: string
           notes: string | null
           order_type: Database["public"]["Enums"]["order_type"] | null
+          ready_at: string | null
           status: Database["public"]["Enums"]["order_status"] | null
           subtotal: number | null
           table_id: string | null
@@ -639,6 +640,7 @@ export type Database = {
           id?: string
           notes?: string | null
           order_type?: Database["public"]["Enums"]["order_type"] | null
+          ready_at?: string | null
           status?: Database["public"]["Enums"]["order_status"] | null
           subtotal?: number | null
           table_id?: string | null
@@ -658,6 +660,7 @@ export type Database = {
           id?: string
           notes?: string | null
           order_type?: Database["public"]["Enums"]["order_type"] | null
+          ready_at?: string | null
           status?: Database["public"]["Enums"]["order_status"] | null
           subtotal?: number | null
           table_id?: string | null

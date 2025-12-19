@@ -567,7 +567,12 @@ export default function KDS() {
         .update({ status: 'delivered' })
         .eq('order_id', orderId);
       
-      await updateOrder.mutateAsync({ id: orderId, status: 'ready' });
+      // Record ready_at timestamp when marking as ready
+      await updateOrder.mutateAsync({ 
+        id: orderId, 
+        status: 'ready',
+        ready_at: new Date().toISOString()
+      } as any);
       toast.success('Pedido marcado como pronto!');
     } catch (error) {
       toast.error('Erro ao marcar pedido como pronto');
