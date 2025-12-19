@@ -47,6 +47,10 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
   // Track announcements with audio errors
   const [audioErrors, setAudioErrors] = useState<Set<string>>(new Set());
   
+  // Track if compatibility check is in progress
+  const [isCheckingCompatibility, setIsCheckingCompatibility] = useState(false);
+  const compatibilityCheckedRef = useRef<Set<string>>(new Set());
+  
   const [playedToday, setPlayedToday] = useState<Set<string>>(() => {
     try {
       const today = new Date().toDateString();
@@ -421,6 +425,75 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
     return () => clearInterval(interval);
   }, [announcements, currentScreen, orderCounts, playAnnouncement, checkCondition, isInCooldown]);
 
+  // Check audio compatibility for a single announcement
+  const checkAudioCompatibility = useCallback(async (announcement: ScheduledAnnouncement): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const audio = new Audio();
+      
+      // Timeout of 5 seconds
+      const timeout = setTimeout(() => {
+        audio.src = '';
+        resolve(false);
+      }, 5000);
+      
+      audio.onloadedmetadata = () => {
+        clearTimeout(timeout);
+        audio.src = '';
+        resolve(true); // Audio is compatible
+      };
+      
+      audio.onerror = () => {
+        clearTimeout(timeout);
+        audio.src = '';
+        resolve(false); // Audio is incompatible
+      };
+      
+      // Only load metadata (doesn't download the entire file)
+      audio.preload = 'metadata';
+      audio.src = announcement.file_path;
+    });
+  }, []);
+
+  // Automatically check audio compatibility when announcements are loaded
+  useEffect(() => {
+    if (!announcements.length || isLoading) return;
+    
+    const checkAllAnnouncements = async () => {
+      // Filter announcements that haven't been checked yet
+      const uncheckedAnnouncements = announcements.filter(
+        a => !compatibilityCheckedRef.current.has(a.id)
+      );
+      
+      if (uncheckedAnnouncements.length === 0) return;
+      
+      setIsCheckingCompatibility(true);
+      
+      // Check each announcement in parallel
+      const results = await Promise.all(
+        uncheckedAnnouncements.map(async (announcement) => {
+          const isCompatible = await checkAudioCompatibility(announcement);
+          return { id: announcement.id, isCompatible };
+        })
+      );
+      
+      // Mark all as checked
+      results.forEach(r => compatibilityCheckedRef.current.add(r.id));
+      
+      // Add IDs with problems to the error set
+      const errors = results
+        .filter(r => !r.isCompatible)
+        .map(r => r.id);
+      
+      if (errors.length > 0) {
+        setAudioErrors(prev => new Set([...prev, ...errors]));
+      }
+      
+      setIsCheckingCompatibility(false);
+    };
+    
+    checkAllAnnouncements();
+  }, [announcements, isLoading, checkAudioCompatibility]);
+
   // Clear audio error when announcement is updated
   const clearAudioError = useCallback((announcementId: string) => {
     setAudioErrors(prev => {
@@ -428,11 +501,14 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
       next.delete(announcementId);
       return next;
     });
+    // Allow re-checking after update
+    compatibilityCheckedRef.current.delete(announcementId);
   }, []);
 
   return {
     announcements,
     isLoading,
+    isCheckingCompatibility,
     createAnnouncement,
     updateAnnouncement,
     deleteAnnouncement,
