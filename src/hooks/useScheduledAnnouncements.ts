@@ -114,10 +114,10 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
     mutationFn: async (data: Omit<ScheduledAnnouncement, 'id' | 'created_at' | 'last_played_at' | 'created_by'>) => {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // Convert empty strings to null for date fields
+      // Convert empty strings to null for date fields (PostgreSQL date type rejects empty strings)
       const cleanData = {
         ...data,
-        scheduled_date: data.scheduled_date || null,
+        scheduled_date: data.scheduled_date && data.scheduled_date.trim() !== '' ? data.scheduled_date : null,
         created_by: user?.id
       };
       
@@ -141,10 +141,10 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
 
   const updateAnnouncement = useMutation({
     mutationFn: async ({ id, ...data }: Partial<ScheduledAnnouncement> & { id: string }) => {
-      // Convert empty strings to null for date fields
+      // Convert empty strings to null for date fields (PostgreSQL date type rejects empty strings)
       const cleanData = {
         ...data,
-        scheduled_date: data.scheduled_date === '' ? null : data.scheduled_date
+        scheduled_date: data.scheduled_date && data.scheduled_date.trim() !== '' ? data.scheduled_date : null
       };
       
       const { error } = await supabase
