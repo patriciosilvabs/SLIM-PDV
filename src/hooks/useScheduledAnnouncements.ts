@@ -23,7 +23,7 @@ export interface ScheduledAnnouncement {
   trigger_type: 'scheduled' | 'condition';
   condition_type: 'orders_in_production' | 'orders_pending' | 'orders_total_active' | 'avg_wait_time' | 'max_wait_time' | 'delayed_orders_count' | null;
   condition_threshold: number;
-  condition_comparison: 'greater_than' | 'less_than' | 'equals';
+  condition_comparison: 'greater_than' | 'greater_than_or_equal' | 'less_than' | 'less_than_or_equal' | 'equals';
   cooldown_minutes: number;
   delay_threshold_minutes: number;
 }
@@ -330,8 +330,12 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
     switch (announcement.condition_comparison) {
       case 'greater_than':
         return value > threshold;
+      case 'greater_than_or_equal':
+        return value >= threshold;
       case 'less_than':
         return value < threshold;
+      case 'less_than_or_equal':
+        return value <= threshold;
       case 'equals':
         return value === threshold;
       default:

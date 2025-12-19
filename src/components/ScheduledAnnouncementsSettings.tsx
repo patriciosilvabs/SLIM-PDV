@@ -49,7 +49,9 @@ const CONDITION_TYPES = [
 
 const CONDITION_COMPARISONS = [
   { value: 'greater_than', label: 'Maior que' },
+  { value: 'greater_than_or_equal', label: 'Maior ou igual a' },
   { value: 'less_than', label: 'Menor que' },
+  { value: 'less_than_or_equal', label: 'Menor ou igual a' },
   { value: 'equals', label: 'Igual a' },
 ];
 
@@ -115,7 +117,7 @@ export function ScheduledAnnouncementsSettings() {
     scheduled_date: '',
     condition_type: 'orders_in_production' as 'orders_in_production' | 'orders_pending' | 'orders_total_active' | 'avg_wait_time' | 'max_wait_time' | 'delayed_orders_count',
     condition_threshold: 15,
-    condition_comparison: 'greater_than' as 'greater_than' | 'less_than' | 'equals',
+    condition_comparison: 'greater_than' as 'greater_than' | 'greater_than_or_equal' | 'less_than' | 'less_than_or_equal' | 'equals',
     cooldown_minutes: 30,
     delay_threshold_minutes: 20,
     target_screens: ['kds'],
