@@ -114,7 +114,7 @@ export default function Tables() {
   const printer = usePrinterOptional();
   const { data: printSectors } = usePrintSectors();
   const { data: tables, isLoading } = useTables();
-  const { data: orders } = useOrders(['pending', 'preparing', 'ready']);
+  const { data: orders } = useOrders(['pending', 'preparing', 'ready', 'delivered']);
   const { data: allOrders } = useOrders(['pending', 'preparing', 'ready', 'delivered', 'cancelled']);
   const { createTable, updateTable } = useTableMutations();
   const { createOrder, updateOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
@@ -413,7 +413,23 @@ export default function Tables() {
   }, [orders, tables, idleTableSettings, audioSettings.enabled, playIdleTableAlertSound, updateTable, updateOrder]);
 
   const getTableOrder = (tableId: string) => {
-    return orders?.find(o => o.table_id === tableId && o.status !== 'delivered' && o.status !== 'cancelled');
+    return orders?.find(o => o.table_id === tableId && o.status !== 'cancelled');
+  };
+
+  // Mark order as delivered
+  const handleMarkAsDelivered = async (orderId: string) => {
+    try {
+      await updateOrder.mutateAsync({ 
+        id: orderId, 
+        status: 'delivered' 
+      });
+      toast.success('Pedido marcado como entregue!', {
+        description: 'O pedido foi entregue na mesa.',
+      });
+    } catch (error) {
+      console.error('Error marking order as delivered:', error);
+      toast.error('Erro ao marcar pedido como entregue');
+    }
   };
 
   const getTableReservation = (tableId: string) => {
@@ -1174,13 +1190,33 @@ export default function Tables() {
                   </CardHeader>
 
                   <CardContent className="flex-1 flex flex-col space-y-4 overflow-hidden">
-                    {/* Ready Alert Banner */}
+                    {/* Ready Alert Banner - Clickable to mark as delivered */}
                     {selectedOrder?.status === 'ready' && !isClosingBill && (
-                      <div className="bg-green-500 text-white p-3 rounded-lg flex items-center gap-2 animate-pulse">
-                        <Bell className="h-5 w-5" />
+                      <button 
+                        onClick={() => handleMarkAsDelivered(selectedOrder.id)}
+                        className="w-full bg-green-500 hover:bg-green-600 text-white p-3 rounded-lg flex items-center justify-between gap-2 transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Bell className="h-5 w-5 animate-pulse group-hover:animate-none" />
+                          <div className="text-left">
+                            <p className="font-bold">Pedido Pronto!</p>
+                            <p className="text-xs opacity-90">A cozinha finalizou o preparo</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-lg">
+                          <Check className="h-4 w-4" />
+                          <span className="font-medium text-sm">Marcar Entregue</span>
+                        </div>
+                      </button>
+                    )}
+                    
+                    {/* Delivered Banner - Awaiting bill closure */}
+                    {selectedOrder?.status === 'delivered' && !isClosingBill && (
+                      <div className="bg-blue-500/10 border border-blue-500/30 text-blue-700 dark:text-blue-400 p-3 rounded-lg flex items-center gap-2">
+                        <Check className="h-5 w-5" />
                         <div>
-                          <p className="font-bold">Pedido Pronto!</p>
-                          <p className="text-xs opacity-90">A cozinha finalizou o preparo</p>
+                          <p className="font-medium">Pedido Entregue</p>
+                          <p className="text-xs opacity-80">Aguardando fechamento da conta</p>
                         </div>
                       </div>
                     )}
@@ -1993,6 +2029,35 @@ export default function Tables() {
           {/* MOBILE: Regular View */}
           {!isClosingBill && (
             <div className="space-y-4 pt-4">
+              {/* Ready Alert Banner - Mobile */}
+              {selectedOrder?.status === 'ready' && (
+                <button 
+                  onClick={() => handleMarkAsDelivered(selectedOrder.id)}
+                  className="w-full bg-green-500 hover:bg-green-600 text-white p-3 rounded-lg flex items-center justify-between gap-2 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Bell className="h-5 w-5 animate-pulse" />
+                    <div className="text-left">
+                      <p className="font-bold text-sm">Pedido Pronto!</p>
+                      <p className="text-xs opacity-90">Clique para marcar como entregue</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 bg-white/20 px-2 py-1 rounded">
+                    <Check className="h-4 w-4" />
+                  </div>
+                </button>
+              )}
+              
+              {/* Delivered Banner - Mobile */}
+              {selectedOrder?.status === 'delivered' && (
+                <div className="bg-blue-500/10 border border-blue-500/30 text-blue-700 dark:text-blue-400 p-3 rounded-lg flex items-center gap-2">
+                  <Check className="h-5 w-5" />
+                  <div>
+                    <p className="font-medium text-sm">Pedido Entregue</p>
+                    <p className="text-xs opacity-80">Aguardando fechamento da conta</p>
+                  </div>
+                </div>
+              )}
               {selectedOrder && selectedOrder.order_items && selectedOrder.order_items.length > 0 ? (
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium">Itens do Pedido</h4>
