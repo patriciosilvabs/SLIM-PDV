@@ -15,7 +15,8 @@ import { AudioRecorder } from '@/components/AudioRecorder';
 import { useScheduledAnnouncements, ScheduledAnnouncement } from '@/hooks/useScheduledAnnouncements';
 import { useVoiceTextHistory } from '@/hooks/useVoiceTextHistory';
 import { useOpenAITTS, OPENAI_VOICES } from '@/hooks/useOpenAITTS';
-import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2, Activity, AlertTriangle, Timer, Sparkles, RefreshCw, Check, History, X, Square, Pause, TriangleAlert } from 'lucide-react';
+import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2, Activity, AlertTriangle, Timer, Sparkles, RefreshCw, Check, History, X, Square, Pause, TriangleAlert, Loader2 } from 'lucide-react';
+import { convertWavToMp3, isWavFile, replaceFileExtension } from '@/utils/audioConverter';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
@@ -55,7 +56,8 @@ const CONDITION_COMPARISONS = [
 export function ScheduledAnnouncementsSettings() {
   const { 
     announcements, 
-    isLoading, 
+    isLoading,
+    isCheckingCompatibility,
     createAnnouncement, 
     updateAnnouncement, 
     deleteAnnouncement,
@@ -99,6 +101,9 @@ export function ScheduledAnnouncementsSettings() {
   
   // State for date validation
   const [showDateError, setShowDateError] = useState(false);
+  
+  // State for WAV to MP3 conversion
+  const [isConverting, setIsConverting] = useState(false);
   
   const [form, setForm] = useState({
     name: '',
@@ -290,8 +295,28 @@ export function ScheduledAnnouncementsSettings() {
       URL.revokeObjectURL(uploadPreviewUrl);
     }
 
+    let processedBlob: Blob = file;
+    let processedFileName = file.name;
+
+    // If WAV file, convert to MP3 for better compatibility
+    if (isWavFile(file)) {
+      setIsConverting(true);
+      try {
+        toast.info('Convertendo WAV para MP3 para melhor compatibilidade...');
+        processedBlob = await convertWavToMp3(file);
+        processedFileName = replaceFileExtension(file.name, '.mp3');
+        toast.success('Conversão concluída!');
+      } catch (error) {
+        console.error('Erro na conversão WAV para MP3:', error);
+        toast.error('Erro ao converter WAV para MP3. Tente converter manualmente.');
+        setIsConverting(false);
+        return;
+      }
+      setIsConverting(false);
+    }
+
     // Test if audio can be loaded before accepting
-    const testUrl = URL.createObjectURL(file);
+    const testUrl = URL.createObjectURL(processedBlob);
     const testAudio = new Audio(testUrl);
     
     const canPlay = await new Promise<boolean>((resolve) => {
@@ -312,8 +337,8 @@ export function ScheduledAnnouncementsSettings() {
 
     // Use the same URL for preview since it's valid
     setUploadPreviewUrl(testUrl);
-    setUploadPreviewBlob(file);
-    setUploadFileName(file.name);
+    setUploadPreviewBlob(processedBlob);
+    setUploadFileName(processedFileName);
     
     toast.success('Arquivo carregado! Ouça o preview e confirme.');
   };
@@ -574,7 +599,7 @@ export function ScheduledAnnouncementsSettings() {
                       </div>
                       
                       {/* File selector */}
-                      {!uploadPreviewUrl && (
+                      {!uploadPreviewUrl && !isConverting && (
                         <div className="space-y-2">
                           <div className="flex gap-2">
                             <Label className="flex-1">
@@ -586,7 +611,7 @@ export function ScheduledAnnouncementsSettings() {
                               </Button>
                               <input
                                 type="file"
-                                accept="audio/mpeg,audio/mp3,audio/webm,audio/ogg,.mp3,.webm,.ogg"
+                                accept="audio/mpeg,audio/mp3,audio/webm,audio/wav,audio/ogg,.mp3,.wav,.webm,.ogg"
                                 className="hidden"
                                 onChange={handleFileUpload}
                               />
@@ -596,8 +621,18 @@ export function ScheduledAnnouncementsSettings() {
                             </Button>
                           </div>
                           <p className="text-xs text-muted-foreground text-center">
-                            Formatos aceitos: MP3 (recomendado), WebM, OGG
+                            Formatos aceitos: MP3, WAV, WebM, OGG (WAV convertido automaticamente)
                           </p>
+                        </div>
+                      )}
+                      
+                      {/* Conversion indicator */}
+                      {isConverting && (
+                        <div className="flex items-center gap-2 p-3 border rounded-lg bg-blue-500/10 border-blue-500/30">
+                          <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                          <span className="text-sm text-blue-600 dark:text-blue-400">
+                            Convertendo WAV para MP3...
+                          </span>
                         </div>
                       )}
                       
@@ -1167,6 +1202,13 @@ export function ScheduledAnnouncementsSettings() {
           </div>
         ) : (
           <div className="space-y-2">
+            {/* Compatibility check indicator */}
+            {isCheckingCompatibility && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground py-2 px-3 bg-muted/30 rounded-lg">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Verificando compatibilidade de áudio...
+              </div>
+            )}
             {announcements.map(announcement => (
               <div
                 key={announcement.id}
