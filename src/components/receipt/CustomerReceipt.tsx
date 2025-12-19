@@ -3,6 +3,7 @@ import { Payment } from '@/hooks/useCashRegister';
 import { usePrinterOptional } from '@/contexts/PrinterContext';
 import { CustomerReceiptData } from '@/utils/escpos';
 import { escapeHtml } from '@/lib/htmlEscape';
+import { PaymentMethod } from '@/hooks/useCashRegister';
 
 interface CustomerReceiptProps {
   order: Order;
@@ -384,4 +385,216 @@ export async function printCustomerReceipt(
   
   // Fallback to browser print
   printWithBrowser(props);
+}
+
+// ============ PARTIAL PAYMENT RECEIPT ============
+
+interface PartialPaymentReceiptProps {
+  orderTotal: number;
+  paymentAmount: number;
+  paymentMethod: PaymentMethod;
+  existingPayments: Payment[];
+  tableNumber?: number;
+  customerName?: string;
+  orderId: string;
+}
+
+const paymentMethodLabels: Record<PaymentMethod, string> = {
+  cash: 'Dinheiro',
+  credit_card: 'Crédito',
+  debit_card: 'Débito',
+  pix: 'Pix',
+};
+
+function printPartialPaymentWithBrowser({
+  orderTotal,
+  paymentAmount,
+  paymentMethod,
+  existingPayments,
+  tableNumber,
+  customerName,
+  orderId,
+}: PartialPaymentReceiptProps) {
+  const previousTotal = existingPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+  const totalPaid = previousTotal + paymentAmount;
+  const remainingAmount = orderTotal - totalPaid;
+
+  const printContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Comprovante de Pagamento Parcial</title>
+      <style>
+        @page {
+          size: 80mm auto;
+          margin: 0;
+        }
+        body {
+          width: 72mm;
+          font-family: 'Courier New', monospace;
+          font-size: 11px;
+          margin: 0;
+          padding: 4mm;
+          background: white;
+          color: black;
+        }
+        .header {
+          text-align: center;
+          border-bottom: 1px dashed black;
+          padding-bottom: 3mm;
+          margin-bottom: 3mm;
+        }
+        .title {
+          font-size: 14px;
+          font-weight: bold;
+          margin-bottom: 2mm;
+        }
+        .info-section {
+          border-bottom: 1px dashed black;
+          padding-bottom: 2mm;
+          margin-bottom: 2mm;
+        }
+        .info-line {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 1mm;
+        }
+        .payment-section {
+          padding: 3mm 0;
+          border-bottom: 1px dashed black;
+        }
+        .current-payment {
+          background: #f0f0f0;
+          padding: 2mm;
+          margin: 2mm 0;
+          text-align: center;
+        }
+        .current-payment .amount {
+          font-size: 16px;
+          font-weight: bold;
+        }
+        .previous-payments {
+          margin-top: 2mm;
+          font-size: 10px;
+        }
+        .summary {
+          padding-top: 2mm;
+          margin-top: 2mm;
+        }
+        .summary-line {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 1mm;
+        }
+        .remaining {
+          font-weight: bold;
+          font-size: 13px;
+          border-top: 1px solid black;
+          padding-top: 2mm;
+          margin-top: 2mm;
+        }
+        .remaining.paid {
+          color: green;
+        }
+        .footer {
+          text-align: center;
+          margin-top: 4mm;
+          padding-top: 2mm;
+          border-top: 1px dashed black;
+          font-size: 9px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <div class="title">PAGAMENTO PARCIAL</div>
+        <div>Comprovante de Pagamento</div>
+      </div>
+      
+      <div class="info-section">
+        <div class="info-line">
+          <span>Pedido:</span>
+          <span>#${escapeHtml(orderId.slice(0, 8).toUpperCase())}</span>
+        </div>
+        ${tableNumber ? `
+          <div class="info-line">
+            <span>Mesa:</span>
+            <span>${tableNumber}</span>
+          </div>
+        ` : ''}
+        ${customerName ? `
+          <div class="info-line">
+            <span>Cliente:</span>
+            <span>${escapeHtml(customerName)}</span>
+          </div>
+        ` : ''}
+        <div class="info-line">
+          <span>Data/Hora:</span>
+          <span>${new Date().toLocaleString('pt-BR')}</span>
+        </div>
+      </div>
+      
+      <div class="payment-section">
+        <div class="current-payment">
+          <div>Pagamento Registrado</div>
+          <div class="amount">${formatCurrency(paymentAmount)}</div>
+          <div>${paymentMethodLabels[paymentMethod]}</div>
+        </div>
+        
+        ${existingPayments.length > 0 ? `
+          <div class="previous-payments">
+            <div style="font-weight: bold; margin-bottom: 1mm;">Pagamentos anteriores:</div>
+            ${existingPayments.map(p => `
+              <div class="info-line">
+                <span>${paymentMethodLabels[p.payment_method]}</span>
+                <span>${formatCurrency(Number(p.amount))}</span>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+      </div>
+      
+      <div class="summary">
+        <div class="summary-line">
+          <span>Total da Conta:</span>
+          <span>${formatCurrency(orderTotal)}</span>
+        </div>
+        <div class="summary-line">
+          <span>Total Pago:</span>
+          <span>${formatCurrency(totalPaid)}</span>
+        </div>
+        <div class="summary-line remaining ${remainingAmount <= 0 ? 'paid' : ''}">
+          <span>${remainingAmount <= 0 ? 'PAGO' : 'Falta Pagar:'}</span>
+          <span>${remainingAmount <= 0 ? '✓' : formatCurrency(remainingAmount)}</span>
+        </div>
+      </div>
+      
+      <div class="footer">
+        <div>*** Comprovante de pagamento parcial ***</div>
+        <div>Mesa continua aberta</div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const printWindow = window.open('', '_blank', 'width=400,height=500');
+  if (printWindow) {
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+  }
+}
+
+export async function printPartialPaymentReceipt(
+  props: PartialPaymentReceiptProps,
+  printer?: ReturnType<typeof usePrinterOptional>
+) {
+  // For now, use browser print for partial payment receipts
+  // QZ Tray support can be added later if needed
+  printPartialPaymentWithBrowser(props);
 }

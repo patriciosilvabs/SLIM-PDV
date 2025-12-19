@@ -38,6 +38,7 @@ export interface Order {
   created_at: string;
   updated_at: string;
   ready_at?: string | null;
+  delivered_at?: string | null;
   table?: { number: number } | null;
   order_items?: OrderItem[];
   created_by_profile?: { name: string } | null;

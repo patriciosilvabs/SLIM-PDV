@@ -142,10 +142,13 @@ export function useCashRegisterMutations() {
 
       // Only close the order/table if NOT a partial payment
       if (!payment.is_partial) {
-        // Update order status to delivered
+        // Update order status to delivered and set delivered_at timestamp
         await supabase
           .from('orders')
-          .update({ status: 'delivered' })
+          .update({ 
+            status: 'delivered',
+            delivered_at: new Date().toISOString()
+          })
           .eq('id', payment.order_id);
 
         // Update table status if it's a dine-in order

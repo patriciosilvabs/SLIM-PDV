@@ -13,7 +13,7 @@ import { useCashMovements } from '@/hooks/useReports';
 import { useOrders, Order } from '@/hooks/useOrders';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { AccessDenied } from '@/components/auth/AccessDenied';
-import { useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -25,7 +25,9 @@ import {
   ArrowDownCircle,
   Lock,
   Unlock,
-  CheckCircle
+  CheckCircle,
+  Users,
+  Clock
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -73,6 +75,30 @@ export default function CashRegister() {
   const { openCashRegister, closeCashRegister, createPayment } = useCashRegisterMutations();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  // Fetch partial payments for this cash register
+  const { data: partialPayments } = useQuery({
+    queryKey: ['partial-payments', openRegister?.id],
+    queryFn: async () => {
+      if (!openRegister?.id) return [];
+      const { data, error } = await supabase
+        .from('payments')
+        .select(`
+          *,
+          order:orders!inner(
+            id, customer_name, table_id, total,
+            table:tables(number)
+          )
+        `)
+        .eq('is_partial', true)
+        .eq('cash_register_id', openRegister.id)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!openRegister?.id,
+  });
 
   // Permission check AFTER all hooks
   if (!permissionsLoading && !hasPermission('cash_register_view')) {
@@ -426,6 +452,62 @@ export default function CashRegister() {
                   ) : (
                     <p className="text-center py-4 text-muted-foreground">
                       Nenhuma movimentação registrada
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Partial Payments History */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Pagamentos Parciais
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {partialPayments && partialPayments.length > 0 ? (
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                      {partialPayments.map((p: any) => {
+                        const Icon = paymentMethodConfig[p.payment_method as PaymentMethod]?.icon || DollarSign;
+                        return (
+                          <div 
+                            key={p.id} 
+                            className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-primary/10 rounded-lg">
+                                <Icon className="h-4 w-4 text-primary" />
+                              </div>
+                              <div>
+                                <p className="font-medium">
+                                  {p.order?.table?.number 
+                                    ? `Mesa ${p.order.table.number}` 
+                                    : p.order?.customer_name || `Pedido #${p.order_id.slice(0, 6)}`}
+                                </p>
+                                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {new Date(p.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                  {' - '}
+                                  {paymentMethodConfig[p.payment_method as PaymentMethod]?.label || p.payment_method}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <span className="font-bold text-primary">
+                                {formatCurrency(Number(p.amount))}
+                              </span>
+                              <p className="text-xs text-muted-foreground">
+                                de {formatCurrency(Number(p.order?.total || 0))}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-center py-4 text-muted-foreground">
+                      Nenhum pagamento parcial registrado
                     </p>
                   )}
                 </CardContent>
