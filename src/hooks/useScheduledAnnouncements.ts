@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { sanitizeFileName } from '@/lib/sanitizeFileName';
+import { detectAudioFormat } from '@/utils/audioConverter';
 
 export interface ScheduledAnnouncement {
   id: string;
@@ -202,24 +203,40 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Usuário não autenticado');
 
+    // Verificar se blob tem conteúdo válido
+    if (blob.size === 0) {
+      throw new Error('Arquivo de áudio vazio');
+    }
+
     const safeName = sanitizeFileName(name);
     
-    // Detectar tipo de arquivo e extensão apropriada
-    const mimeType = blob.type || 'audio/webm';
-    const extensionMap: Record<string, string> = {
-      'audio/webm': 'webm',
-      'audio/mpeg': 'mp3',
-      'audio/mp3': 'mp3',
-      'audio/wav': 'wav',
-      'audio/wave': 'wav',
-      'audio/ogg': 'ogg',
-      'audio/x-wav': 'wav',
-      'audio/x-m4a': 'm4a',
-      'audio/mp4': 'm4a',
+    // Detectar formato real do arquivo usando magic bytes
+    const detectedFormat = await detectAudioFormat(blob);
+    
+    // Mapear formato detectado para MIME type
+    const formatToMimeType: Record<string, string> = {
+      'mp3': 'audio/mpeg',
+      'wav': 'audio/wav',
+      'webm': 'audio/webm',
+      'ogg': 'audio/ogg',
     };
-    const extension = extensionMap[mimeType] || 'webm';
+    
+    // Usar formato detectado, fallback para blob.type, último recurso webm
+    const mimeType = formatToMimeType[detectedFormat] || blob.type || 'audio/webm';
+    const extension = detectedFormat !== 'unknown' ? detectedFormat : 
+      (blob.type?.includes('mp3') || blob.type?.includes('mpeg') ? 'mp3' :
+       blob.type?.includes('wav') ? 'wav' :
+       blob.type?.includes('ogg') ? 'ogg' : 'webm');
     
     const fileName = `${user.id}/${safeName}_${Date.now()}.${extension}`;
+
+    console.log('Upload info:', {
+      fileName,
+      mimeType,
+      detectedFormat,
+      blobSize: blob.size,
+      blobType: blob.type
+    });
 
     const { error: uploadError } = await supabase.storage
       .from('announcements')
