@@ -43,6 +43,10 @@ const COOLDOWN_STORAGE_KEY = 'pdv-announcements-cooldowns';
 export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: OrderCounts) {
   const queryClient = useQueryClient();
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Track announcements with audio errors
+  const [audioErrors, setAudioErrors] = useState<Set<string>>(new Set());
+  
   const [playedToday, setPlayedToday] = useState<Set<string>>(() => {
     try {
       const today = new Date().toDateString();
@@ -240,6 +244,8 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
       console.error(`Erro ao carregar anúncio "${announcement.name}":`, audio.error);
       toast.error(`Não foi possível reproduzir o anúncio "${announcement.name}". Formato de áudio não suportado.`);
       audioRef.current = null;
+      // Track audio error
+      setAudioErrors(prev => new Set([...prev, announcement.id]));
     };
     
     audio.play().catch(err => {
@@ -415,6 +421,15 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
     return () => clearInterval(interval);
   }, [announcements, currentScreen, orderCounts, playAnnouncement, checkCondition, isInCooldown]);
 
+  // Clear audio error when announcement is updated
+  const clearAudioError = useCallback((announcementId: string) => {
+    setAudioErrors(prev => {
+      const next = new Set(prev);
+      next.delete(announcementId);
+      return next;
+    });
+  }, []);
+
   return {
     announcements,
     isLoading,
@@ -422,6 +437,8 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
     updateAnnouncement,
     deleteAnnouncement,
     uploadRecording,
-    playAnnouncement
+    playAnnouncement,
+    audioErrors,
+    clearAudioError
   };
 }

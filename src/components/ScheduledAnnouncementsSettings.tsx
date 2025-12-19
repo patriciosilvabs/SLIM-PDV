@@ -15,7 +15,8 @@ import { AudioRecorder } from '@/components/AudioRecorder';
 import { useScheduledAnnouncements, ScheduledAnnouncement } from '@/hooks/useScheduledAnnouncements';
 import { useVoiceTextHistory } from '@/hooks/useVoiceTextHistory';
 import { useOpenAITTS, OPENAI_VOICES } from '@/hooks/useOpenAITTS';
-import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2, Activity, AlertTriangle, Timer, Sparkles, RefreshCw, Check, History, X, Square, Pause } from 'lucide-react';
+import { Megaphone, Plus, Mic, Upload, Play, Trash2, Edit, Calendar, Clock, Volume2, Activity, AlertTriangle, Timer, Sparkles, RefreshCw, Check, History, X, Square, Pause, TriangleAlert } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -59,7 +60,9 @@ export function ScheduledAnnouncementsSettings() {
     updateAnnouncement, 
     deleteAnnouncement,
     uploadRecording,
-    playAnnouncement 
+    playAnnouncement,
+    audioErrors,
+    clearAudioError
   } = useScheduledAnnouncements();
 
   const { getHistory, addToHistory, clearHistory } = useVoiceTextHistory();
@@ -416,6 +419,8 @@ export function ScheduledAnnouncementsSettings() {
           id: editingAnnouncement.id,
           ...form
         });
+        // Clear audio error after successful update
+        clearAudioError(editingAnnouncement.id);
       } else {
         await createAnnouncement.mutateAsync(form);
       }
@@ -1172,6 +1177,22 @@ export function ScheduledAnnouncementsSettings() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-medium truncate">{announcement.name}</span>
+                    
+                    {/* Audio error indicator */}
+                    {audioErrors.has(announcement.id) && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <TriangleAlert className="h-4 w-4 text-amber-500 shrink-0" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Problema ao reproduzir áudio.</p>
+                            <p className="text-xs text-muted-foreground">Reenvie um arquivo MP3.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    
                     <Badge variant="outline" className="text-xs">
                       {announcement.trigger_type === 'condition' ? (
                         <Activity className="h-3 w-3 mr-1" />
