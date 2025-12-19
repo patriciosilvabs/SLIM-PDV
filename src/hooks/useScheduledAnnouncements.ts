@@ -235,8 +235,16 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
     audio.volume = announcement.volume;
     audioRef.current = audio;
     
+    // Add error handling
+    audio.onerror = () => {
+      console.error(`Erro ao carregar anúncio "${announcement.name}":`, audio.error);
+      toast.error(`Não foi possível reproduzir o anúncio "${announcement.name}". Formato de áudio não suportado.`);
+      audioRef.current = null;
+    };
+    
     audio.play().catch(err => {
       console.warn('Erro ao reproduzir anúncio:', err);
+      toast.error(`Erro ao reproduzir anúncio "${announcement.name}"`);
     });
 
     // Mark as played (for scheduled announcements)

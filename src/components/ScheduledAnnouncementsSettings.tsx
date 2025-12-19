@@ -133,6 +133,16 @@ export function ScheduledAnnouncementsSettings() {
     const audio = new Audio(form.file_path);
     audio.volume = form.volume;
     
+    audio.onerror = () => {
+      console.error('Erro ao carregar áudio:', audio.error);
+      toast.error('Erro ao reproduzir áudio. O formato pode não ser suportado pelo navegador.');
+      setIsPreviewPlaying(false);
+      setPreviewingAudio(null);
+      setAudioProgress(0);
+      setAudioCurrentTime(0);
+      setAudioDuration(0);
+    };
+    
     audio.onplay = () => setIsPreviewPlaying(true);
     audio.onloadedmetadata = () => setAudioDuration(audio.duration);
     audio.ontimeupdate = () => {
@@ -149,7 +159,12 @@ export function ScheduledAnnouncementsSettings() {
     };
     audio.onpause = () => setIsPreviewPlaying(false);
     
-    audio.play();
+    audio.play().catch(err => {
+      console.error('Erro ao reproduzir:', err);
+      toast.error('Não foi possível reproduzir o áudio: ' + err.message);
+      setIsPreviewPlaying(false);
+      setPreviewingAudio(null);
+    });
     setPreviewingAudio(audio);
   };
 
@@ -272,9 +287,25 @@ export function ScheduledAnnouncementsSettings() {
       URL.revokeObjectURL(uploadPreviewUrl);
     }
 
-    // Create preview
-    const previewUrl = URL.createObjectURL(file);
-    setUploadPreviewUrl(previewUrl);
+    // Test if audio can be loaded before accepting
+    const testUrl = URL.createObjectURL(file);
+    const testAudio = new Audio(testUrl);
+    
+    const canPlay = await new Promise<boolean>((resolve) => {
+      testAudio.onloadedmetadata = () => resolve(true);
+      testAudio.onerror = () => resolve(false);
+      // Timeout of 5 seconds
+      setTimeout(() => resolve(false), 5000);
+    });
+    
+    if (!canPlay) {
+      URL.revokeObjectURL(testUrl);
+      toast.error('Este arquivo de áudio não pode ser reproduzido pelo navegador. Tente converter para MP3.');
+      return;
+    }
+
+    // Use the same URL for preview since it's valid
+    setUploadPreviewUrl(testUrl);
     setUploadPreviewBlob(file);
     setUploadFileName(file.name);
     
