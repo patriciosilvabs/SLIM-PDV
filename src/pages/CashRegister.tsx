@@ -76,7 +76,7 @@ export default function CashRegister() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Fetch partial payments for this cash register
+  // Fetch partial payments for this cash register WITH receiver profile
   const { data: partialPayments } = useQuery({
     queryKey: ['partial-payments', openRegister?.id],
     queryFn: async () => {
@@ -88,7 +88,8 @@ export default function CashRegister() {
           order:orders!inner(
             id, customer_name, table_id, total,
             table:tables(number)
-          )
+          ),
+          received_by_profile:profiles!payments_received_by_fkey(id, name)
         `)
         .eq('is_partial', true)
         .eq('cash_register_id', openRegister.id)
@@ -491,6 +492,12 @@ export default function CashRegister() {
                                   {' - '}
                                   {paymentMethodConfig[p.payment_method as PaymentMethod]?.label || p.payment_method}
                                 </p>
+                                {p.received_by_profile?.name && (
+                                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <Users className="h-3 w-3" />
+                                    Recebido por: {p.received_by_profile.name}
+                                  </p>
+                                )}
                               </div>
                             </div>
                             <div className="text-right">

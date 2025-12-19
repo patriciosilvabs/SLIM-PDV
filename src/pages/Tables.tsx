@@ -25,7 +25,7 @@ import { useAudioNotification } from '@/hooks/useAudioNotification';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
 import { CancelOrderDialog } from '@/components/order/CancelOrderDialog';
-import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus, ArrowRightLeft, Edit, XCircle, Printer, RotateCcw, Ban, ArrowRight } from 'lucide-react';
+import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus, ArrowRightLeft, Edit, XCircle, Printer, RotateCcw, Ban, ArrowRight, Wallet } from 'lucide-react';
 import { printKitchenOrderTicket } from '@/components/kitchen/KitchenOrderTicket';
 import { printCustomerReceipt, printPartialPaymentReceipt } from '@/components/receipt/CustomerReceipt';
 import { Switch } from '@/components/ui/switch';
@@ -868,20 +868,70 @@ export default function Tables() {
 
   const selectedOrder = selectedTable ? getTableOrder(selectedTable.id) : null;
 
-  // Fetch existing partial payments for the selected order
+  // Fetch existing partial payments for the selected order WITH receiver profile
   const { data: existingPayments } = useQuery({
     queryKey: ['payments', selectedOrder?.id],
     queryFn: async () => {
       if (!selectedOrder?.id) return [];
       const { data, error } = await supabase
         .from('payments')
-        .select('*')
+        .select(`
+          *,
+          received_by_profile:profiles!payments_received_by_fkey(id, name)
+        `)
         .eq('order_id', selectedOrder.id);
       if (error) throw error;
       return data || [];
     },
     enabled: !!selectedOrder?.id,
   });
+
+  // Fetch payments for ALL occupied tables to show partial payment indicators on grid
+  const { data: allTablePayments } = useQuery({
+    queryKey: ['all-table-payments', tables?.filter(t => t.status === 'occupied').map(t => t.id)],
+    queryFn: async () => {
+      const occupiedTableIds = tables?.filter(t => t.status === 'occupied').map(t => t.id) || [];
+      if (occupiedTableIds.length === 0) return [];
+      
+      // Get orders for occupied tables
+      const { data: activeOrders, error: ordersError } = await supabase
+        .from('orders')
+        .select('id, table_id, total')
+        .in('table_id', occupiedTableIds)
+        .neq('status', 'cancelled');
+      
+      if (ordersError) throw ordersError;
+      if (!activeOrders?.length) return [];
+      
+      // Get payments for those orders
+      const { data: payments, error: paymentsError } = await supabase
+        .from('payments')
+        .select('order_id, amount')
+        .in('order_id', activeOrders.map(o => o.id));
+      
+      if (paymentsError) throw paymentsError;
+      
+      // Aggregate by table_id
+      return activeOrders.map(order => ({
+        table_id: order.table_id,
+        order_id: order.id,
+        orderTotal: Number(order.total),
+        totalPaid: payments
+          ?.filter(p => p.order_id === order.id)
+          .reduce((sum, p) => sum + Number(p.amount), 0) || 0
+      }));
+    },
+    enabled: !!tables?.length,
+  });
+
+  // Create map for quick access to table payment info
+  const tablePaymentsMap = useMemo(() => {
+    const map = new Map<string, { totalPaid: number; orderTotal: number }>();
+    allTablePayments?.forEach(tp => {
+      map.set(tp.table_id, { totalPaid: tp.totalPaid, orderTotal: tp.orderTotal });
+    });
+    return map;
+  }, [allTablePayments]);
 
   // Calculate total already paid (from database)
   const existingPaymentsTotal = useMemo(() => 
@@ -1210,6 +1260,13 @@ export default function Tables() {
                     const isSelected = selectedTable?.id === table.id;
                     const isOrderReady = order?.status === 'ready';
                     const isOrderDelivered = order?.status === 'delivered';
+                    
+                    // Check for partial payments
+                    const tablePaymentInfo = tablePaymentsMap.get(table.id);
+                    const hasPartialPayment = tablePaymentInfo && 
+                      tablePaymentInfo.totalPaid > 0 && 
+                      tablePaymentInfo.totalPaid < tablePaymentInfo.orderTotal;
+                    
                     return (
                       <Card
                         key={table.id}
@@ -1218,10 +1275,20 @@ export default function Tables() {
                           statusColors[table.status],
                           isSelected && 'ring-2 ring-primary ring-offset-2',
                           isOrderReady && 'ring-2 ring-green-500 ring-offset-2 animate-pulse',
-                          isOrderDelivered && !isOrderReady && 'ring-2 ring-blue-500 ring-offset-2'
+                          isOrderDelivered && !isOrderReady && 'ring-2 ring-blue-500 ring-offset-2',
+                          hasPartialPayment && !isOrderReady && !isOrderDelivered && 'ring-2 ring-orange-500 ring-offset-2'
                         )}
                         onClick={() => handleTableClick(table)}
                       >
+                        {/* Partial Payment Badge */}
+                        {hasPartialPayment && !isOrderReady && (
+                          <div className="absolute -top-2 -left-2 z-10">
+                            <Badge className="bg-orange-500 text-white shadow-lg text-[10px] px-1.5">
+                              <Wallet className="h-3 w-3 mr-0.5" />
+                              {formatCurrency(tablePaymentInfo.totalPaid)}
+                            </Badge>
+                          </div>
+                        )}
                         {isOrderReady && (
                           <div className="absolute -top-2 -right-2 z-10">
                             <Badge className="bg-green-500 text-white shadow-lg animate-bounce">
@@ -1249,6 +1316,12 @@ export default function Tables() {
                             <p className="text-xs mt-1 opacity-75">
                               {order.order_items?.length || 0} itens
                             </p>
+                          )}
+                          {/* Partial Payment Info */}
+                          {hasPartialPayment && (
+                            <div className="text-xs mt-1 text-orange-200 font-medium">
+                              Falta: {formatCurrency(tablePaymentInfo.orderTotal - tablePaymentInfo.totalPaid)}
+                            </div>
                           )}
                           {reservation && (
                             <p className="text-xs mt-1 opacity-75">
@@ -1870,18 +1943,26 @@ export default function Tables() {
                               {existingPayments.map((payment: any) => (
                                 <div 
                                   key={payment.id}
-                                  className="flex items-center justify-between p-2 bg-green-600/10 rounded text-sm border border-green-600/20"
+                                  className="flex flex-col p-2 bg-green-600/10 rounded text-sm border border-green-600/20"
                                 >
-                                  <div className="flex items-center gap-2">
-                                    {paymentMethodIcons[payment.payment_method as PaymentMethod]}
-                                    <span>{paymentMethodLabels[payment.payment_method as PaymentMethod]}</span>
-                                    {payment.is_partial && (
-                                      <Badge variant="outline" className="text-xs">Parcial</Badge>
-                                    )}
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      {paymentMethodIcons[payment.payment_method as PaymentMethod]}
+                                      <span>{paymentMethodLabels[payment.payment_method as PaymentMethod]}</span>
+                                      {payment.is_partial && (
+                                        <Badge variant="outline" className="text-xs">Parcial</Badge>
+                                      )}
+                                    </div>
+                                    <span className="font-medium text-green-600">
+                                      {formatCurrency(Number(payment.amount))}
+                                    </span>
                                   </div>
-                                  <span className="font-medium text-green-600">
-                                    {formatCurrency(Number(payment.amount))}
-                                  </span>
+                                  {payment.received_by_profile?.name && (
+                                    <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                                      <Users className="h-3 w-3" />
+                                      Recebido por: {payment.received_by_profile.name}
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </div>
