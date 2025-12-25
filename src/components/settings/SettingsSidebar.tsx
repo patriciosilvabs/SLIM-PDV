@@ -12,6 +12,7 @@ import {
   Shield,
   Search,
   X,
+  Factory,
   LucideIcon
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,7 @@ import { Input } from '@/components/ui/input';
 export type SettingsSection = 
   | 'tables' 
   | 'kds' 
+  | 'kds-stations'
   | 'orders' 
   | 'printers' 
   | 'notifications' 
@@ -31,6 +33,7 @@ export type SettingsSection =
 export const SECTION_INFO: Record<SettingsSection, { label: string; icon: LucideIcon }> = {
   tables: { label: 'Mesas', icon: UtensilsCrossed },
   kds: { label: 'KDS', icon: ChefHat },
+  'kds-stations': { label: 'Praças', icon: Factory },
   orders: { label: 'Pedidos', icon: ShoppingCart },
   printers: { label: 'Impressoras', icon: Printer },
   notifications: { label: 'Sons', icon: Bell },
@@ -51,6 +54,7 @@ const sections = [
     items: [
       { id: 'tables' as const, label: 'Mesas', icon: UtensilsCrossed },
       { id: 'kds' as const, label: 'KDS', icon: ChefHat },
+      { id: 'kds-stations' as const, label: 'Praças', icon: Factory },
       { id: 'orders' as const, label: 'Pedidos', icon: ShoppingCart },
       { id: 'printers' as const, label: 'Impressoras', icon: Printer },
     ],

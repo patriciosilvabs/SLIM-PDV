@@ -17,6 +17,9 @@ import { useAudioNotification } from '@/hooks/useAudioNotification';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { useScheduledAnnouncements } from '@/hooks/useScheduledAnnouncements';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
+import { KdsSlaIndicator } from '@/components/kds/KdsSlaIndicator';
+import { KdsItemCounter } from '@/components/kds/KdsItemCounter';
+import { KdsBorderBadge } from '@/components/kds/KdsBorderHighlight';
 
 type OrderTypeFilter = 'all' | 'table' | 'takeaway' | 'delivery';
 
@@ -85,7 +88,7 @@ export default function KDS() {
     }
   });
   const { playKdsNewOrderSound, playMaxWaitAlertSound, playOrderCancelledSound, settings } = useAudioNotification();
-  const { settings: kdsSettings } = useKdsSettings();
+  const { settings: kdsSettings, hasSpecialBorder } = useKdsSettings();
   const notifiedOrdersRef = useRef<Set<string>>(new Set());
   const previousOrdersRef = useRef<Order[]>([]);
   const initialLoadRef = useRef(true);
@@ -863,61 +866,77 @@ export default function KDS() {
     showReadyButton?: boolean;
   }) => {
     const origin = getOrderOrigin(order);
-    const timeInfo = getTimeInfo(order.updated_at || order.created_at);
     const OriginIcon = origin.icon;
+    
+    // Get items that need preparation
+    const itemsToShow = order.order_items?.filter(item => item.status === 'pending' || item.status === 'preparing') || [];
+    const totalItems = itemsToShow.length;
+    
+    // Check if any item has special border
+    const hasSpecialBorderItem = itemsToShow.some(item => {
+      const itemText = `${item.product?.name || ''} ${item.notes || ''} ${item.extras?.map(e => e.extra_name).join(' ') || ''}`;
+      return hasSpecialBorder(itemText);
+    });
 
     return (
-      <Card className="mb-3 shadow-md">
+      <Card className={cn(
+        "mb-3 shadow-md transition-all",
+        hasSpecialBorderItem && "ring-2 ring-amber-500 ring-offset-2 ring-offset-background"
+      )}>
         <CardHeader className="pb-2 pt-3 px-4">
           <div className="flex items-center justify-between">
             <Badge className={cn("py-1 px-2 text-xs font-bold", origin.color)}>
               <OriginIcon className="h-3.5 w-3.5 mr-1" />
               {origin.label}
             </Badge>
-            <div className={cn("flex items-center gap-1.5 px-2 py-1 rounded-full text-sm", timeInfo.bgColor)}>
-              <Clock className={cn("h-3.5 w-3.5", timeInfo.color)} />
-              <span className={cn("font-bold", timeInfo.color)}>{timeInfo.text}</span>
-            </div>
+            <KdsSlaIndicator createdAt={order.updated_at || order.created_at} size="md" />
           </div>
           <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
             <span className="font-mono">#{order.id.slice(-4).toUpperCase()}</span>
             {order.customer_name && (
               <span className="font-medium text-primary">• {order.customer_name}</span>
             )}
+            {totalItems > 1 && (
+              <KdsItemCounter currentIndex={1} totalItems={totalItems} label="Pizza" />
+            )}
           </div>
         </CardHeader>
         <CardContent className="px-4 pb-3">
           <div className="space-y-2 mb-3 border rounded-lg p-2 bg-background/50">
-            {/* Filter to show only items that still need to be prepared (pending/preparing) */}
-            {order.order_items
-              ?.filter(item => item.status === 'pending' || item.status === 'preparing')
-              .map((item, idx) => (
-              <div key={idx} className="text-sm">
-                <div className="flex items-start gap-1">
-                  <span className="font-bold text-primary">{item.quantity}x</span>
-                  <div className="flex-1">
-                    <span className="font-medium">{item.product?.name || 'Produto'}</span>
-                    {item.variation?.name && (
-                      <span className="text-muted-foreground ml-1">({item.variation.name})</span>
-                    )}
+            {itemsToShow.map((item, idx) => {
+              const itemText = `${item.product?.name || ''} ${item.notes || ''} ${item.extras?.map(e => e.extra_name).join(' ') || ''}`;
+              
+              return (
+                <div key={idx} className="text-sm">
+                  <div className="flex items-start gap-1">
+                    <span className="font-bold text-primary">{item.quantity}x</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-medium">{item.product?.name || 'Produto'}</span>
+                        {item.variation?.name && (
+                          <span className="text-muted-foreground">({item.variation.name})</span>
+                        )}
+                        <KdsBorderBadge text={itemText} />
+                      </div>
+                    </div>
                   </div>
+                  {/* Extras/Complementos */}
+                  {item.extras && item.extras.length > 0 && (
+                    <div className="text-xs text-blue-600 dark:text-blue-400 ml-5 mt-0.5">
+                      + {item.extras.map(e => 
+                          e.extra_name.includes(': ') 
+                            ? e.extra_name.split(': ').slice(1).join(': ')
+                            : e.extra_name
+                        ).join(', ')}
+                    </div>
+                  )}
+                  {/* Observações do item */}
+                  {item.notes && (
+                    <div className="text-xs text-orange-500 ml-5 mt-0.5">📝 {item.notes}</div>
+                  )}
                 </div>
-                {/* Extras/Complementos */}
-                {item.extras && item.extras.length > 0 && (
-                  <div className="text-xs text-blue-600 dark:text-blue-400 ml-5 mt-0.5">
-                    + {item.extras.map(e => 
-                        e.extra_name.includes(': ') 
-                          ? e.extra_name.split(': ').slice(1).join(': ')
-                          : e.extra_name
-                      ).join(', ')}
-                  </div>
-                )}
-                {/* Observações do item */}
-                {item.notes && (
-                  <div className="text-xs text-orange-500 ml-5 mt-0.5">📝 {item.notes}</div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
           {order.notes && (
             <div className="text-xs text-orange-600 dark:text-orange-400 bg-orange-500/10 rounded p-2 mb-3">
