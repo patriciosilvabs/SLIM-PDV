@@ -1657,6 +1657,12 @@ export default function Tables() {
                                           📅 {format(new Date(item.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                                         </p>
                                       )}
+                                      {/* Nome do garçom que adicionou */}
+                                      {item.added_by_profile?.name && (
+                                        <p className="text-xs text-blue-600 mt-0.5 pl-2">
+                                          👤 {item.added_by_profile.name}
+                                        </p>
+                                      )}
                                     </div>
                                     <div className="flex items-center gap-1 ml-2">
                                       <span className="text-sm font-medium">

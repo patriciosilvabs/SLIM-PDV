@@ -26,12 +26,14 @@ export interface OrderItem {
   notes: string | null;
   status: OrderStatus;
   created_at: string;
+  added_by?: string | null;
   current_station_id?: string | null;
   station_status?: 'waiting' | 'in_progress' | 'completed' | null;
   product?: { name: string; image_url: string | null };
   variation?: { name: string } | null;
   extras?: { extra_name: string; price: number }[] | null;
   current_station?: OrderItemStation | null;
+  added_by_profile?: { name: string } | null;
 }
 
 export interface Order {
@@ -69,7 +71,7 @@ export function useOrders(status?: OrderStatus[]) {
     queryFn: async () => {
       let q = supabase
         .from('orders')
-        .select('*, table:tables(number), order_items(*, product:products(name, image_url), variation:product_variations(name), extras:order_item_extras(extra_name, price), current_station:kds_stations(id, name, station_type, color, icon, sort_order))')
+        .select('*, table:tables(number), order_items(*, added_by, product:products(name, image_url), variation:product_variations(name), extras:order_item_extras(extra_name, price), current_station:kds_stations(id, name, station_type, color, icon, sort_order))')
         .order('created_at', { ascending: false });
       
       if (status && status.length > 0) {
@@ -79,15 +81,20 @@ export function useOrders(status?: OrderStatus[]) {
       const { data: ordersData, error } = await q;
       if (error) throw error;
       
-      // Fetch profiles for created_by users
-      const createdByIds = [...new Set(ordersData?.map(o => o.created_by).filter(Boolean) as string[])];
+      // Collect all user IDs (order creators + item adders)
+      const createdByIds = ordersData?.map(o => o.created_by).filter(Boolean) as string[];
+      const addedByIds = ordersData?.flatMap(o => 
+        o.order_items?.map((item: { added_by?: string | null }) => item.added_by).filter(Boolean) || []
+      ) as string[];
+      
+      const allUserIds = [...new Set([...createdByIds, ...addedByIds])];
       let profilesMap: Record<string, { name: string }> = {};
       
-      if (createdByIds.length > 0) {
+      if (allUserIds.length > 0) {
         const { data: profiles } = await supabase
           .from('profiles')
           .select('id, name')
-          .in('id', createdByIds);
+          .in('id', allUserIds);
         
         if (profiles) {
           profilesMap = profiles.reduce((acc, p) => {
@@ -97,10 +104,14 @@ export function useOrders(status?: OrderStatus[]) {
         }
       }
       
-      // Merge profiles into orders
+      // Merge profiles into orders and order items
       const ordersWithProfiles = ordersData?.map(order => ({
         ...order,
-        created_by_profile: order.created_by ? profilesMap[order.created_by] || null : null
+        created_by_profile: order.created_by ? profilesMap[order.created_by] || null : null,
+        order_items: order.order_items?.map((item: { added_by?: string | null }) => ({
+          ...item,
+          added_by_profile: item.added_by ? profilesMap[item.added_by] || null : null
+        }))
       }));
       
       return ordersWithProfiles as Order[];
