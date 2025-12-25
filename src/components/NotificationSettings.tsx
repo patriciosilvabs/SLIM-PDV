@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
-import { Bell, Volume2, Play, ShoppingBag, CalendarCheck, ChefHat, Store, Clock, Timer, Ban, AlertTriangle } from 'lucide-react';
+import { Bell, Volume2, Play, ShoppingBag, CalendarCheck, ChefHat, Store, Clock, Timer, Ban, AlertTriangle, Hourglass } from 'lucide-react';
 import { SoundType } from '@/hooks/useCustomSounds';
 
 const SOUND_EVENTS: { 
@@ -70,6 +70,13 @@ const SOUND_EVENTS: {
     iconColor: 'text-red-500',
     label: 'Alerta de Tempo Máximo',
     description: 'Som quando pedido excede 25min no KDS'
+  },
+  {
+    type: 'itemDelayAlert',
+    icon: Hourglass,
+    iconColor: 'text-red-600',
+    label: 'Alerta de Item Atrasado',
+    description: 'Som quando item fica muito tempo na estação'
   }
 ];
 

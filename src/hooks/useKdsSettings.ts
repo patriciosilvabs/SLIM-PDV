@@ -31,6 +31,12 @@ export interface KdsGlobalSettings {
   bottleneckSettings: BottleneckSettings;
   showPartySize: boolean;
   compactMode: boolean;
+  // Timer settings
+  timerGreenMinutes: number;
+  timerYellowMinutes: number;
+  // Delay alert settings
+  delayAlertEnabled: boolean;
+  delayAlertMinutes: number;
 }
 
 // Device-specific settings (stored in localStorage)
@@ -75,6 +81,10 @@ const defaultGlobalSettings: KdsGlobalSettings = {
   bottleneckSettings: defaultBottleneckSettings,
   showPartySize: true,
   compactMode: false,
+  timerGreenMinutes: 5,
+  timerYellowMinutes: 10,
+  delayAlertEnabled: true,
+  delayAlertMinutes: 10,
 };
 
 const getDeviceSettings = (): KdsDeviceSettings => {
@@ -166,6 +176,10 @@ export function useKdsSettings() {
       bottleneckSettings: parseBottleneckSettings(dbSettings.bottleneck_settings),
       showPartySize: dbSettings.show_party_size ?? defaultGlobalSettings.showPartySize,
       compactMode: dbSettings.compact_mode ?? defaultGlobalSettings.compactMode,
+      timerGreenMinutes: (dbSettings as any).timer_green_minutes ?? defaultGlobalSettings.timerGreenMinutes,
+      timerYellowMinutes: (dbSettings as any).timer_yellow_minutes ?? defaultGlobalSettings.timerYellowMinutes,
+      delayAlertEnabled: (dbSettings as any).delay_alert_enabled ?? defaultGlobalSettings.delayAlertEnabled,
+      delayAlertMinutes: (dbSettings as any).delay_alert_minutes ?? defaultGlobalSettings.delayAlertMinutes,
     };
   }, [dbSettings]);
 
@@ -192,6 +206,10 @@ export function useKdsSettings() {
       if (updates.bottleneckSettings !== undefined) dbUpdates.bottleneck_settings = updates.bottleneckSettings;
       if (updates.showPartySize !== undefined) dbUpdates.show_party_size = updates.showPartySize;
       if (updates.compactMode !== undefined) dbUpdates.compact_mode = updates.compactMode;
+      if (updates.timerGreenMinutes !== undefined) dbUpdates.timer_green_minutes = updates.timerGreenMinutes;
+      if (updates.timerYellowMinutes !== undefined) dbUpdates.timer_yellow_minutes = updates.timerYellowMinutes;
+      if (updates.delayAlertEnabled !== undefined) dbUpdates.delay_alert_enabled = updates.delayAlertEnabled;
+      if (updates.delayAlertMinutes !== undefined) dbUpdates.delay_alert_minutes = updates.delayAlertMinutes;
 
       const { error } = await supabase
         .from('kds_global_settings')
@@ -226,6 +244,10 @@ export function useKdsSettings() {
     if (updates.bottleneckSettings !== undefined) globalUpdates.bottleneckSettings = updates.bottleneckSettings;
     if (updates.showPartySize !== undefined) globalUpdates.showPartySize = updates.showPartySize;
     if (updates.compactMode !== undefined) globalUpdates.compactMode = updates.compactMode;
+    if (updates.timerGreenMinutes !== undefined) globalUpdates.timerGreenMinutes = updates.timerGreenMinutes;
+    if (updates.timerYellowMinutes !== undefined) globalUpdates.timerYellowMinutes = updates.timerYellowMinutes;
+    if (updates.delayAlertEnabled !== undefined) globalUpdates.delayAlertEnabled = updates.delayAlertEnabled;
+    if (updates.delayAlertMinutes !== undefined) globalUpdates.delayAlertMinutes = updates.delayAlertMinutes;
 
     // Update device settings locally
     if (Object.keys(deviceUpdates).length > 0) {

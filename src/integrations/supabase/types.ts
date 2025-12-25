@@ -499,6 +499,8 @@ export type Database = {
           cancellation_alerts_enabled: boolean
           compact_mode: boolean
           created_at: string
+          delay_alert_enabled: boolean
+          delay_alert_minutes: number
           highlight_special_borders: boolean
           id: string
           operation_mode: string
@@ -506,6 +508,8 @@ export type Database = {
           show_pending_column: boolean
           sla_green_minutes: number
           sla_yellow_minutes: number
+          timer_green_minutes: number
+          timer_yellow_minutes: number
           updated_at: string
         }
         Insert: {
@@ -516,6 +520,8 @@ export type Database = {
           cancellation_alerts_enabled?: boolean
           compact_mode?: boolean
           created_at?: string
+          delay_alert_enabled?: boolean
+          delay_alert_minutes?: number
           highlight_special_borders?: boolean
           id?: string
           operation_mode?: string
@@ -523,6 +529,8 @@ export type Database = {
           show_pending_column?: boolean
           sla_green_minutes?: number
           sla_yellow_minutes?: number
+          timer_green_minutes?: number
+          timer_yellow_minutes?: number
           updated_at?: string
         }
         Update: {
@@ -533,6 +541,8 @@ export type Database = {
           cancellation_alerts_enabled?: boolean
           compact_mode?: boolean
           created_at?: string
+          delay_alert_enabled?: boolean
+          delay_alert_minutes?: number
           highlight_special_borders?: boolean
           id?: string
           operation_mode?: string
@@ -540,6 +550,8 @@ export type Database = {
           show_pending_column?: boolean
           sla_green_minutes?: number
           sla_yellow_minutes?: number
+          timer_green_minutes?: number
+          timer_yellow_minutes?: number
           updated_at?: string
         }
         Relationships: []
