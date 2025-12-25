@@ -224,6 +224,9 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const logoUrl = localStorage.getItem('pdv_restaurant_logo_url') || '';
       const logoMaxWidth = parseInt(localStorage.getItem('pdv_logo_max_width') || '300');
       
+      // Debug: Log logo settings
+      console.log('🖨️ [CustomerReceipt] Logo settings:', { showLogo, logoUrl: logoUrl ? `${logoUrl.substring(0, 50)}...` : '(empty)', logoMaxWidth });
+      
       // Get custom messages based on order type
       const isTableOrder = data.orderType === 'dine_in';
       const customMessage = isTableOrder 
@@ -236,6 +239,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       
       // Check if we should print logo instead of text restaurant name
       const shouldPrintLogo = showLogo && !!logoUrl;
+      console.log('🖨️ [CustomerReceipt] shouldPrintLogo:', shouldPrintLogo);
       
       // Merge restaurant info into data
       const enrichedData: CustomerReceiptData = {
@@ -265,21 +269,27 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       
       // If logo is enabled, build mixed array with image + text
       if (shouldPrintLogo) {
+        console.log('🖼️ [CustomerReceipt] Tentando carregar logo...');
         const logoBase64 = await imageUrlToBase64Cached(logoUrl);
         
         if (logoBase64) {
+          console.log('✅ [CustomerReceipt] Logo carregado! Tamanho base64:', logoBase64.length);
           // Resize image to configured max width before sending to printer
           let resizedLogo = await resizeImage(logoBase64, logoMaxWidth);
+          console.log('✅ [CustomerReceipt] Logo redimensionado');
           
           // Apply color mode conversion (grayscale or dithering)
           const currentLogoPrintMode = localStorage.getItem('pdv_logo_print_mode') || 'original';
           if (currentLogoPrintMode === 'grayscale') {
             resizedLogo = await convertToGrayscale(resizedLogo);
+            console.log('✅ [CustomerReceipt] Convertido para escala de cinza');
           } else if (currentLogoPrintMode === 'dithered') {
             resizedLogo = await convertToDithered(resizedLogo);
+            console.log('✅ [CustomerReceipt] Convertido com dithering');
           }
           
           const pureBase64 = extractBase64Data(resizedLogo);
+          console.log('🖨️ [CustomerReceipt] Enviando para impressora com logo...');
           
           // Build print array: init + center + logo image + spacing + receipt text
           const printArray: PrintDataItem[] = [
@@ -303,8 +313,13 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
           ];
           
           await qz.print(qz.config.cashierPrinter, printArray);
+          console.log('✅ [CustomerReceipt] Impresso com logo!');
           return true;
+        } else {
+          console.warn('⚠️ [CustomerReceipt] Falha ao carregar logo, imprimindo sem logo');
         }
+      } else {
+        console.log('ℹ️ [CustomerReceipt] Logo desabilitado ou URL vazia, imprimindo sem logo');
       }
       
       // Fallback: print text-only receipt
@@ -376,7 +391,11 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const logoUrl = localStorage.getItem('pdv_restaurant_logo_url') || '';
       const logoMaxWidth = parseInt(localStorage.getItem('pdv_logo_max_width') || '300');
       
+      // Debug: Log logo settings
+      console.log('🖨️ [PartialPayment] Logo settings:', { showLogo, logoUrl: logoUrl ? `${logoUrl.substring(0, 50)}...` : '(empty)', logoMaxWidth });
+      
       const shouldPrintLogo = showLogo && !!logoUrl;
+      console.log('🖨️ [PartialPayment] shouldPrintLogo:', shouldPrintLogo);
       
       // Enrich data with restaurant info
       const enrichedData: PartialPaymentReceiptData = {
@@ -402,21 +421,27 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       
       // If logo is enabled, build mixed array with image + text
       if (shouldPrintLogo) {
+        console.log('🖼️ [PartialPayment] Tentando carregar logo...');
         const logoBase64 = await imageUrlToBase64Cached(logoUrl);
         
         if (logoBase64) {
+          console.log('✅ [PartialPayment] Logo carregado! Tamanho base64:', logoBase64.length);
           // Resize image to configured max width
           let resizedLogo = await resizeImage(logoBase64, logoMaxWidth);
+          console.log('✅ [PartialPayment] Logo redimensionado');
           
           // Apply color mode conversion
           const currentLogoPrintMode = localStorage.getItem('pdv_logo_print_mode') || 'original';
           if (currentLogoPrintMode === 'grayscale') {
             resizedLogo = await convertToGrayscale(resizedLogo);
+            console.log('✅ [PartialPayment] Convertido para escala de cinza');
           } else if (currentLogoPrintMode === 'dithered') {
             resizedLogo = await convertToDithered(resizedLogo);
+            console.log('✅ [PartialPayment] Convertido com dithering');
           }
           
           const pureBase64 = extractBase64Data(resizedLogo);
+          console.log('🖨️ [PartialPayment] Enviando para impressora com logo...');
           
           // Build print array: init + center + logo image + spacing + receipt text
           const printArray: PrintDataItem[] = [
@@ -436,8 +461,13 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
           ];
           
           await qz.print(qz.config.cashierPrinter, printArray);
+          console.log('✅ [PartialPayment] Impresso com logo!');
           return true;
+        } else {
+          console.warn('⚠️ [PartialPayment] Falha ao carregar logo, imprimindo sem logo');
         }
+      } else {
+        console.log('ℹ️ [PartialPayment] Logo desabilitado ou URL vazia, imprimindo sem logo');
       }
       
       // Fallback: print text-only receipt
