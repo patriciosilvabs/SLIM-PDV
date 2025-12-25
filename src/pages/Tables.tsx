@@ -628,15 +628,9 @@ export default function Tables() {
     const order = getTableOrder(selectedTable.id);
     if (!order) return;
 
-    // BUG FIX: If order is ready or delivered, reset to initial status for KDS
-    // Also reset updated_at so wait time calculation starts fresh
-    if (order.status === 'ready' || order.status === 'delivered') {
-      await updateOrder.mutateAsync({
-        id: order.id,
-        status: getInitialOrderStatus(),
-        updated_at: new Date().toISOString()
-      });
-    }
+    // O trigger auto_initialize_new_order_item cuidará de:
+    // 1. Atribuir estação KDS ao item
+    // 2. Mudar status do pedido de 'delivered' para 'preparing' automaticamente
 
     for (const item of items) {
       const orderItem = await addOrderItem.mutateAsync({
