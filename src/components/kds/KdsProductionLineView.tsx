@@ -59,13 +59,16 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
 
   // Filtrar pedidos baseado na praça atribuída a este dispositivo
   const filteredOrders = useMemo(() => {
+    // Excluir pedidos em rascunho primeiro
+    const nonDraftOrders = typedOrders.filter(o => (o as any).is_draft !== true);
+
     if (!settings.assignedStationId) {
       // Se não tiver praça atribuída, mostra todos os pedidos ativos
-      return typedOrders.filter(o => o.status === 'pending' || o.status === 'preparing');
+      return nonDraftOrders.filter(o => o.status === 'pending' || o.status === 'preparing');
     }
 
     // Filtrar pedidos que têm itens nesta praça
-    return typedOrders.filter(order => {
+    return nonDraftOrders.filter(order => {
       if (order.status === 'pending') return true; // Pedidos pendentes aparecem para inicialização
       
       return order.order_items?.some(

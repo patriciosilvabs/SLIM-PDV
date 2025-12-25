@@ -149,16 +149,18 @@ export default function KDS() {
     return Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
   };
 
-  // List for display (includes ready) - only orders with items
+  // List for display (includes ready) - only orders with items and not drafts
   const activeOrdersList = orders.filter(o => 
     (o.status === 'pending' || o.status === 'preparing' || o.status === 'ready') &&
-    (o.order_items?.length ?? 0) > 0
+    (o.order_items?.length ?? 0) > 0 &&
+    o.is_draft !== true
   );
   
   // List for alerts (ONLY pending and preparing - ready orders should not trigger alerts)
   const ordersForAlerts = orders.filter(o => 
     (o.status === 'pending' || o.status === 'preparing') &&
-    (o.order_items?.length ?? 0) > 0
+    (o.order_items?.length ?? 0) > 0 &&
+    o.is_draft !== true
   );
   
   // Use updated_at for wait time calculation - this resets when new items are added to a ready order
@@ -332,10 +334,11 @@ export default function KDS() {
   })));
   console.log('[KDS] Current filter:', orderTypeFilter);
 
-  // Count by type (unfiltered) - only orders with items
+  // Count by type (unfiltered) - only orders with items and not drafts
   const allActiveOrders = orders.filter(
     order => (order.status === 'pending' || order.status === 'preparing' || order.status === 'ready') &&
-             (order.order_items?.length ?? 0) > 0
+             (order.order_items?.length ?? 0) > 0 &&
+             order.is_draft !== true
   );
   const tableCount = allActiveOrders.filter(o => o.order_type === 'dine_in').length;
   const takeawayCount = allActiveOrders.filter(o => o.order_type === 'takeaway').length;
