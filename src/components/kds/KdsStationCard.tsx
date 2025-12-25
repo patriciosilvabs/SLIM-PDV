@@ -345,7 +345,6 @@ export function KdsStationCard({
               <Button 
                 size={compact ? "sm" : "default"}
                 onClick={() => onMoveToNext(item.id)}
-                disabled={isProcessing}
                 className={cn("w-full mt-3", compact && "h-8 text-xs mt-2")}
                 style={{ backgroundColor: stationColor }}
               >
