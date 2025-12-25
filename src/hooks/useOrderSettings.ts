@@ -48,13 +48,15 @@ export function useOrderSettings() {
   });
 
   const [autoPrintKitchenTicket, setAutoPrintKitchenTicket] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem(AUTO_PRINT_KITCHEN_KEY) === 'true';
+    if (typeof window === 'undefined') return true;
+    const val = localStorage.getItem(AUTO_PRINT_KITCHEN_KEY);
+    return val === null ? true : val === 'true';
   });
 
   const [autoPrintCustomerReceipt, setAutoPrintCustomerReceipt] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem(AUTO_PRINT_RECEIPT_KEY) === 'true';
+    if (typeof window === 'undefined') return true;
+    const val = localStorage.getItem(AUTO_PRINT_RECEIPT_KEY);
+    return val === null ? true : val === 'true';
   });
 
   const [kitchenFontSize, setKitchenFontSize] = useState<PrintFontSize>(() => {
