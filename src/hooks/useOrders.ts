@@ -6,6 +6,15 @@ import { useEffect } from 'react';
 export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
 export type OrderType = 'dine_in' | 'takeaway' | 'delivery';
 
+export interface OrderItemStation {
+  id: string;
+  name: string;
+  station_type: string;
+  color: string | null;
+  icon: string | null;
+  sort_order: number | null;
+}
+
 export interface OrderItem {
   id: string;
   order_id: string;
@@ -17,9 +26,12 @@ export interface OrderItem {
   notes: string | null;
   status: OrderStatus;
   created_at: string;
+  current_station_id?: string | null;
+  station_status?: 'waiting' | 'in_progress' | 'completed' | null;
   product?: { name: string; image_url: string | null };
   variation?: { name: string } | null;
   extras?: { extra_name: string; price: number }[] | null;
+  current_station?: OrderItemStation | null;
 }
 
 export interface Order {
@@ -57,7 +69,7 @@ export function useOrders(status?: OrderStatus[]) {
     queryFn: async () => {
       let q = supabase
         .from('orders')
-        .select('*, table:tables(number), order_items(*, product:products(name, image_url), variation:product_variations(name), extras:order_item_extras(extra_name, price))')
+        .select('*, table:tables(number), order_items(*, product:products(name, image_url), variation:product_variations(name), extras:order_item_extras(extra_name, price), current_station:kds_stations(id, name, station_type, color, icon, sort_order))')
         .order('created_at', { ascending: false });
       
       if (status && status.length > 0) {
