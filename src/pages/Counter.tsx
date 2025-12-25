@@ -65,7 +65,10 @@ import {
   ChevronRight,
   XCircle,
   Store,
-  Truck
+  Truck,
+  Clock,
+  ChefHat,
+  PackageCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -115,7 +118,7 @@ export default function Counter() {
   const { data: comboItems } = useComboItems();
   const { data: variations } = useProductVariations();
   const { data: allOrders = [] } = useOrders();
-  const { createOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
+  const { createOrder, updateOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
   const { toast } = useToast();
   const { duplicateItems, autoPrintKitchenTicket, autoPrintCustomerReceipt, duplicateKitchenTicket } = useOrderSettings();
   const { getInitialOrderStatus, settings: kdsSettings } = useKdsSettings();
@@ -990,7 +993,7 @@ export default function Counter() {
           </div>
 
           {/* Active Orders Section */}
-          {canCancelOrder && todayActiveOrders.length > 0 && (
+          {todayActiveOrders.length > 0 && (
             <Collapsible open={activeOrdersOpen} onOpenChange={setActiveOrdersOpen}>
               <CollapsibleTrigger asChild>
                 <Button 
@@ -999,7 +1002,7 @@ export default function Counter() {
                 >
                   <span className="flex items-center gap-2 text-sm">
                     <History className="h-4 w-4" />
-                    Pedidos Ativos ({todayActiveOrders.length})
+                    Pedidos em Andamento ({todayActiveOrders.length})
                   </span>
                   <ChevronRight className={cn(
                     "h-4 w-4 transition-transform",
@@ -1008,16 +1011,40 @@ export default function Counter() {
                 </Button>
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <ScrollArea className="max-h-48 border-b">
+                <ScrollArea className="max-h-64 border-b">
                   <div className="p-2 space-y-2">
-                    {todayActiveOrders.map(order => (
-                      <div 
-                        key={order.id}
-                        className="flex items-center justify-between p-2 bg-muted/50 rounded-lg text-sm"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium flex items-center gap-2">
-                            #{order.id.slice(-4).toUpperCase()}
+                    {todayActiveOrders.map(order => {
+                      const orderTime = order.created_at ? new Date(order.created_at).getTime() : Date.now();
+                      const waitMinutes = Math.floor((Date.now() - orderTime) / 60000);
+                      const timeColor = waitMinutes < 10 ? 'text-green-500' : waitMinutes < 20 ? 'text-yellow-500' : 'text-red-500';
+                      
+                      const statusConfig = {
+                        pending: { label: 'Novo', color: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30', icon: <Package className="h-3 w-3" /> },
+                        preparing: { label: 'Produzindo', color: 'bg-blue-500/10 text-blue-600 border-blue-500/30', icon: <ChefHat className="h-3 w-3" /> },
+                        ready: { label: 'Pronto', color: 'bg-green-500/10 text-green-600 border-green-500/30', icon: <CheckCircle2 className="h-3 w-3" /> },
+                      };
+                      const currentStatus = statusConfig[order.status as keyof typeof statusConfig] || statusConfig.pending;
+                      
+                      return (
+                        <div 
+                          key={order.id}
+                          className="flex flex-col gap-2 p-3 bg-muted/50 rounded-lg text-sm border"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold">#{order.id.slice(-4).toUpperCase()}</span>
+                              <Badge variant="outline" className={cn("text-xs", currentStatus.color)}>
+                                {currentStatus.icon}
+                                <span className="ml-1">{currentStatus.label}</span>
+                              </Badge>
+                            </div>
+                            <span className={cn("text-xs font-medium flex items-center gap-1", timeColor)}>
+                              <Clock className="h-3 w-3" />
+                              {waitMinutes}min
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
                             <Badge variant="outline" className={cn(
                               "text-xs",
                               order.order_type === 'delivery' 
@@ -1030,27 +1057,54 @@ export default function Counter() {
                                 <><Store className="h-3 w-3 mr-1" />Balcão</>
                               )}
                             </Badge>
-                          </p>
-                          {order.customer_name && (
-                            <p className="text-xs text-muted-foreground truncate">{order.customer_name}</p>
-                          )}
-                          <p className="text-xs text-primary font-medium">
-                            {formatCurrency(order.total || 0)}
-                          </p>
+                            {order.customer_name && (
+                              <span className="text-xs text-muted-foreground truncate">{order.customer_name}</span>
+                            )}
+                            <span className="text-xs text-primary font-medium ml-auto">
+                              {formatCurrency(order.total || 0)}
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center gap-2 pt-1 border-t border-border">
+                            {order.status === 'ready' && (
+                              <Button
+                                size="sm"
+                                className="flex-1 h-7 bg-muted-foreground hover:bg-muted-foreground/80"
+                                onClick={async () => {
+                                  try {
+                                    await updateOrder.mutateAsync({
+                                      id: order.id,
+                                      status: 'delivered' as any,
+                                      delivered_at: new Date().toISOString()
+                                    } as any);
+                                    toast({ title: 'Pedido marcado como entregue!' });
+                                  } catch (error) {
+                                    toast({ title: 'Erro ao atualizar pedido', variant: 'destructive' });
+                                  }
+                                }}
+                              >
+                                <PackageCheck className="h-3 w-3 mr-1" />
+                                Marcar Entregue
+                              </Button>
+                            )}
+                            {canCancelOrder && order.status !== 'ready' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:bg-destructive/10 h-7"
+                                onClick={() => {
+                                  setOrderToCancel(order);
+                                  setCancelDialogOpen(true);
+                                }}
+                              >
+                                <XCircle className="h-3 w-3 mr-1" />
+                                Cancelar
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
-                          onClick={() => {
-                            setOrderToCancel(order);
-                            setCancelDialogOpen(true);
-                          }}
-                        >
-                          <XCircle className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </ScrollArea>
               </CollapsibleContent>

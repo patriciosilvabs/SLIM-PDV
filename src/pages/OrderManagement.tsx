@@ -10,7 +10,7 @@ import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { AccessDenied } from '@/components/auth/AccessDenied';
 import { CancelOrderDialog } from '@/components/order/CancelOrderDialog';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, Store, Truck, Clock, Package, CheckCircle2, XCircle } from 'lucide-react';
+import { RefreshCw, Store, Truck, Clock, Package, CheckCircle2, XCircle, ChefHat, PackageCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -24,7 +24,7 @@ const formatTimeDisplay = (minutes: number): string => {
   return `${minutes} min`;
 };
 
-type KanbanColumn = 'pending' | 'preparing' | 'ready';
+type KanbanColumn = 'pending' | 'preparing' | 'ready' | 'delivered';
 
 interface KanbanColumnConfig {
   id: KanbanColumn;
@@ -45,7 +45,7 @@ const columns: KanbanColumnConfig[] = [
   { 
     id: 'preparing', 
     title: 'EM PRODUÇÃO', 
-    icon: <Clock className="h-5 w-5" />,
+    icon: <ChefHat className="h-5 w-5" />,
     color: 'text-blue-500',
     bgColor: 'bg-blue-500/10 border-blue-500/30'
   },
@@ -55,6 +55,13 @@ const columns: KanbanColumnConfig[] = [
     icon: <CheckCircle2 className="h-5 w-5" />,
     color: 'text-green-500',
     bgColor: 'bg-green-500/10 border-green-500/30'
+  },
+  { 
+    id: 'delivered', 
+    title: 'ENTREGUE', 
+    icon: <PackageCheck className="h-5 w-5" />,
+    color: 'text-muted-foreground',
+    bgColor: 'bg-muted/50 border-muted-foreground/30'
   },
 ];
 
@@ -184,22 +191,41 @@ export default function OrderManagement() {
     }
   };
 
-  const getTimeInfo = (createdAt: string | null) => {
+  const getTimeInfo = (createdAt: string | null, status: string) => {
     if (!createdAt) return { text: '--', color: 'text-muted-foreground' };
     const minutes = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
     const timeText = formatTimeDisplay(minutes);
+    
+    // Delivered orders show neutral color
+    if (status === 'delivered') return { text: timeText, color: 'text-muted-foreground' };
     
     if (minutes < 10) return { text: timeText, color: 'text-green-500' };
     if (minutes < 20) return { text: timeText, color: 'text-yellow-500' };
     return { text: timeText, color: 'text-red-500' };
   };
 
+  // Get next status action
+  const getNextStatusAction = (currentStatus: string): { label: string; nextStatus: KanbanColumn; icon: React.ReactNode } | null => {
+    switch (currentStatus) {
+      case 'pending':
+        return { label: 'Iniciar Produção', nextStatus: 'preparing', icon: <ChefHat className="h-4 w-4" /> };
+      case 'preparing':
+        return { label: 'Marcar Pronto', nextStatus: 'ready', icon: <CheckCircle2 className="h-4 w-4" /> };
+      case 'ready':
+        return { label: 'Marcar Entregue', nextStatus: 'delivered', icon: <PackageCheck className="h-4 w-4" /> };
+      default:
+        return null;
+    }
+  };
+
   const OrderCard = ({ order }: { order: Order }) => {
     const isDelivery = order.order_type === 'delivery';
-    const timeInfo = getTimeInfo(order.created_at);
+    const timeInfo = getTimeInfo(order.created_at, order.status || 'pending');
+    const nextAction = getNextStatusAction(order.status || 'pending');
+    const isDelivered = order.status === 'delivered';
     
     return (
-      <Card className="mb-3 hover:shadow-md transition-shadow cursor-pointer">
+      <Card className={cn("mb-3 hover:shadow-md transition-shadow", isDelivered && "opacity-70")}>
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -256,23 +282,45 @@ export default function OrderManagement() {
             </div>
           </div>
           
-          <div className="border-t border-border pt-2 mt-2 flex items-center justify-between">
-            <span className="font-bold text-primary">
-              R$ {(order.total || 0).toFixed(2)}
-            </span>
-            {canCancelOrder && order.status !== 'delivered' && order.status !== 'cancelled' && (
+          <div className="border-t border-border pt-2 mt-2 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-primary">
+                R$ {(order.total || 0).toFixed(2)}
+              </span>
+              {canCancelOrder && order.status !== 'delivered' && order.status !== 'cancelled' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:bg-destructive/10 h-7 px-2"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedOrderToCancel(order);
+                    setCancelDialogOpen(true);
+                  }}
+                >
+                  <XCircle className="h-4 w-4 mr-1" />
+                  Cancelar
+                </Button>
+              )}
+            </div>
+            
+            {/* Action button for status change */}
+            {nextAction && (
               <Button
-                variant="ghost"
                 size="sm"
-                className="text-destructive hover:bg-destructive/10 h-7 px-2"
+                className={cn(
+                  "w-full",
+                  order.status === 'pending' && "bg-blue-500 hover:bg-blue-600",
+                  order.status === 'preparing' && "bg-green-500 hover:bg-green-600",
+                  order.status === 'ready' && "bg-muted-foreground hover:bg-muted-foreground/80"
+                )}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelectedOrderToCancel(order);
-                  setCancelDialogOpen(true);
+                  handleStatusChange(order.id, nextAction.nextStatus);
                 }}
               >
-                <XCircle className="h-4 w-4 mr-1" />
-                Cancelar
+                {nextAction.icon}
+                <span className="ml-1">{nextAction.label}</span>
               </Button>
             )}
           </div>
@@ -295,7 +343,7 @@ export default function OrderManagement() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {columns.map((column) => {
             const columnOrders = getOrdersByStatus(column.id);
             
