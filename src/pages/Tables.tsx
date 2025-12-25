@@ -1666,8 +1666,8 @@ export default function Tables() {
                                   Fechar Conta
                                 </Button>
                               )}
-                              {/* Cancel Order button */}
-                              {canCancelOrder && selectedOrder && (
+                              {/* Cancel Order button - only show when order has items */}
+                              {canCancelOrder && selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
                                 <Button 
                                   variant="outline" 
                                   className="w-full text-destructive border-destructive/50 hover:bg-destructive/10"
