@@ -39,6 +39,7 @@ interface CancellationHistoryItem {
 const FILTER_STORAGE_KEY = 'kds-order-type-filter';
 const CANCELLATION_HISTORY_KEY = 'kds-cancellation-history';
 const UNCONFIRMED_CANCELLATIONS_KEY = 'kds-unconfirmed-cancellations';
+const CONFIRMED_CANCELLATIONS_KEY = 'kds-confirmed-cancellations';
 const MAX_WAIT_ALERT_THRESHOLD = 25; // minutes
 const MAX_WAIT_ALERT_COOLDOWN = 300000; // 5 minutes in ms
 const RECENT_CANCELLATION_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
@@ -461,10 +462,24 @@ export default function KDS() {
       console.error('Error reading stored unconfirmed cancellations:', e);
     }
     
+    // Get already confirmed IDs to exclude them
+    let confirmedIds: string[] = [];
+    try {
+      const stored = localStorage.getItem(CONFIRMED_CANCELLATIONS_KEY);
+      if (stored) {
+        confirmedIds = JSON.parse(stored);
+      }
+    } catch (e) {
+      console.error('Error reading confirmed cancellations:', e);
+    }
+    
     // Find recently cancelled orders (within 30 minutes) OR orders from localStorage
     const now = Date.now();
     const recentCancellations = orders.filter(o => {
       if (o.status !== 'cancelled') return false;
+      
+      // IMPORTANT: Skip orders that were already confirmed by the user
+      if (confirmedIds.includes(o.id)) return false;
       
       // Check if it was in production when cancelled (pending/preparing)
       // If status_before_cancellation is set, use it; otherwise include for backwards compatibility
@@ -596,6 +611,20 @@ export default function KDS() {
         }
         return updated;
       });
+    }
+    
+    // Add to confirmed list so it won't reappear after refresh
+    try {
+      const stored = localStorage.getItem(CONFIRMED_CANCELLATIONS_KEY);
+      const confirmed: string[] = stored ? JSON.parse(stored) : [];
+      if (!confirmed.includes(orderId)) {
+        confirmed.push(orderId);
+        // Keep only last 200 entries to prevent indefinite growth
+        const trimmed = confirmed.slice(-200);
+        localStorage.setItem(CONFIRMED_CANCELLATIONS_KEY, JSON.stringify(trimmed));
+      }
+    } catch (e) {
+      console.error('Error saving confirmed cancellation:', e);
     }
     
     setUnconfirmedCancellations(prev => {
