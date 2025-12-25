@@ -539,7 +539,7 @@ export default function Counter() {
         }
       }
 
-      // Create order with final values
+      // Create order with final values - starts as draft until items are added
       console.log('[Counter] Creating order with:', {
         order_type: orderType,
         status: 'pending',
@@ -557,6 +557,7 @@ export default function Counter() {
         discount: discountAmount,
         total: finalTotal,
         status: 'pending', // Goes to KDS for preparation
+        is_draft: true, // Start as draft - will be set to false after all items are added
       });
       
       console.log('[Counter] Order created:', {
@@ -594,6 +595,13 @@ export default function Counter() {
           await addOrderItemExtras.mutateAsync(extras);
         }
       }
+
+      // Mark order as no longer draft - now it can appear in KDS
+      await updateOrder.mutateAsync({
+        id: order.id,
+        is_draft: false
+      });
+      console.log('[Counter] Order marked as confirmed (is_draft: false)');
 
       // Create payment
       await createPayment.mutateAsync({

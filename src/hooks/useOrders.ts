@@ -43,6 +43,7 @@ export interface Order {
   cancelled_by?: string | null;
   cancellation_reason?: string | null;
   status_before_cancellation?: OrderStatus | null;
+  is_draft?: boolean;
   table?: { number: number } | null;
   order_items?: OrderItem[];
   created_by_profile?: { name: string } | null;
