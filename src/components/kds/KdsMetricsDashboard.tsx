@@ -39,6 +39,8 @@ import {
 
 interface KdsMetricsDashboardProps {
   trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 const formatTime = (seconds: number): string => {
@@ -300,8 +302,20 @@ function CompletionChart({ metrics }: { metrics: StationMetrics[] }) {
   );
 }
 
-export function KdsMetricsDashboard({ trigger }: KdsMetricsDashboardProps) {
-  const [open, setOpen] = useState(false);
+export function KdsMetricsDashboard({ trigger, open: controlledOpen, onOpenChange }: KdsMetricsDashboardProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  
+  // Support both controlled and uncontrolled modes
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (value: boolean) => {
+    if (isControlled && onOpenChange) {
+      onOpenChange(value);
+    } else {
+      setInternalOpen(value);
+    }
+  };
+  
   const { data: metrics, isLoading: metricsLoading } = useAllStationsMetrics();
   const { data: bottlenecks, isLoading: bottlenecksLoading } = useBottleneckAnalysis();
 

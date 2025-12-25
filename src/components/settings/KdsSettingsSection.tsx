@@ -5,17 +5,20 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useKdsSettings, KdsOperationMode } from '@/hooks/useKdsSettings';
 import { useKdsStations } from '@/hooks/useKdsStations';
 import { useKdsDevice } from '@/hooks/useKdsDevice';
-import { ChefHat, Printer, Monitor, Factory, Clock, Circle, X, Plus } from 'lucide-react';
+import { ChefHat, Printer, Monitor, Factory, Clock, Circle, X, Plus, AlertTriangle, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
+import { cn } from '@/lib/utils';
 
 export function KdsSettingsSection() {
-  const { settings, updateSettings } = useKdsSettings();
+  const { settings, updateSettings, updateBottleneckSettings, updateStationOverride } = useKdsSettings();
   const { activeStations } = useKdsStations();
   const { device, assignToStation, renameDevice } = useKdsDevice();
   const [newKeyword, setNewKeyword] = useState('');
+  const [expandedStations, setExpandedStations] = useState<Set<string>>(new Set());
 
   const addBorderKeyword = () => {
     if (newKeyword.trim() && !settings.borderKeywords.includes(newKeyword.trim().toLowerCase())) {
@@ -31,6 +34,27 @@ export function KdsSettingsSection() {
       borderKeywords: settings.borderKeywords.filter(k => k !== keyword)
     });
   };
+
+  const toggleStationExpanded = (stationId: string) => {
+    setExpandedStations(prev => {
+      const next = new Set(prev);
+      if (next.has(stationId)) {
+        next.delete(stationId);
+      } else {
+        next.add(stationId);
+      }
+      return next;
+    });
+  };
+
+  const queueSizeOptions = [3, 5, 8, 10, 15];
+  const timeRatioOptions = [
+    { value: 1.2, label: '1.2x (20% acima)' },
+    { value: 1.3, label: '1.3x (30% acima)' },
+    { value: 1.5, label: '1.5x (50% acima)' },
+    { value: 1.8, label: '1.8x (80% acima)' },
+    { value: 2.0, label: '2.0x (100% acima)' },
+  ];
 
   return (
     <div className="space-y-6">
@@ -136,6 +160,213 @@ export function KdsSettingsSection() {
           )}
         </CardContent>
       </Card>
+
+      {/* Alertas de Gargalo */}
+      {settings.operationMode === 'production_line' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Alertas de Gargalo
+            </CardTitle>
+            <CardDescription>
+              Configure os limites para detecção de gargalos por praça
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="font-medium">Ativar alertas de gargalo</Label>
+                <p className="text-sm text-muted-foreground">
+                  Receba notificações quando uma praça estiver com acúmulo de itens ou tempo elevado
+                </p>
+              </div>
+              <Switch
+                checked={settings.bottleneckSettings.enabled}
+                onCheckedChange={(enabled) => updateBottleneckSettings({ enabled })}
+              />
+            </div>
+
+            {settings.bottleneckSettings.enabled && (
+              <>
+                {/* Limites Padrão */}
+                <div className="border-t pt-4">
+                  <Label className="font-medium text-base mb-3 block">Limites Padrão</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Tamanho máximo de fila</Label>
+                      <Select
+                        value={String(settings.bottleneckSettings.defaultMaxQueueSize)}
+                        onValueChange={(value) => updateBottleneckSettings({ defaultMaxQueueSize: Number(value) })}
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {queueSizeOptions.map(n => (
+                            <SelectItem key={n} value={String(n)}>{n} itens</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Alerta quando a fila exceder este número
+                      </p>
+                    </div>
+
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Tempo máximo relativo</Label>
+                      <Select
+                        value={String(settings.bottleneckSettings.defaultMaxTimeRatio)}
+                        onValueChange={(value) => updateBottleneckSettings({ defaultMaxTimeRatio: Number(value) })}
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {timeRatioOptions.map(opt => (
+                            <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Alerta quando o tempo médio exceder este ratio da média geral
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Configuração por Praça */}
+                {activeStations.length > 0 && (
+                  <div className="border-t pt-4">
+                    <Label className="font-medium text-base mb-3 block">Configuração por Praça</Label>
+                    <div className="space-y-2">
+                      {activeStations.map((station) => {
+                        const override = settings.bottleneckSettings.stationOverrides[station.id];
+                        const hasOverride = override && (override.maxQueueSize !== undefined || override.maxTimeRatio !== undefined);
+                        const isExpanded = expandedStations.has(station.id);
+                        const alertsEnabled = override?.alertsEnabled !== false;
+
+                        return (
+                          <Collapsible
+                            key={station.id}
+                            open={isExpanded}
+                            onOpenChange={() => toggleStationExpanded(station.id)}
+                          >
+                            <div className="border rounded-lg overflow-hidden">
+                              <CollapsibleTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <Circle
+                                      className="h-4 w-4"
+                                      style={{ color: station.color, fill: station.color }}
+                                    />
+                                    <span className="font-medium">{station.name}</span>
+                                    {hasOverride && (
+                                      <Badge variant="secondary" className="text-xs">
+                                        Personalizado
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Switch
+                                      checked={alertsEnabled}
+                                      onCheckedChange={(checked) => {
+                                        updateStationOverride(station.id, { alertsEnabled: checked });
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                    <ChevronDown className={cn(
+                                      "h-4 w-4 transition-transform",
+                                      isExpanded && "rotate-180"
+                                    )} />
+                                  </div>
+                                </button>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                <div className="p-3 pt-0 border-t bg-muted/30 space-y-3">
+                                  <div className="flex items-center gap-2">
+                                    <Switch
+                                      id={`override-${station.id}`}
+                                      checked={hasOverride}
+                                      onCheckedChange={(checked) => {
+                                        if (checked) {
+                                          updateStationOverride(station.id, {
+                                            maxQueueSize: settings.bottleneckSettings.defaultMaxQueueSize,
+                                            maxTimeRatio: settings.bottleneckSettings.defaultMaxTimeRatio,
+                                          });
+                                        } else {
+                                          // Remove overrides but keep alertsEnabled
+                                          const currentAlertsEnabled = override?.alertsEnabled;
+                                          if (currentAlertsEnabled !== undefined && !currentAlertsEnabled) {
+                                            updateStationOverride(station.id, { alertsEnabled: false });
+                                          } else {
+                                            updateStationOverride(station.id, null);
+                                          }
+                                        }
+                                      }}
+                                    />
+                                    <Label htmlFor={`override-${station.id}`} className="text-sm">
+                                      Usar limites personalizados
+                                    </Label>
+                                  </div>
+
+                                  {hasOverride && (
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div>
+                                        <Label className="text-xs text-muted-foreground">Fila máx.</Label>
+                                        <Select
+                                          value={String(override?.maxQueueSize ?? settings.bottleneckSettings.defaultMaxQueueSize)}
+                                          onValueChange={(value) => {
+                                            updateStationOverride(station.id, { maxQueueSize: Number(value) });
+                                          }}
+                                        >
+                                          <SelectTrigger className="h-8 text-sm">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {queueSizeOptions.map(n => (
+                                              <SelectItem key={n} value={String(n)}>{n} itens</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div>
+                                        <Label className="text-xs text-muted-foreground">Tempo máx.</Label>
+                                        <Select
+                                          value={String(override?.maxTimeRatio ?? settings.bottleneckSettings.defaultMaxTimeRatio)}
+                                          onValueChange={(value) => {
+                                            updateStationOverride(station.id, { maxTimeRatio: Number(value) });
+                                          }}
+                                        >
+                                          <SelectTrigger className="h-8 text-sm">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {timeRatioOptions.map(opt => (
+                                              <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </CollapsibleContent>
+                            </div>
+                          </Collapsible>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* SLA Visual */}
       <Card>

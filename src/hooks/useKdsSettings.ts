@@ -2,6 +2,19 @@ import { useState, useEffect, useCallback } from 'react';
 
 export type KdsOperationMode = 'traditional' | 'production_line';
 
+export interface BottleneckStationOverride {
+  maxQueueSize?: number;
+  maxTimeRatio?: number;
+  alertsEnabled?: boolean;
+}
+
+export interface BottleneckSettings {
+  enabled: boolean;
+  defaultMaxQueueSize: number;
+  defaultMaxTimeRatio: number;
+  stationOverrides: Record<string, BottleneckStationOverride>;
+}
+
 export interface KdsSettings {
   // Modo de operação
   operationMode: KdsOperationMode;
@@ -24,6 +37,9 @@ export interface KdsSettings {
   // Destaque de bordas (para pizzarias)
   highlightSpecialBorders: boolean;
   borderKeywords: string[]; // palavras-chave que indicam borda especial
+  
+  // Configurações de alertas de gargalo
+  bottleneckSettings: BottleneckSettings;
 }
 
 const STORAGE_KEY = 'pdv_kds_settings';
@@ -36,6 +52,13 @@ const generateDeviceId = (): string => {
   const newId = crypto.randomUUID();
   localStorage.setItem('pdv_kds_device_id', newId);
   return newId;
+};
+
+const defaultBottleneckSettings: BottleneckSettings = {
+  enabled: true,
+  defaultMaxQueueSize: 5,
+  defaultMaxTimeRatio: 1.5,
+  stationOverrides: {},
 };
 
 const defaultSettings: KdsSettings = {
@@ -60,6 +83,9 @@ const defaultSettings: KdsSettings = {
   // Destaque de bordas
   highlightSpecialBorders: true,
   borderKeywords: ['borda', 'recheada', 'chocolate', 'catupiry', 'cheddar'],
+  
+  // Alertas de gargalo
+  bottleneckSettings: defaultBottleneckSettings,
 };
 
 export function useKdsSettings() {
@@ -70,7 +96,16 @@ export function useKdsSettings() {
       
       if (stored) {
         const parsed = JSON.parse(stored);
-        return { ...defaultSettings, ...parsed, deviceId };
+        // Merge with defaults to ensure new fields exist
+        return { 
+          ...defaultSettings, 
+          ...parsed, 
+          deviceId,
+          bottleneckSettings: {
+            ...defaultBottleneckSettings,
+            ...parsed.bottleneckSettings,
+          }
+        };
       }
       
       return { ...defaultSettings, deviceId };
@@ -92,6 +127,31 @@ export function useKdsSettings() {
     setSettings(prev => ({ ...prev, ...updates }));
   }, []);
 
+  const updateBottleneckSettings = useCallback((updates: Partial<BottleneckSettings>) => {
+    setSettings(prev => ({
+      ...prev,
+      bottleneckSettings: { ...prev.bottleneckSettings, ...updates }
+    }));
+  }, []);
+
+  const updateStationOverride = useCallback((stationId: string, override: BottleneckStationOverride | null) => {
+    setSettings(prev => {
+      const newOverrides = { ...prev.bottleneckSettings.stationOverrides };
+      if (override === null) {
+        delete newOverrides[stationId];
+      } else {
+        newOverrides[stationId] = { ...newOverrides[stationId], ...override };
+      }
+      return {
+        ...prev,
+        bottleneckSettings: {
+          ...prev.bottleneckSettings,
+          stationOverrides: newOverrides
+        }
+      };
+    });
+  }, []);
+
   // Helper to get initial order status based on settings
   const getInitialOrderStatus = useCallback((): 'pending' | 'preparing' => {
     return settings.showPendingColumn ? 'pending' : 'preparing';
@@ -111,15 +171,28 @@ export function useKdsSettings() {
     return settings.borderKeywords.some(keyword => lowerText.includes(keyword.toLowerCase()));
   }, [settings.highlightSpecialBorders, settings.borderKeywords]);
 
+  // Helper para obter thresholds de uma praça (com override ou padrão)
+  const getStationThresholds = useCallback((stationId: string) => {
+    const override = settings.bottleneckSettings.stationOverrides[stationId];
+    return {
+      maxQueueSize: override?.maxQueueSize ?? settings.bottleneckSettings.defaultMaxQueueSize,
+      maxTimeRatio: override?.maxTimeRatio ?? settings.bottleneckSettings.defaultMaxTimeRatio,
+      alertsEnabled: override?.alertsEnabled ?? true,
+    };
+  }, [settings.bottleneckSettings]);
+
   // Verificar se está em modo linha de produção
   const isProductionLineMode = settings.operationMode === 'production_line';
 
   return {
     settings,
     updateSettings,
+    updateBottleneckSettings,
+    updateStationOverride,
     getInitialOrderStatus,
     getSlaColor,
     hasSpecialBorder,
+    getStationThresholds,
     isProductionLineMode,
   };
 }
