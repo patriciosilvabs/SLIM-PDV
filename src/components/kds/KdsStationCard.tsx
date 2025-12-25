@@ -51,7 +51,8 @@ interface KdsStationCardProps {
 
 const STATION_ICONS = {
   prep_start: Circle,
-  assembly: Layers,
+  item_assembly: Layers,
+  assembly: ChefHat,
   oven_expedite: Flame,
   order_status: CheckCircle,
   custom: ChefHat,
@@ -161,8 +162,8 @@ export function KdsStationCard({
       );
     }
     
-    // Produzindo (assembly): Mostra sabores + observações PISCANDO
-    if (stationType === 'assembly') {
+    // Item em montagem (item_assembly): Mostra sabores + observações PISCANDO
+    if (stationType === 'item_assembly') {
       return (
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -320,7 +321,7 @@ export function KdsStationCard({
                   {isLastStation ? (
                     <>
                       <CheckCircle className={cn("h-4 w-4 mr-2", compact && "h-3 w-3 mr-1")} />
-                      Concluir
+                      Pronto
                     </>
                   ) : (
                     <>
