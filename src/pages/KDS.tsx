@@ -454,9 +454,11 @@ export default function KDS() {
           // Orders that were ready/delivered don't need to alert the kitchen anymore
           if (order.status === 'cancelled' && prevOrder.status !== 'cancelled') {
             const wasInProduction = prevOrder.status === 'pending' || prevOrder.status === 'preparing';
+            const hasItems = (order.order_items?.length ?? 0) > 0;
             
-            // Only show cancellation alerts if enabled in settings
-            if (wasInProduction && kdsSettings.cancellationAlertsEnabled !== false) {
+            // Only show cancellation alerts if enabled in settings AND order had items
+            // Skip empty orders (waiter opened table but customer left before ordering)
+            if (wasInProduction && hasItems && kdsSettings.cancellationAlertsEnabled !== false) {
               // Add to unconfirmed cancellations map - will persist until confirmed
               setUnconfirmedCancellations(prev => {
                 const newMap = new Map(prev);
@@ -530,6 +532,9 @@ export default function KDS() {
       
       // IMPORTANT: Skip orders that were already confirmed by the user
       if (confirmedIds.includes(o.id)) return false;
+      
+      // Skip empty orders (waiter opened table but customer left before ordering)
+      if ((o.order_items?.length ?? 0) === 0) return false;
       
       // Check if it was in production when cancelled (pending/preparing)
       // If status_before_cancellation is set, use it; otherwise include for backwards compatibility
