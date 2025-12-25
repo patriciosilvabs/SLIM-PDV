@@ -787,6 +787,7 @@ export default function Tables() {
           cancellation_reason: reason,
           cancelled_by: user?.id,
           cancelled_at: new Date().toISOString(),
+          status_before_cancellation: selectedOrder.status,
         })
         .eq('id', selectedOrder.id);
       

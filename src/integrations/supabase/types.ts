@@ -623,6 +623,9 @@ export type Database = {
           order_type: Database["public"]["Enums"]["order_type"] | null
           ready_at: string | null
           status: Database["public"]["Enums"]["order_status"] | null
+          status_before_cancellation:
+            | Database["public"]["Enums"]["order_status"]
+            | null
           subtotal: number | null
           table_id: string | null
           total: number | null
@@ -644,6 +647,9 @@ export type Database = {
           order_type?: Database["public"]["Enums"]["order_type"] | null
           ready_at?: string | null
           status?: Database["public"]["Enums"]["order_status"] | null
+          status_before_cancellation?:
+            | Database["public"]["Enums"]["order_status"]
+            | null
           subtotal?: number | null
           table_id?: string | null
           total?: number | null
@@ -665,6 +671,9 @@ export type Database = {
           order_type?: Database["public"]["Enums"]["order_type"] | null
           ready_at?: string | null
           status?: Database["public"]["Enums"]["order_status"] | null
+          status_before_cancellation?:
+            | Database["public"]["Enums"]["order_status"]
+            | null
           subtotal?: number | null
           table_id?: string | null
           total?: number | null

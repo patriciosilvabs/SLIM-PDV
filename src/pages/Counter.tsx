@@ -465,6 +465,7 @@ export default function Counter() {
           cancellation_reason: reason,
           cancelled_by: user?.id,
           cancelled_at: new Date().toISOString(),
+          status_before_cancellation: orderToCancel.status,
         })
         .eq('id', orderToCancel.id);
       

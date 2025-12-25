@@ -39,6 +39,10 @@ export interface Order {
   updated_at: string;
   ready_at?: string | null;
   delivered_at?: string | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
+  cancellation_reason?: string | null;
+  status_before_cancellation?: OrderStatus | null;
   table?: { number: number } | null;
   order_items?: OrderItem[];
   created_by_profile?: { name: string } | null;

@@ -472,16 +472,22 @@ export default function KDS() {
     const recentCancellations = orders.filter(o => {
       if (o.status !== 'cancelled') return false;
       
+      // Check if it was in production when cancelled (pending/preparing)
+      // If status_before_cancellation is set, use it; otherwise include for backwards compatibility
+      const statusBefore = o.status_before_cancellation;
+      if (statusBefore && statusBefore !== 'pending' && statusBefore !== 'preparing') {
+        // Order was already ready/delivered when cancelled - kitchen doesn't need to know
+        return false;
+      }
+      
       // Check if it's in the stored unconfirmed list
       if (storedUnconfirmedIds.includes(o.id)) return true;
       
       // Check if it was cancelled recently (within 30 min window)
-      const cancelledAt = (o as any).cancelled_at ? new Date((o as any).cancelled_at).getTime() : 
+      const cancelledAt = o.cancelled_at ? new Date(o.cancelled_at).getTime() : 
                           o.updated_at ? new Date(o.updated_at).getTime() : 0;
       const isRecent = (now - cancelledAt) < RECENT_CANCELLATION_WINDOW_MS;
       
-      // Only include orders that were likely in production when cancelled
-      // (we can't know for sure, so we include all recent ones)
       return isRecent;
     });
     
