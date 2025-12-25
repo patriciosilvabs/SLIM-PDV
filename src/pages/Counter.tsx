@@ -552,7 +552,7 @@ export default function Counter() {
         subtotal: subtotal,
         discount: discountAmount,
         total: finalTotal,
-        status: 'delivered', // Order is paid immediately
+        status: 'pending', // Goes to KDS for preparation
       });
 
       // Add order items
@@ -565,7 +565,7 @@ export default function Counter() {
           unit_price: item.unit_price,
           total_price: item.total_price,
           notes: item.notes || null,
-          status: 'delivered',
+          status: 'pending',
         });
 
         if (item.complements && item.complements.length > 0) {
