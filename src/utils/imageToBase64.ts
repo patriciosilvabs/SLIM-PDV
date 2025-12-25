@@ -177,26 +177,42 @@ export async function convertToDithered(dataUrl: string): Promise<string> {
  * Used for printing images via ESC/POS on thermal printers
  */
 export async function imageUrlToBase64(url: string): Promise<string | null> {
+  console.log('🔄 [imageUrlToBase64] Iniciando fetch da imagem:', url.substring(0, 80) + '...');
+  
   try {
     const response = await fetch(url);
     if (!response.ok) {
-      console.error('Failed to fetch image:', response.status, response.statusText);
+      console.error('❌ [imageUrlToBase64] Falha no fetch:', {
+        status: response.status,
+        statusText: response.statusText,
+        url: url.substring(0, 80) + '...'
+      });
+      console.error('💡 Dica: Verifique se a URL está acessível e se não há problemas de CORS');
       return null;
     }
     
     const blob = await response.blob();
+    console.log('✅ [imageUrlToBase64] Imagem baixada, tamanho:', blob.size, 'bytes, tipo:', blob.type);
     
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        console.log('✅ [imageUrlToBase64] Conversão para base64 concluída, tamanho:', result.length);
+        resolve(result);
+      };
       reader.onerror = () => {
-        console.error('FileReader error:', reader.error);
+        console.error('❌ [imageUrlToBase64] FileReader error:', reader.error);
         reject(reader.error);
       };
       reader.readAsDataURL(blob);
     });
   } catch (error) {
-    console.error('Error converting image to base64:', error);
+    console.error('❌ [imageUrlToBase64] Erro ao converter imagem:', error);
+    console.error('💡 Dicas para resolver:');
+    console.error('   - Verifique se a URL está correta e acessível');
+    console.error('   - Se a imagem está em outro domínio, pode haver bloqueio por CORS');
+    console.error('   - Tente usar uma imagem hospedada no mesmo domínio ou em CDN com CORS habilitado');
     return null;
   }
 }
