@@ -14,6 +14,7 @@ const roleLabels: Record<AppRole, string> = {
   cashier: 'Caixa',
   waiter: 'Garçom',
   kitchen: 'Cozinha',
+  kds: 'KDS',
 };
 
 const roleColors: Record<AppRole, string> = {
@@ -21,6 +22,7 @@ const roleColors: Record<AppRole, string> = {
   cashier: 'bg-primary text-primary-foreground',
   waiter: 'bg-info text-info-foreground',
   kitchen: 'bg-warning text-warning-foreground',
+  kds: 'bg-orange-500 text-white',
 };
 
 export function RolesSettings() {
@@ -88,6 +90,12 @@ export function RolesSettings() {
               <Badge className={roleColors.kitchen}>Cozinha</Badge>
               <p className="text-sm text-muted-foreground mt-2">
                 Visualiza e atualiza status dos pedidos. Acesso ao estoque.
+              </p>
+            </div>
+            <div className="p-4 border rounded-lg">
+              <Badge className={roleColors.kds}>KDS</Badge>
+              <p className="text-sm text-muted-foreground mt-2">
+                Acesso exclusivo à tela KDS para visualizar e atualizar status dos pedidos.
               </p>
             </div>
           </div>

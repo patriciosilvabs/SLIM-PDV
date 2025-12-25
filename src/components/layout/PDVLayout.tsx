@@ -24,7 +24,7 @@ interface NavItem {
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'cashier', 'waiter'], permission: 'dashboard_view' },
   { name: 'Gestão de Pedidos', href: '/order-management', icon: Kanban, roles: ['admin', 'cashier'], permission: 'orders_view' },
-  { name: 'KDS', href: '/kds', icon: ChefHat, roles: ['admin', 'kitchen'], permission: 'kds_view' },
+  { name: 'KDS', href: '/kds', icon: ChefHat, roles: ['admin', 'kitchen', 'kds'], permission: 'kds_view' },
   { name: 'Mesas', href: '/tables', icon: UtensilsCrossed, roles: ['admin', 'waiter'], permission: 'tables_view' },
   { name: 'Balcão', href: '/counter', icon: Store, roles: ['admin', 'waiter', 'cashier'], permission: 'counter_view' },
   { name: 'Pedidos', href: '/orders', icon: ShoppingBag, roles: ['admin', 'waiter', 'kitchen', 'cashier'], permission: 'orders_view' },
@@ -46,6 +46,7 @@ const roleLabels: Record<AppRole, string> = {
   cashier: 'Caixa',
   waiter: 'Garçom',
   kitchen: 'Cozinha',
+  kds: 'KDS',
 };
 
 const roleColors: Record<AppRole, string> = {
@@ -53,6 +54,7 @@ const roleColors: Record<AppRole, string> = {
   cashier: 'bg-primary/20 text-primary',
   waiter: 'bg-info/20 text-info',
   kitchen: 'bg-warning/20 text-warning',
+  kds: 'bg-orange-500/20 text-orange-600',
 };
 
 export default function PDVLayout({ children }: { children: React.ReactNode }) {

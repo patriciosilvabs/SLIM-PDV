@@ -68,3 +68,7 @@ export function WaiterOnly({ children }: { children: ReactNode }) {
 export function KitchenOnly({ children }: { children: ReactNode }) {
   return <RequireRole roles={['admin', 'kitchen']}>{children}</RequireRole>;
 }
+
+export function KdsOnly({ children }: { children: ReactNode }) {
+  return <RequireRole roles={['admin', 'kds']}>{children}</RequireRole>;
+}

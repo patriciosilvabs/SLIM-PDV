@@ -33,7 +33,7 @@ serve(async (req) => {
     }
 
     // Validate role
-    const validRoles = ['admin', 'cashier', 'waiter', 'kitchen'];
+    const validRoles = ['admin', 'cashier', 'waiter', 'kitchen', 'kds'];
     if (!validRoles.includes(role)) {
       return new Response(
         JSON.stringify({ error: `Invalid role. Must be one of: ${validRoles.join(', ')}` }),
@@ -89,6 +89,23 @@ serve(async (req) => {
     }
 
     console.log(`Role ${role} assigned to user ${userId}`);
+
+    // If role is 'kds', automatically assign KDS permissions
+    if (role === 'kds') {
+      const kdsPermissions = ['kds_view', 'kds_change_status'];
+      for (const permission of kdsPermissions) {
+        const { error: permError } = await supabaseAdmin
+          .from('user_permissions')
+          .insert({ user_id: userId, permission, granted: true });
+        
+        if (permError) {
+          console.error(`Error assigning permission ${permission}:`, permError);
+          // Don't fail the request for permission errors
+        } else {
+          console.log(`Permission ${permission} assigned to user ${userId}`);
+        }
+      }
+    }
 
     return new Response(
       JSON.stringify({ 
