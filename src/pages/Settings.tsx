@@ -26,11 +26,12 @@ import {
 import { SettingsSidebar, SettingsSection, SECTION_INFO } from '@/components/settings/SettingsSidebar';
 import { TablesSettings } from '@/components/settings/TablesSettings';
 import { KdsSettingsSection } from '@/components/settings/KdsSettingsSection';
+import { KdsStationsSettings } from '@/components/settings/KdsStationsSettings';
 import { OrderSettingsSection } from '@/components/settings/OrderSettingsSection';
 import { UsersSettings } from '@/components/settings/UsersSettings';
 import { RolesSettings } from '@/components/settings/RolesSettings';
 
-const VALID_SECTIONS: SettingsSection[] = ['tables', 'kds', 'orders', 'printers', 'notifications', 'announcements', 'push', 'users', 'roles'];
+const VALID_SECTIONS: SettingsSection[] = ['tables', 'kds', 'kds-stations', 'orders', 'printers', 'notifications', 'announcements', 'push', 'users', 'roles'];
 
 // Hook to check if system has any admins
 function useHasAdmins() {
@@ -155,6 +156,8 @@ export default function Settings() {
         return <TablesSettings />;
       case 'kds':
         return <KdsSettingsSection />;
+      case 'kds-stations':
+        return <KdsStationsSettings />;
       case 'orders':
         return <OrderSettingsSection />;
       case 'printers':
@@ -226,6 +229,7 @@ export default function Settings() {
                 <optgroup label="Sistema">
                   <option value="tables">Mesas</option>
                   <option value="kds">KDS</option>
+                  <option value="kds-stations">Praças</option>
                   <option value="orders">Pedidos</option>
                   <option value="printers">Impressoras</option>
                 </optgroup>
