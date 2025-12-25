@@ -16,7 +16,7 @@ export interface KdsDevice {
 }
 
 export function useKdsDevice() {
-  const { settings, updateSettings } = useKdsSettings();
+  const { settings, updateDeviceSettings } = useKdsSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -103,7 +103,7 @@ export function useKdsDevice() {
 
   // Atribuir dispositivo a uma praça
   const assignToStation = useCallback((stationId: string | null) => {
-    updateSettings({ assignedStationId: stationId });
+    updateDeviceSettings({ assignedStationId: stationId });
     
     if (device) {
       updateDevice.mutate({ station_id: stationId });
@@ -112,16 +112,16 @@ export function useKdsDevice() {
     toast({
       title: stationId ? 'Dispositivo atribuído à praça' : 'Dispositivo desvinculado da praça',
     });
-  }, [device, updateDevice, updateSettings, toast]);
+  }, [device, updateDevice, updateDeviceSettings, toast]);
 
   // Renomear dispositivo
   const renameDevice = useCallback((name: string) => {
-    updateSettings({ deviceName: name });
+    updateDeviceSettings({ deviceName: name });
     
     if (device) {
       updateDevice.mutate({ name });
     }
-  }, [device, updateDevice, updateSettings]);
+  }, [device, updateDevice, updateDeviceSettings]);
 
   // Atualizar heartbeat periodicamente
   useEffect(() => {

@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 export type KdsOperationMode = 'traditional' | 'production_line';
 
@@ -15,36 +17,33 @@ export interface BottleneckSettings {
   stationOverrides: Record<string, BottleneckStationOverride>;
 }
 
-export interface KdsSettings {
-  // Modo de operação
+// Global settings (synced to database)
+export interface KdsGlobalSettings {
   operationMode: KdsOperationMode;
-  
-  // Configurações por dispositivo
-  deviceId: string;
-  deviceName: string;
-  assignedStationId: string | null;
-  
-  // SLA Visual (em minutos)
   slaGreenMinutes: number;
   slaYellowMinutes: number;
-  
-  // Configurações existentes
   showPendingColumn: boolean;
   cancellationAlertInterval: number;
   cancellationAlertsEnabled: boolean;
   autoPrintCancellations: boolean;
-  
-  // Destaque de bordas (para pizzarias)
   highlightSpecialBorders: boolean;
-  borderKeywords: string[]; // palavras-chave que indicam borda especial
-  
-  // Configurações de alertas de gargalo
+  borderKeywords: string[];
   bottleneckSettings: BottleneckSettings;
 }
 
-const STORAGE_KEY = 'pdv_kds_settings';
+// Device-specific settings (stored in localStorage)
+export interface KdsDeviceSettings {
+  deviceId: string;
+  deviceName: string;
+  assignedStationId: string | null;
+}
 
-// Gera um ID único para este dispositivo
+// Combined settings interface
+export interface KdsSettings extends KdsGlobalSettings, KdsDeviceSettings {}
+
+const DEVICE_STORAGE_KEY = 'pdv_kds_device_settings';
+
+// Generate unique device ID
 const generateDeviceId = (): string => {
   const stored = localStorage.getItem('pdv_kds_device_id');
   if (stored) return stored;
@@ -61,117 +60,247 @@ const defaultBottleneckSettings: BottleneckSettings = {
   stationOverrides: {},
 };
 
-const defaultSettings: KdsSettings = {
-  // Modo de operação
+const defaultGlobalSettings: KdsGlobalSettings = {
   operationMode: 'traditional',
-  
-  // Configurações por dispositivo
-  deviceId: '',
-  deviceName: 'KDS Device',
-  assignedStationId: null,
-  
-  // SLA Visual
   slaGreenMinutes: 8,
   slaYellowMinutes: 12,
-  
-  // Configurações existentes
   showPendingColumn: true,
   cancellationAlertInterval: 3,
   cancellationAlertsEnabled: true,
   autoPrintCancellations: true,
-  
-  // Destaque de bordas
   highlightSpecialBorders: true,
   borderKeywords: ['borda', 'recheada', 'chocolate', 'catupiry', 'cheddar'],
-  
-  // Alertas de gargalo
   bottleneckSettings: defaultBottleneckSettings,
 };
 
-export function useKdsSettings() {
-  const [settings, setSettings] = useState<KdsSettings>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      const deviceId = generateDeviceId();
-      
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        // Merge with defaults to ensure new fields exist
-        return { 
-          ...defaultSettings, 
-          ...parsed, 
-          deviceId,
-          bottleneckSettings: {
-            ...defaultBottleneckSettings,
-            ...parsed.bottleneckSettings,
-          }
-        };
-      }
-      
-      return { ...defaultSettings, deviceId };
-    } catch (e) {
-      console.error('Error loading KDS settings:', e);
-      return { ...defaultSettings, deviceId: generateDeviceId() };
+const getDeviceSettings = (): KdsDeviceSettings => {
+  try {
+    const stored = localStorage.getItem(DEVICE_STORAGE_KEY);
+    const deviceId = generateDeviceId();
+    
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return { ...parsed, deviceId };
     }
+    
+    return {
+      deviceId,
+      deviceName: 'KDS Device',
+      assignedStationId: null,
+    };
+  } catch (e) {
+    console.error('Error loading device settings:', e);
+    return {
+      deviceId: generateDeviceId(),
+      deviceName: 'KDS Device',
+      assignedStationId: null,
+    };
+  }
+};
+
+const saveDeviceSettings = (settings: KdsDeviceSettings) => {
+  try {
+    localStorage.setItem(DEVICE_STORAGE_KEY, JSON.stringify(settings));
+  } catch (e) {
+    console.error('Error saving device settings:', e);
+  }
+};
+
+// Parse bottleneck settings from database JSON
+const parseBottleneckSettings = (dbSettings: unknown): BottleneckSettings => {
+  if (!dbSettings || typeof dbSettings !== 'object') {
+    return defaultBottleneckSettings;
+  }
+  
+  const settings = dbSettings as Record<string, unknown>;
+  return {
+    enabled: typeof settings.enabled === 'boolean' ? settings.enabled : defaultBottleneckSettings.enabled,
+    defaultMaxQueueSize: typeof settings.defaultMaxQueueSize === 'number' ? settings.defaultMaxQueueSize : defaultBottleneckSettings.defaultMaxQueueSize,
+    defaultMaxTimeRatio: typeof settings.defaultMaxTimeRatio === 'number' ? settings.defaultMaxTimeRatio : defaultBottleneckSettings.defaultMaxTimeRatio,
+    stationOverrides: (settings.stationOverrides as Record<string, BottleneckStationOverride>) || {},
+  };
+};
+
+export function useKdsSettings() {
+  const queryClient = useQueryClient();
+  const [deviceSettings, setDeviceSettings] = useState<KdsDeviceSettings>(getDeviceSettings);
+
+  // Fetch global settings from database
+  const { data: dbSettings, isLoading } = useQuery({
+    queryKey: ['kds-global-settings'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('kds_global_settings')
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching KDS global settings:', error);
+        throw error;
+      }
+
+      return data;
+    },
+    staleTime: 1000 * 60, // 1 minute
   });
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-    } catch (e) {
-      console.error('Error saving KDS settings:', e);
-    }
-  }, [settings]);
+  // Parse global settings from database
+  const globalSettings: KdsGlobalSettings = useMemo(() => {
+    if (!dbSettings) return defaultGlobalSettings;
 
+    return {
+      operationMode: (dbSettings.operation_mode as KdsOperationMode) || defaultGlobalSettings.operationMode,
+      slaGreenMinutes: dbSettings.sla_green_minutes ?? defaultGlobalSettings.slaGreenMinutes,
+      slaYellowMinutes: dbSettings.sla_yellow_minutes ?? defaultGlobalSettings.slaYellowMinutes,
+      showPendingColumn: dbSettings.show_pending_column ?? defaultGlobalSettings.showPendingColumn,
+      cancellationAlertInterval: dbSettings.cancellation_alert_interval ?? defaultGlobalSettings.cancellationAlertInterval,
+      cancellationAlertsEnabled: dbSettings.cancellation_alerts_enabled ?? defaultGlobalSettings.cancellationAlertsEnabled,
+      autoPrintCancellations: dbSettings.auto_print_cancellations ?? defaultGlobalSettings.autoPrintCancellations,
+      highlightSpecialBorders: dbSettings.highlight_special_borders ?? defaultGlobalSettings.highlightSpecialBorders,
+      borderKeywords: dbSettings.border_keywords ?? defaultGlobalSettings.borderKeywords,
+      bottleneckSettings: parseBottleneckSettings(dbSettings.bottleneck_settings),
+    };
+  }, [dbSettings]);
+
+  // Combined settings
+  const settings: KdsSettings = useMemo(() => ({
+    ...globalSettings,
+    ...deviceSettings,
+  }), [globalSettings, deviceSettings]);
+
+  // Mutation to update global settings in database
+  const updateGlobalMutation = useMutation({
+    mutationFn: async (updates: Partial<KdsGlobalSettings>) => {
+      const dbUpdates: Record<string, unknown> = {};
+      
+      if (updates.operationMode !== undefined) dbUpdates.operation_mode = updates.operationMode;
+      if (updates.slaGreenMinutes !== undefined) dbUpdates.sla_green_minutes = updates.slaGreenMinutes;
+      if (updates.slaYellowMinutes !== undefined) dbUpdates.sla_yellow_minutes = updates.slaYellowMinutes;
+      if (updates.showPendingColumn !== undefined) dbUpdates.show_pending_column = updates.showPendingColumn;
+      if (updates.cancellationAlertInterval !== undefined) dbUpdates.cancellation_alert_interval = updates.cancellationAlertInterval;
+      if (updates.cancellationAlertsEnabled !== undefined) dbUpdates.cancellation_alerts_enabled = updates.cancellationAlertsEnabled;
+      if (updates.autoPrintCancellations !== undefined) dbUpdates.auto_print_cancellations = updates.autoPrintCancellations;
+      if (updates.highlightSpecialBorders !== undefined) dbUpdates.highlight_special_borders = updates.highlightSpecialBorders;
+      if (updates.borderKeywords !== undefined) dbUpdates.border_keywords = updates.borderKeywords;
+      if (updates.bottleneckSettings !== undefined) dbUpdates.bottleneck_settings = updates.bottleneckSettings;
+
+      const { error } = await supabase
+        .from('kds_global_settings')
+        .update(dbUpdates)
+        .not('id', 'is', null); // Update all rows (should only be one)
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kds-global-settings'] });
+    },
+  });
+
+  // Update global settings (synced to database)
   const updateSettings = useCallback((updates: Partial<KdsSettings>) => {
-    setSettings(prev => ({ ...prev, ...updates }));
-  }, []);
+    // Separate device-specific from global settings
+    const deviceUpdates: Partial<KdsDeviceSettings> = {};
+    const globalUpdates: Partial<KdsGlobalSettings> = {};
 
-  const updateBottleneckSettings = useCallback((updates: Partial<BottleneckSettings>) => {
-    setSettings(prev => ({
-      ...prev,
-      bottleneckSettings: { ...prev.bottleneckSettings, ...updates }
-    }));
-  }, []);
+    if (updates.deviceName !== undefined) deviceUpdates.deviceName = updates.deviceName;
+    if (updates.assignedStationId !== undefined) deviceUpdates.assignedStationId = updates.assignedStationId;
 
-  const updateStationOverride = useCallback((stationId: string, override: BottleneckStationOverride | null) => {
-    setSettings(prev => {
-      const newOverrides = { ...prev.bottleneckSettings.stationOverrides };
-      if (override === null) {
-        delete newOverrides[stationId];
-      } else {
-        newOverrides[stationId] = { ...newOverrides[stationId], ...override };
-      }
-      return {
-        ...prev,
-        bottleneckSettings: {
-          ...prev.bottleneckSettings,
-          stationOverrides: newOverrides
-        }
-      };
+    if (updates.operationMode !== undefined) globalUpdates.operationMode = updates.operationMode;
+    if (updates.slaGreenMinutes !== undefined) globalUpdates.slaGreenMinutes = updates.slaGreenMinutes;
+    if (updates.slaYellowMinutes !== undefined) globalUpdates.slaYellowMinutes = updates.slaYellowMinutes;
+    if (updates.showPendingColumn !== undefined) globalUpdates.showPendingColumn = updates.showPendingColumn;
+    if (updates.cancellationAlertInterval !== undefined) globalUpdates.cancellationAlertInterval = updates.cancellationAlertInterval;
+    if (updates.cancellationAlertsEnabled !== undefined) globalUpdates.cancellationAlertsEnabled = updates.cancellationAlertsEnabled;
+    if (updates.autoPrintCancellations !== undefined) globalUpdates.autoPrintCancellations = updates.autoPrintCancellations;
+    if (updates.highlightSpecialBorders !== undefined) globalUpdates.highlightSpecialBorders = updates.highlightSpecialBorders;
+    if (updates.borderKeywords !== undefined) globalUpdates.borderKeywords = updates.borderKeywords;
+    if (updates.bottleneckSettings !== undefined) globalUpdates.bottleneckSettings = updates.bottleneckSettings;
+
+    // Update device settings locally
+    if (Object.keys(deviceUpdates).length > 0) {
+      setDeviceSettings(prev => {
+        const newSettings = { ...prev, ...deviceUpdates };
+        saveDeviceSettings(newSettings);
+        return newSettings;
+      });
+    }
+
+    // Update global settings in database
+    if (Object.keys(globalUpdates).length > 0) {
+      updateGlobalMutation.mutate(globalUpdates);
+    }
+  }, [updateGlobalMutation]);
+
+  // Update device-specific settings only
+  const updateDeviceSettings = useCallback((updates: Partial<KdsDeviceSettings>) => {
+    setDeviceSettings(prev => {
+      const newSettings = { ...prev, ...updates };
+      saveDeviceSettings(newSettings);
+      return newSettings;
     });
   }, []);
+
+  // Update bottleneck settings
+  const updateBottleneckSettings = useCallback((updates: Partial<BottleneckSettings>) => {
+    const newBottleneckSettings = { ...globalSettings.bottleneckSettings, ...updates };
+    updateGlobalMutation.mutate({ bottleneckSettings: newBottleneckSettings });
+  }, [globalSettings.bottleneckSettings, updateGlobalMutation]);
+
+  // Update station override
+  const updateStationOverride = useCallback((stationId: string, override: BottleneckStationOverride | null) => {
+    const newOverrides = { ...globalSettings.bottleneckSettings.stationOverrides };
+    if (override === null) {
+      delete newOverrides[stationId];
+    } else {
+      newOverrides[stationId] = { ...newOverrides[stationId], ...override };
+    }
+    
+    updateBottleneckSettings({ stationOverrides: newOverrides });
+  }, [globalSettings.bottleneckSettings.stationOverrides, updateBottleneckSettings]);
+
+  // Set up realtime subscription for global settings changes
+  useEffect(() => {
+    const channel = supabase
+      .channel('kds-global-settings-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'kds_global_settings',
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['kds-global-settings'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   // Helper to get initial order status based on settings
   const getInitialOrderStatus = useCallback((): 'pending' | 'preparing' => {
     return settings.showPendingColumn ? 'pending' : 'preparing';
   }, [settings.showPendingColumn]);
 
-  // Helper para calcular cor do SLA baseado no tempo
+  // Helper to calculate SLA color based on time
   const getSlaColor = useCallback((minutesElapsed: number): 'green' | 'yellow' | 'red' => {
     if (minutesElapsed <= settings.slaGreenMinutes) return 'green';
     if (minutesElapsed <= settings.slaYellowMinutes) return 'yellow';
     return 'red';
   }, [settings.slaGreenMinutes, settings.slaYellowMinutes]);
 
-  // Helper para verificar se um texto contém borda especial
+  // Helper to check if text contains special border
   const hasSpecialBorder = useCallback((text: string): boolean => {
     if (!settings.highlightSpecialBorders || !text) return false;
     const lowerText = text.toLowerCase();
     return settings.borderKeywords.some(keyword => lowerText.includes(keyword.toLowerCase()));
   }, [settings.highlightSpecialBorders, settings.borderKeywords]);
 
-  // Helper para obter thresholds de uma praça (com override ou padrão)
+  // Helper to get station thresholds (with override or default)
   const getStationThresholds = useCallback((stationId: string) => {
     const override = settings.bottleneckSettings.stationOverrides[stationId];
     return {
@@ -181,12 +310,14 @@ export function useKdsSettings() {
     };
   }, [settings.bottleneckSettings]);
 
-  // Verificar se está em modo linha de produção
+  // Check if in production line mode
   const isProductionLineMode = settings.operationMode === 'production_line';
 
   return {
     settings,
+    isLoading,
     updateSettings,
+    updateDeviceSettings,
     updateBottleneckSettings,
     updateStationOverride,
     getInitialOrderStatus,

@@ -14,7 +14,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
 export function KdsSettingsSection() {
-  const { settings, updateSettings, updateBottleneckSettings, updateStationOverride } = useKdsSettings();
+  const { settings, updateSettings, updateDeviceSettings, updateBottleneckSettings, updateStationOverride, isLoading } = useKdsSettings();
   const { activeStations } = useKdsStations();
   const { device, assignToStation, renameDevice } = useKdsDevice();
   const [newKeyword, setNewKeyword] = useState('');
@@ -117,7 +117,7 @@ export function KdsSettingsSection() {
                 <Input
                   value={settings.deviceName}
                   onChange={(e) => {
-                    updateSettings({ deviceName: e.target.value });
+                    updateDeviceSettings({ deviceName: e.target.value });
                     renameDevice(e.target.value);
                   }}
                   placeholder="Ex: Tablet Cozinha 1"
