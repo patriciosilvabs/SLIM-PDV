@@ -660,3 +660,149 @@ export function buildFontSizeTestPrint(
 
   return print;
 }
+
+// Build cancellation ticket for kitchen
+export interface CancellationTicketData {
+  orderNumber: string;
+  orderType: 'dine_in' | 'takeaway' | 'delivery';
+  tableNumber?: number;
+  customerName?: string | null;
+  cancellationReason: string;
+  cancelledBy?: string;
+  items: {
+    quantity: number;
+    productName: string;
+    variation?: string | null;
+    notes?: string | null;
+  }[];
+  cancelledAt: string;
+}
+
+export function buildCancellationTicket(
+  data: CancellationTicketData,
+  paperWidth: '58mm' | '80mm' = '80mm',
+  fontSize: PrintFontSize = 'normal',
+  lineSpacing: number = 0,
+  leftMargin: number = 0,
+  asciiMode: boolean = false,
+  charSpacing: number = 1,
+  topMargin: number = 0,
+  bottomMargin: number = 3
+): string {
+  const width = paperWidth === '58mm' ? 32 : 48;
+  let ticket = '';
+  const fontCmd = getFontSizeCommand(fontSize);
+  const processText = (text: string) => asciiMode ? toAscii(text) : text;
+
+  // Initialize
+  ticket += INIT;
+
+  // Top margin
+  if (topMargin > 0) {
+    ticket += FEED_LINES(topMargin);
+  }
+
+  // Character spacing
+  if (charSpacing > 0) {
+    ticket += CHAR_SPACING_SET(charSpacing);
+  }
+
+  // Line spacing
+  if (lineSpacing > 0) {
+    ticket += LINE_SPACING_SET(lineSpacing);
+  }
+
+  // Left margin
+  if (leftMargin > 0) {
+    ticket += GS + 'L' + String.fromCharCode(leftMargin) + '\x00';
+  }
+
+  // Header - INVERTED (black background, white text) for emphasis
+  ticket += ALIGN_CENTER;
+  ticket += TEXT_DOUBLE_SIZE;
+  ticket += GS + 'B' + '\x01'; // INVERT ON
+  ticket += ' CANCELAMENTO ' + LF;
+  ticket += GS + 'B' + '\x00'; // INVERT OFF
+  ticket += LF;
+
+  // Order info
+  ticket += TEXT_BOLD;
+  ticket += fontCmd;
+  
+  if (data.orderType === 'dine_in' && data.tableNumber) {
+    ticket += `MESA ${data.tableNumber}` + LF;
+  } else if (data.orderType === 'takeaway') {
+    ticket += processText('BALCÃO') + LF;
+  } else {
+    ticket += 'DELIVERY' + LF;
+  }
+
+  ticket += `Pedido #${data.orderNumber.slice(-6).toUpperCase()}` + LF;
+  ticket += TEXT_BOLD_OFF;
+  
+  if (data.customerName) {
+    ticket += processText(data.customerName) + LF;
+  }
+
+  ticket += TEXT_NORMAL;
+  ticket += DASHED_LINE(width);
+
+  // Cancellation reason - highlighted
+  ticket += ALIGN_LEFT;
+  ticket += fontCmd;
+  ticket += TEXT_BOLD;
+  ticket += 'MOTIVO:' + LF;
+  ticket += TEXT_BOLD_OFF;
+  ticket += TEXT_DOUBLE_SIZE;
+  ticket += GS + 'B' + '\x01'; // INVERT ON
+  ticket += ` ${processText(data.cancellationReason || 'Nao informado')} ` + LF;
+  ticket += GS + 'B' + '\x00'; // INVERT OFF
+  ticket += fontCmd;
+  ticket += LF;
+
+  if (data.cancelledBy) {
+    ticket += `Por: ${processText(data.cancelledBy)}` + LF;
+  }
+
+  ticket += TEXT_NORMAL;
+  ticket += DASHED_LINE(width);
+
+  // Cancelled items header
+  ticket += ALIGN_CENTER;
+  ticket += TEXT_BOLD;
+  ticket += fontCmd;
+  ticket += 'ITENS CANCELADOS' + LF;
+  ticket += TEXT_BOLD_OFF;
+  ticket += TEXT_NORMAL;
+  ticket += DASHED_LINE(width);
+
+  // Items
+  ticket += ALIGN_LEFT;
+  for (const item of data.items) {
+    ticket += fontCmd;
+    // Strikethrough effect with dashes
+    ticket += `${item.quantity}x ${processText(item.productName)}` + LF;
+
+    if (item.variation) {
+      ticket += `  > ${processText(item.variation)}` + LF;
+    }
+
+    if (item.notes) {
+      ticket += `  OBS: ${processText(item.notes)}` + LF;
+    }
+  }
+
+  // Footer
+  ticket += TEXT_NORMAL;
+  ticket += DASHED_LINE(width);
+  ticket += ALIGN_CENTER;
+  const cancelDate = new Date(data.cancelledAt);
+  ticket += `Cancelado: ${cancelDate.toLocaleDateString('pt-BR')} ${cancelDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` + LF;
+  ticket += `Impresso: ${new Date().toLocaleString('pt-BR')}` + LF;
+  
+  // Feed and cut
+  ticket += FEED_LINES(bottomMargin);
+  ticket += PAPER_CUT_PARTIAL;
+
+  return ticket;
+}

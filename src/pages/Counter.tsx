@@ -30,8 +30,9 @@ import { ProductDetailDialog, SelectedComplement } from '@/components/order/Prod
 import { CancelOrderDialog } from '@/components/order/CancelOrderDialog';
 import { printCustomerReceipt } from '@/components/receipt/CustomerReceipt';
 import { usePrinterOptional, SectorPrintItem } from '@/contexts/PrinterContext';
-import { KitchenTicketData } from '@/utils/escpos';
+import { KitchenTicketData, CancellationTicketData } from '@/utils/escpos';
 import { usePrintSectors } from '@/hooks/usePrintSectors';
+import { useProfile } from '@/hooks/useProfile';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Package, 
@@ -120,6 +121,7 @@ export default function Counter() {
   const { getInitialOrderStatus } = useKdsSettings();
   const printer = usePrinterOptional();
   const { data: printSectors } = usePrintSectors();
+  const { profile } = useProfile();
   const { findOrCreateCustomer, updateCustomerStats } = useCustomerMutations();
   const { data: openCashRegister } = useOpenCashRegister();
   const { createPayment } = useCashRegisterMutations();
@@ -467,6 +469,30 @@ export default function Counter() {
         .eq('id', orderToCancel.id);
       
       if (error) throw error;
+      
+      // Print cancellation ticket to kitchen
+      if (printer?.canPrintToKitchen && orderToCancel.order_items && orderToCancel.order_items.length > 0) {
+        try {
+          const cancellationData: CancellationTicketData = {
+            orderNumber: orderToCancel.id,
+            orderType: orderToCancel.order_type || 'takeaway',
+            tableNumber: orderToCancel.table?.number,
+            customerName: orderToCancel.customer_name,
+            cancellationReason: reason,
+            cancelledBy: profile?.name || user?.email || 'Desconhecido',
+            items: orderToCancel.order_items.map(item => ({
+              quantity: item.quantity,
+              productName: item.product?.name || 'Produto',
+              variation: item.variation?.name,
+              notes: item.notes,
+            })),
+            cancelledAt: new Date().toISOString(),
+          };
+          await printer.printCancellationTicket(cancellationData);
+        } catch (printError) {
+          console.error('Error printing cancellation ticket:', printError);
+        }
+      }
       
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       toast({ title: 'Pedido cancelado', description: `Motivo: ${reason}` });
