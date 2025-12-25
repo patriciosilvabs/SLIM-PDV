@@ -213,25 +213,34 @@ export default function Tables() {
   }, [queryClient]);
 
   // Detect when table orders change to "ready" and play sound
+  // Uses robust detection: checks for recently ready orders even if page wasn't open
   useEffect(() => {
-    if (!orders || previousOrdersRef.current.length === 0) {
-      previousOrdersRef.current = orders || [];
-      return;
-    }
+    if (!orders) return;
+
+    const now = Date.now();
+    const RECENT_THRESHOLD_MS = 60000; // 60 seconds - consider orders ready within this window
 
     orders.forEach(order => {
-      // Only table orders (dine_in)
-      if (order.order_type !== 'dine_in') return;
+      // Only table orders (dine_in) that are ready
+      if (order.order_type !== 'dine_in' || order.status !== 'ready') return;
       
+      // Skip if already notified
+      if (notifiedReadyOrdersRef.current.has(order.id)) return;
+
+      // Method 1: Detect status change from previous state
       const prevOrder = previousOrdersRef.current.find(o => o.id === order.id);
-      
-      // If order existed before and changed to "ready"
-      if (
-        prevOrder && 
-        prevOrder.status !== 'ready' && 
-        order.status === 'ready' &&
-        !notifiedReadyOrdersRef.current.has(order.id)
-      ) {
+      const justChangedToReady = prevOrder && prevOrder.status !== 'ready';
+
+      // Method 2: Detect recently ready orders (using ready_at timestamp)
+      // This catches orders that became ready while page wasn't active
+      let isRecentlyReady = false;
+      if (order.ready_at) {
+        const readyTime = new Date(order.ready_at).getTime();
+        isRecentlyReady = (now - readyTime) < RECENT_THRESHOLD_MS;
+      }
+
+      // Trigger notification if either condition is met
+      if (justChangedToReady || (isRecentlyReady && previousOrdersRef.current.length > 0)) {
         // Play alert sound
         if (audioSettings.enabled) {
           playOrderReadySound();
@@ -244,7 +253,16 @@ export default function Tables() {
           `🔔 Mesa ${tableNumber} - Pedido Pronto!`,
           { 
             description: 'A cozinha finalizou o preparo',
-            duration: 6000 
+            duration: 8000,
+            action: {
+              label: 'Ver Mesa',
+              onClick: () => {
+                const targetTable = tables?.find(t => t.id === order.table_id);
+                if (targetTable) {
+                  setSelectedTable(targetTable);
+                }
+              }
+            }
           }
         );
         
