@@ -4,7 +4,7 @@ import { useAudioNotification } from './useAudioNotification';
 import { useToast } from '@/hooks/use-toast';
 
 export function useRealtimeNotifications() {
-  const { playNewOrderSound, playNewReservationSound, playOrderReadySound } = useAudioNotification();
+  const { playNewOrderSound, playNewReservationSound, playOrderReadySound, playStationChangeSound } = useAudioNotification();
   const { toast } = useToast();
   const initializedRef = useRef(false);
 
@@ -76,9 +76,32 @@ export function useRealtimeNotifications() {
       )
       .subscribe();
 
+    // Subscribe to order_items changes for station transitions
+    const orderItemsChannel = supabase
+      .channel('order-items-station-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'order_items',
+        },
+        (payload) => {
+          const newData = payload.new as any;
+          const oldData = payload.old as any;
+          
+          // Play sound when item moves to a different station
+          if (oldData?.current_station_id !== newData?.current_station_id && newData?.current_station_id) {
+            playStationChangeSound();
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(ordersChannel);
       supabase.removeChannel(reservationsChannel);
+      supabase.removeChannel(orderItemsChannel);
     };
-  }, [playNewOrderSound, playNewReservationSound, playOrderReadySound, toast]);
+  }, [playNewOrderSound, playNewReservationSound, playOrderReadySound, playStationChangeSound, toast]);
 }

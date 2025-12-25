@@ -48,8 +48,7 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
   const { activeStations, productionStations, orderStatusStation, isLoading: stationsLoading } = useKdsStations();
   const { settings } = useKdsSettings();
   const { 
-    startItemAtStation, 
-    completeItemAtStation, 
+    moveItemToNextStation,
     skipItemToNextStation,
     finalizeOrderFromStatus
   } = useKdsWorkflow();
@@ -108,12 +107,8 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
     ? activeStations.find(s => s.id === settings.assignedStationId)
     : null;
 
-  const handleStartItem = (itemId: string, stationId: string) => {
-    startItemAtStation.mutate({ itemId, stationId });
-  };
-
-  const handleCompleteItem = (itemId: string, stationId: string) => {
-    completeItemAtStation.mutate({ itemId, currentStationId: stationId });
+  const handleMoveToNext = (itemId: string, stationId: string) => {
+    moveItemToNextStation.mutate({ itemId, currentStationId: stationId });
   };
 
   const handleSkipItem = (itemId: string, stationId: string) => {
@@ -209,10 +204,9 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
                   stationType={currentStation.station_type}
                   isFirstStation={isFirstStation}
                   isLastStation={isLastStation}
-                  onStartItem={(itemId) => handleStartItem(itemId, currentStation.id)}
-                  onCompleteItem={(itemId) => handleCompleteItem(itemId, currentStation.id)}
+                  onMoveToNext={(itemId) => handleMoveToNext(itemId, currentStation.id)}
                   onSkipItem={(itemId) => handleSkipItem(itemId, currentStation.id)}
-                  isProcessing={startItemAtStation.isPending || completeItemAtStation.isPending}
+                  isProcessing={moveItemToNextStation.isPending}
                 />
               ))}
             </div>
@@ -273,10 +267,9 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
                         stationType={station.station_type}
                         isFirstStation={isFirstStation}
                         isLastStation={isLastStation}
-                        onStartItem={(itemId) => handleStartItem(itemId, station.id)}
-                        onCompleteItem={(itemId) => handleCompleteItem(itemId, station.id)}
+                        onMoveToNext={(itemId) => handleMoveToNext(itemId, station.id)}
                         onSkipItem={(itemId) => handleSkipItem(itemId, station.id)}
-                        isProcessing={startItemAtStation.isPending || completeItemAtStation.isPending}
+                        isProcessing={moveItemToNextStation.isPending}
                       />
                     ))}
                   </div>
