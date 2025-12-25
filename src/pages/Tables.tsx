@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { useTables, useTableMutations, Table, TableStatus } from '@/hooks/useTables';
-import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
+import { useOrders, useOrderMutations, Order, OrderItemStation } from '@/hooks/useOrders';
 import { useReservations, useReservationMutations, Reservation } from '@/hooks/useReservations';
 import { useOpenCashRegister, useCashRegisterMutations, PaymentMethod } from '@/hooks/useCashRegister';
 import { useAuth } from '@/contexts/AuthContext';
@@ -552,6 +552,28 @@ export default function Tables() {
     } finally {
       setIsReopening(false);
     }
+  };
+
+  // Get the current KDS station for an order (based on items' current_station)
+  const getOrderCurrentStation = (order: Order | undefined): OrderItemStation | null => {
+    if (!order?.order_items || order.order_items.length === 0) return null;
+    
+    // Find items with station info (non-completed items)
+    const itemsWithStation = order.order_items.filter(
+      item => item.current_station && item.station_status !== 'completed'
+    );
+    if (itemsWithStation.length === 0) return null;
+    
+    // Get the station with lowest sort_order (earliest in the flow)
+    const earliestItem = itemsWithStation.reduce((earliest, item) => {
+      if (!earliest.current_station) return item;
+      if (!item.current_station) return earliest;
+      const earliestOrder = earliest.current_station.sort_order ?? 999;
+      const itemOrder = item.current_station.sort_order ?? 999;
+      return itemOrder < earliestOrder ? item : earliest;
+    });
+    
+    return earliestItem.current_station || null;
   };
 
   const handleTableClick = (table: Table) => {
@@ -1338,6 +1360,7 @@ export default function Tables() {
                     const isOrderDelivered = order?.status === 'delivered' && table.status !== 'available';
                     const isOrderPreparing = order?.status === 'preparing';
                     const isOrderPending = order?.status === 'pending';
+                    const currentStation = getOrderCurrentStation(order);
                     
                     // Check for partial payments
                     const tablePaymentInfo = tablePaymentsMap.get(table.id);
@@ -1384,8 +1407,11 @@ export default function Tables() {
                         )}
                         {isOrderPreparing && !isOrderReady && !isOrderDelivered && (
                           <div className="absolute -top-2 -right-2 z-10">
-                            <Badge className="bg-amber-500 text-white shadow-lg animate-pulse text-[10px]">
-                              🍳 Produzindo
+                            <Badge 
+                              className="shadow-lg animate-pulse text-[10px] text-white"
+                              style={{ backgroundColor: currentStation?.color || '#f59e0b' }}
+                            >
+                              🍳 {currentStation?.name || 'Produzindo'}
                             </Badge>
                           </div>
                         )}
@@ -1485,15 +1511,25 @@ export default function Tables() {
                     )}
                     
                     {/* Preparing Banner - In production */}
-                    {selectedOrder?.status === 'preparing' && !isClosingBill && (
-                      <div className="bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 p-3 rounded-lg flex items-center gap-2 animate-pulse">
-                        <span className="text-xl">🍳</span>
-                        <div>
-                          <p className="font-medium">Em Produção</p>
-                          <p className="text-xs opacity-80">A cozinha está preparando o pedido</p>
+                    {selectedOrder?.status === 'preparing' && !isClosingBill && (() => {
+                      const selectedStation = getOrderCurrentStation(selectedOrder);
+                      return (
+                        <div 
+                          className="p-3 rounded-lg flex items-center gap-2 animate-pulse border"
+                          style={{ 
+                            backgroundColor: selectedStation?.color ? `${selectedStation.color}1a` : 'rgba(245, 158, 11, 0.1)',
+                            borderColor: selectedStation?.color ? `${selectedStation.color}4d` : 'rgba(245, 158, 11, 0.3)',
+                            color: selectedStation?.color || '#f59e0b'
+                          }}
+                        >
+                          <span className="text-xl">🍳</span>
+                          <div>
+                            <p className="font-medium">{selectedStation?.name || 'Em Produção'}</p>
+                            <p className="text-xs opacity-80">A cozinha está preparando o pedido</p>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                     
                     {/* Ready Alert Banner - Clickable to mark as delivered */}
                     {selectedOrder?.status === 'ready' && !isClosingBill && (
