@@ -806,3 +806,155 @@ export function buildCancellationTicket(
 
   return ticket;
 }
+
+// ============ PARTIAL PAYMENT RECEIPT ============
+
+export interface PartialPaymentReceiptData {
+  orderTotal: number;
+  paymentAmount: number;
+  paymentMethod: 'cash' | 'credit_card' | 'debit_card' | 'pix';
+  existingPayments: { payment_method: string; amount: number }[];
+  tableNumber?: number;
+  customerName?: string;
+  orderId: string;
+}
+
+const partialPaymentMethodLabels: Record<string, string> = {
+  cash: 'Dinheiro',
+  credit_card: 'Credito',
+  debit_card: 'Debito',
+  pix: 'Pix',
+};
+
+export function buildPartialPaymentReceipt(
+  data: PartialPaymentReceiptData,
+  paperWidth: '58mm' | '80mm' = '80mm',
+  fontSize: PrintFontSize = 'normal',
+  lineSpacing: number = 0,
+  leftMargin: number = 0,
+  asciiMode: boolean = false,
+  charSpacing: number = 1,
+  topMargin: number = 0,
+  bottomMargin: number = 4
+): string {
+  const width = paperWidth === '58mm' ? 32 : 48;
+  let receipt = '';
+  const fontCmd = getFontSizeCommand(fontSize);
+  const processText = (text: string) => asciiMode ? toAscii(text) : text;
+
+  const previousTotal = data.existingPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+  const totalPaid = previousTotal + data.paymentAmount;
+  const remainingAmount = data.orderTotal - totalPaid;
+
+  // Initialize
+  receipt += INIT;
+
+  // Top margin
+  if (topMargin > 0) {
+    receipt += FEED_LINES(topMargin);
+  }
+
+  // Apply character spacing
+  if (charSpacing > 0) {
+    receipt += CHAR_SPACING_SET(charSpacing);
+  }
+
+  // Apply line spacing
+  if (lineSpacing > 0) {
+    receipt += LINE_SPACING_SET(lineSpacing);
+  }
+
+  // Apply left margin
+  if (leftMargin > 0) {
+    receipt += GS + 'L' + String.fromCharCode(leftMargin) + '\x00';
+  }
+
+  // Header
+  receipt += ALIGN_CENTER;
+  receipt += TEXT_BOLD;
+  receipt += TEXT_DOUBLE_SIZE;
+  receipt += 'PAGAMENTO PARCIAL' + LF;
+  receipt += fontCmd;
+  receipt += TEXT_BOLD_OFF;
+  receipt += 'Comprovante de Pagamento' + LF;
+  receipt += TEXT_NORMAL;
+  receipt += DASHED_LINE(width);
+
+  // Order info
+  receipt += ALIGN_LEFT;
+  receipt += fontCmd;
+  receipt += formatLine('Pedido:', `#${data.orderId.slice(0, 8).toUpperCase()}`, width);
+  
+  if (data.tableNumber) {
+    receipt += formatLine('Mesa:', String(data.tableNumber), width);
+  }
+  
+  if (data.customerName) {
+    receipt += formatLine('Cliente:', processText(data.customerName), width);
+  }
+  
+  receipt += formatLine('Data/Hora:', new Date().toLocaleString('pt-BR'), width);
+  
+  receipt += TEXT_NORMAL;
+  receipt += DASHED_LINE(width);
+
+  // Current payment - highlighted
+  receipt += ALIGN_CENTER;
+  receipt += TEXT_BOLD;
+  receipt += fontCmd;
+  receipt += 'PAGAMENTO REGISTRADO' + LF;
+  receipt += TEXT_DOUBLE_SIZE;
+  receipt += formatCurrency(data.paymentAmount) + LF;
+  receipt += fontCmd;
+  receipt += TEXT_BOLD_OFF;
+  receipt += processText(partialPaymentMethodLabels[data.paymentMethod] || data.paymentMethod) + LF;
+  
+  receipt += TEXT_NORMAL;
+  receipt += DASHED_LINE(width);
+
+  // Previous payments if any
+  if (data.existingPayments.length > 0) {
+    receipt += ALIGN_LEFT;
+    receipt += fontCmd;
+    receipt += TEXT_BOLD;
+    receipt += 'Pagamentos anteriores:' + LF;
+    receipt += TEXT_BOLD_OFF;
+    
+    for (const p of data.existingPayments) {
+      const label = processText(partialPaymentMethodLabels[p.payment_method] || p.payment_method);
+      receipt += formatLine(label, formatCurrency(Number(p.amount)), width);
+    }
+    
+    receipt += TEXT_NORMAL;
+    receipt += DASHED_LINE(width);
+  }
+
+  // Summary
+  receipt += ALIGN_LEFT;
+  receipt += fontCmd;
+  receipt += formatLine('Total da Conta:', formatCurrency(data.orderTotal), width);
+  receipt += formatLine('Total Pago:', formatCurrency(totalPaid), width);
+  
+  receipt += TEXT_BOLD;
+  if (remainingAmount <= 0) {
+    receipt += TEXT_DOUBLE_HEIGHT;
+    receipt += formatLine('STATUS:', 'PAGO', width);
+  } else {
+    receipt += formatLine('Falta Pagar:', formatCurrency(remainingAmount), width);
+  }
+  receipt += TEXT_BOLD_OFF;
+
+  // Footer
+  receipt += TEXT_NORMAL;
+  receipt += DASHED_LINE(width);
+  receipt += ALIGN_CENTER;
+  receipt += fontCmd;
+  receipt += '*** Comprovante de pagamento parcial ***' + LF;
+  receipt += 'Mesa continua aberta' + LF;
+
+  // Feed and cut
+  receipt += FEED_LINES(bottomMargin);
+  receipt += PAPER_CUT_PARTIAL;
+
+  return receipt;
+}

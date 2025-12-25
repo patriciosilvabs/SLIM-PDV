@@ -594,7 +594,27 @@ export async function printPartialPaymentReceipt(
   props: PartialPaymentReceiptProps,
   printer?: ReturnType<typeof usePrinterOptional>
 ) {
-  // For now, use browser print for partial payment receipts
-  // QZ Tray support can be added later if needed
+  // Try QZ Tray first
+  if (printer?.canPrintToCashier) {
+    try {
+      const success = await printer.printPartialPaymentReceipt({
+        orderTotal: props.orderTotal,
+        paymentAmount: props.paymentAmount,
+        paymentMethod: props.paymentMethod,
+        existingPayments: props.existingPayments.map(p => ({
+          payment_method: p.payment_method,
+          amount: Number(p.amount)
+        })),
+        tableNumber: props.tableNumber,
+        customerName: props.customerName,
+        orderId: props.orderId
+      });
+      if (success) return;
+    } catch (err) {
+      console.error('QZ Tray print failed, falling back to browser:', err);
+    }
+  }
+  
+  // Fallback to browser print
   printPartialPaymentWithBrowser(props);
 }
