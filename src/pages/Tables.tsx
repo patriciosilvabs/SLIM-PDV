@@ -574,6 +574,7 @@ export default function Tables() {
       status: getInitialOrderStatus(),
       customer_name: openTableData.identification || null,
       notes: openTableData.people ? `${openTableData.people} pessoas` : null,
+      is_draft: true, // Order starts as draft until items are added
     });
     
     setIsOpenTableDialogOpen(false);
@@ -631,6 +632,14 @@ export default function Tables() {
         }));
         await addOrderItemExtras.mutateAsync(extras);
       }
+    }
+
+    // Mark order as no longer draft - now it can appear in KDS
+    if (order.is_draft) {
+      await updateOrder.mutateAsync({
+        id: order.id,
+        is_draft: false
+      });
     }
 
     // Auto-print kitchen ticket if enabled - with detailed logging

@@ -814,6 +814,7 @@ export type Database = {
           delivered_at: string | null
           discount: number | null
           id: string
+          is_draft: boolean | null
           notes: string | null
           order_type: Database["public"]["Enums"]["order_type"] | null
           ready_at: string | null
@@ -838,6 +839,7 @@ export type Database = {
           delivered_at?: string | null
           discount?: number | null
           id?: string
+          is_draft?: boolean | null
           notes?: string | null
           order_type?: Database["public"]["Enums"]["order_type"] | null
           ready_at?: string | null
@@ -862,6 +864,7 @@ export type Database = {
           delivered_at?: string | null
           discount?: number | null
           id?: string
+          is_draft?: boolean | null
           notes?: string | null
           order_type?: Database["public"]["Enums"]["order_type"] | null
           ready_at?: string | null

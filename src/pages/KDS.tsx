@@ -296,11 +296,17 @@ export default function KDS() {
     localStorage.setItem(FILTER_STORAGE_KEY, orderTypeFilter);
   }, [orderTypeFilter]);
 
-  // Filter active orders (pending, preparing, ready) - only orders with items
+  // Filter active orders (pending, preparing, ready) - only orders with items and not drafts
   const activeOrders = orders.filter(order => {
     const isActive = order.status === 'pending' || order.status === 'preparing' || order.status === 'ready';
     if (!isActive) {
       console.log('[KDS] Order filtered out (not active):', order.id.slice(-4), 'status:', order.status);
+      return false;
+    }
+    
+    // Don't show draft orders (waiter still adding items)
+    if (order.is_draft === true) {
+      console.log('[KDS] Order filtered out (draft):', order.id.slice(-4));
       return false;
     }
     
