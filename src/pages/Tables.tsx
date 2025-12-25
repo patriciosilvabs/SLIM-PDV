@@ -37,8 +37,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { usePrinterOptional, SectorPrintItem } from '@/contexts/PrinterContext';
-import { KitchenTicketData } from '@/utils/escpos';
+import { KitchenTicketData, CancellationTicketData } from '@/utils/escpos';
 import { usePrintSectors } from '@/hooks/usePrintSectors';
+import { useProfile } from '@/hooks/useProfile';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -113,6 +114,7 @@ export default function Tables() {
   const { autoPrintKitchenTicket, autoPrintCustomerReceipt, duplicateKitchenTicket } = useOrderSettings();
   const printer = usePrinterOptional();
   const { data: printSectors } = usePrintSectors();
+  const { profile } = useProfile();
   const { data: tables, isLoading } = useTables();
   const { data: orders } = useOrders(['pending', 'preparing', 'ready', 'delivered']);
   const { data: allOrders } = useOrders(['pending', 'preparing', 'ready', 'delivered', 'cancelled']);
@@ -770,6 +772,31 @@ export default function Tables() {
         .eq('id', selectedOrder.id);
       
       if (orderError) throw orderError;
+      
+      // Print cancellation ticket to kitchen
+      if (printer?.canPrintToKitchen && selectedOrder.order_items && selectedOrder.order_items.length > 0) {
+        try {
+          const cancellationData: CancellationTicketData = {
+            orderNumber: selectedOrder.id,
+            orderType: selectedOrder.order_type || 'dine_in',
+            tableNumber: selectedTable.number,
+            customerName: selectedOrder.customer_name,
+            cancellationReason: reason,
+            cancelledBy: profile?.name || user?.email || 'Desconhecido',
+            items: selectedOrder.order_items.map(item => ({
+              quantity: item.quantity,
+              productName: item.product?.name || 'Produto',
+              variation: item.variation?.name,
+              notes: item.notes,
+            })),
+            cancelledAt: new Date().toISOString(),
+          };
+          await printer.printCancellationTicket(cancellationData);
+        } catch (printError) {
+          console.error('Error printing cancellation ticket:', printError);
+          // Don't fail the cancellation if print fails
+        }
+      }
       
       // Free the table
       await updateTable.mutateAsync({
