@@ -6,8 +6,42 @@ import { KdsBorderBadge } from './KdsBorderHighlight';
 import { KdsItemCounter } from './KdsItemCounter';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { cn } from '@/lib/utils';
-import { CheckCircle, Circle, Layers, Flame, ChefHat, ArrowRight } from 'lucide-react';
-import { useMemo } from 'react';
+import { CheckCircle, Circle, Layers, Flame, ChefHat, ArrowRight, Clock } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
+import { differenceInMinutes } from 'date-fns';
+
+// Timer visual para tempo na estação
+function StationTimer({ startedAt, createdAt }: { startedAt?: string | null; createdAt: string }) {
+  const [elapsed, setElapsed] = useState(0);
+  
+  const referenceTime = startedAt || createdAt;
+  
+  useEffect(() => {
+    if (!referenceTime) return;
+    
+    const updateElapsed = () => {
+      const minutes = differenceInMinutes(new Date(), new Date(referenceTime));
+      setElapsed(Math.max(0, minutes));
+    };
+    
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 30000); // Atualiza a cada 30s
+    return () => clearInterval(interval);
+  }, [referenceTime]);
+  
+  const colorClass = elapsed < 5 
+    ? 'text-green-600 bg-green-500/10' 
+    : elapsed < 10 
+      ? 'text-yellow-600 bg-yellow-500/10' 
+      : 'text-red-600 bg-red-500/10';
+  
+  return (
+    <div className={cn("inline-flex items-center gap-1 text-xs font-mono px-1.5 py-0.5 rounded", colorClass)}>
+      <Clock className="h-3 w-3" />
+      <span>{elapsed}min</span>
+    </div>
+  );
+}
 
 interface OrderItem {
   id: string;
@@ -131,16 +165,19 @@ export function KdsStationCard({
     const flavors = getFlavors(item.extras);
     const itemText = `${item.product?.name || ''} ${item.notes || ''} ${item.extras?.map(e => e.extra_name).join(' ') || ''}`;
     
-    // Em preparação (prep_start): Mostra tamanho + borda PISCANDO, esconde sabores e observações
+    // Em preparação (prep_start): Mostra tamanho + borda + observações PISCANDO
     if (stationType === 'prep_start') {
       return (
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-bold text-primary">{item.quantity}x</span>
-            <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
-            {item.variation?.name && (
-              <span className="text-xs text-muted-foreground">({item.variation.name})</span>
-            )}
+          <div className="flex items-center justify-between gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-primary">{item.quantity}x</span>
+              <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
+              {item.variation?.name && (
+                <span className="text-xs text-muted-foreground">({item.variation.name})</span>
+              )}
+            </div>
+            <StationTimer startedAt={item.station_started_at} createdAt={item.created_at} />
           </div>
           {/* Borda - APENAS o fundo da tarja pisca */}
           {borderInfo && (
@@ -151,7 +188,15 @@ export function KdsStationCard({
               </span>
             </div>
           )}
-          {/* NÃO mostra sabores e NÃO mostra observações na estação de início */}
+          {/* Observações do item */}
+          {item.notes && (
+            <div className="mt-1">
+              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden">
+                <span className="absolute inset-0 bg-orange-500 animate-pulse"></span>
+                <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
+              </span>
+            </div>
+          )}
         </div>
       );
     }
@@ -160,12 +205,15 @@ export function KdsStationCard({
     if (stationType === 'item_assembly') {
       return (
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-bold text-primary">{item.quantity}x</span>
-            <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
-            {item.variation?.name && (
-              <span className="text-xs text-muted-foreground">({item.variation.name})</span>
-            )}
+          <div className="flex items-center justify-between gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-primary">{item.quantity}x</span>
+              <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
+              {item.variation?.name && (
+                <span className="text-xs text-muted-foreground">({item.variation.name})</span>
+              )}
+            </div>
+            <StationTimer startedAt={item.station_started_at} createdAt={item.created_at} />
           </div>
           {/* Sabores */}
           {flavors.length > 0 && (
@@ -189,13 +237,16 @@ export function KdsStationCard({
     // Finalização (oven_expedite) e outros: Mostra tudo sem piscar
     return (
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="font-bold text-primary">{item.quantity}x</span>
-          <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
-          {item.variation?.name && (
-            <span className="text-xs text-muted-foreground">({item.variation.name})</span>
-          )}
-          <KdsBorderBadge text={itemText} />
+        <div className="flex items-center justify-between gap-1.5 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-primary">{item.quantity}x</span>
+            <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
+            {item.variation?.name && (
+              <span className="text-xs text-muted-foreground">({item.variation.name})</span>
+            )}
+            <KdsBorderBadge text={itemText} />
+          </div>
+          <StationTimer startedAt={item.station_started_at} createdAt={item.created_at} />
         </div>
         {/* Sabores */}
         {flavors.length > 0 && (
