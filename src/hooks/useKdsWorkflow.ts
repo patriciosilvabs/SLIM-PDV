@@ -107,6 +107,13 @@ export function useKdsWorkflow() {
         return { itemId, nextStationId: nextStation.id, isComplete: false };
       } else {
         // Última praça - marcar item como entregue
+        // Primeiro buscar o order_id do item
+        const { data: itemData } = await supabase
+          .from('order_items')
+          .select('order_id')
+          .eq('id', itemId)
+          .single();
+
         const { error } = await supabase
           .from('order_items')
           .update({
@@ -118,6 +125,27 @@ export function useKdsWorkflow() {
           .eq('id', itemId);
 
         if (error) throw error;
+
+        // Verificar se todos os itens do pedido estão prontos
+        if (itemData?.order_id) {
+          const { data: allItems } = await supabase
+            .from('order_items')
+            .select('id, station_status')
+            .eq('order_id', itemData.order_id);
+
+          const allItemsDone = allItems?.every(item => item.station_status === 'done');
+
+          if (allItemsDone) {
+            // Atualizar pedido para 'ready'
+            await supabase
+              .from('orders')
+              .update({ 
+                status: 'ready',
+                ready_at: new Date().toISOString()
+              })
+              .eq('id', itemData.order_id);
+          }
+        }
 
         return { itemId, nextStationId: null, isComplete: true };
       }
