@@ -1,15 +1,13 @@
 import { useMemo } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useKdsStations } from '@/hooks/useKdsStations';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { useKdsWorkflow } from '@/hooks/useKdsWorkflow';
 import { KdsStationCard } from './KdsStationCard';
 import { KdsOrderStatusCard } from './KdsOrderStatusCard';
 import { cn } from '@/lib/utils';
-import { Factory, Play, Circle, CheckCircle } from 'lucide-react';
+import { Factory, Circle, CheckCircle } from 'lucide-react';
 import type { Order as UseOrdersOrder } from '@/hooks/useOrders';
 
 // Extend the order item type with optional station fields
@@ -53,29 +51,26 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
     startItemAtStation, 
     completeItemAtStation, 
     skipItemToNextStation,
-    initializeOrderForProductionLine,
     finalizeOrderFromStatus
   } = useKdsWorkflow();
 
   // Cast orders to local type for internal use
   const typedOrders = orders as unknown as Order[];
 
-  // Filtrar pedidos baseado na praça atribuída a este dispositivo
+  // Filtrar pedidos - agora só mostra pedidos em preparação e prontos (pending é auto-inicializado pelo trigger)
   const filteredOrders = useMemo(() => {
     // Excluir pedidos em rascunho primeiro
     const nonDraftOrders = typedOrders.filter(o => (o as any).is_draft !== true);
 
     if (!settings.assignedStationId) {
-      // Se não tiver praça atribuída, mostra todos os pedidos ativos (incluindo ready para status)
+      // Se não tiver praça atribuída, mostra pedidos em preparação e prontos
       return nonDraftOrders.filter(o => 
-        o.status === 'pending' || o.status === 'preparing' || o.status === 'ready'
+        o.status === 'preparing' || o.status === 'ready'
       );
     }
 
     // Filtrar pedidos que têm itens nesta praça
     return nonDraftOrders.filter(order => {
-      if (order.status === 'pending') return true; // Pedidos pendentes aparecem para inicialização
-      
       return order.order_items?.some(
         item => item.current_station_id === settings.assignedStationId
       );
@@ -108,9 +103,6 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
     return map;
   }, [filteredOrders, activeStations]);
 
-  // Pedidos pendentes (aguardando inicialização na linha)
-  const pendingOrders = filteredOrders.filter(o => o.status === 'pending');
-
   // Praça atual baseada na configuração do dispositivo
   const currentStation = settings.assignedStationId 
     ? activeStations.find(s => s.id === settings.assignedStationId)
@@ -126,10 +118,6 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
 
   const handleSkipItem = (itemId: string, stationId: string) => {
     skipItemToNextStation.mutate({ itemId, currentStationId: stationId });
-  };
-
-  const handleInitializeOrder = (orderId: string) => {
-    initializeOrderForProductionLine.mutate(orderId);
   };
 
   const handleFinalizeOrder = (orderId: string) => {
@@ -202,39 +190,6 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
           </Badge>
         </div>
 
-        {/* Pedidos pendentes para iniciar na linha */}
-        {isFirstStation && pendingOrders.length > 0 && (
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold text-muted-foreground mb-2">
-              Novos Pedidos ({pendingOrders.length})
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {pendingOrders.map(order => (
-                <Card key={order.id} className="border-dashed">
-                  <CardContent className="p-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-mono text-sm">#{order.id.slice(-4).toUpperCase()}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {order.order_items?.length || 0} itens
-                        </p>
-                      </div>
-                      <Button 
-                        size="sm" 
-                        onClick={() => handleInitializeOrder(order.id)}
-                        disabled={initializeOrderForProductionLine.isPending}
-                      >
-                        <Play className="h-3 w-3 mr-1" />
-                        Iniciar
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Itens nesta praça */}
         <ScrollArea className="flex-1">
           {stationOrders.length === 0 ? (
@@ -270,40 +225,6 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
   // Visão geral de todas as praças (quando não tem praça atribuída)
   return (
     <div className="space-y-6">
-      {/* Pedidos pendentes */}
-      {pendingOrders.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-2">
-            <Badge variant="outline">{pendingOrders.length}</Badge>
-            Novos Pedidos
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-            {pendingOrders.map(order => (
-              <Card key={order.id} className="border-dashed border-2">
-                <CardContent className="p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-mono font-bold">#{order.id.slice(-4).toUpperCase()}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {order.order_items?.length || 0} itens
-                      </p>
-                    </div>
-                    <Button 
-                      size="sm" 
-                      onClick={() => handleInitializeOrder(order.id)}
-                      disabled={initializeOrderForProductionLine.isPending}
-                    >
-                      <Play className="h-3 w-3 mr-1" />
-                      Iniciar
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Colunas por praça de produção */}
       <div className={cn(
         "grid gap-6",
