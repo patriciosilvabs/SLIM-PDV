@@ -497,6 +497,7 @@ export type Database = {
           bottleneck_settings: Json
           cancellation_alert_interval: number
           cancellation_alerts_enabled: boolean
+          compact_mode: boolean
           created_at: string
           highlight_special_borders: boolean
           id: string
@@ -513,6 +514,7 @@ export type Database = {
           bottleneck_settings?: Json
           cancellation_alert_interval?: number
           cancellation_alerts_enabled?: boolean
+          compact_mode?: boolean
           created_at?: string
           highlight_special_borders?: boolean
           id?: string
@@ -529,6 +531,7 @@ export type Database = {
           bottleneck_settings?: Json
           cancellation_alert_interval?: number
           cancellation_alerts_enabled?: boolean
+          compact_mode?: boolean
           created_at?: string
           highlight_special_borders?: boolean
           id?: string

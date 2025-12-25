@@ -46,6 +46,7 @@ interface KdsStationCardProps {
   onCompleteItem: (itemId: string) => void;
   onSkipItem?: (itemId: string) => void;
   isProcessing?: boolean;
+  compact?: boolean;
 }
 
 const STATION_ICONS = {
@@ -98,6 +99,7 @@ export function KdsStationCard({
   onCompleteItem,
   onSkipItem,
   isProcessing,
+  compact = false,
 }: KdsStationCardProps) {
   const { hasSpecialBorder, settings } = useKdsSettings();
   
@@ -216,115 +218,128 @@ export function KdsStationCard({
   return (
     <Card className={cn(
       "shadow-md transition-all",
-      hasSpecialBorderInItems && "ring-2 ring-amber-500 animate-pulse"
+      hasSpecialBorderInItems && "ring-2 ring-amber-500 animate-pulse",
+      compact && "shadow-sm"
     )}>
       <CardHeader 
-        className="pb-2 pt-3 px-4"
+        className={cn("pb-2 pt-3 px-4", compact && "pb-1 pt-2 px-3")}
         style={{ borderTop: `3px solid ${stationColor}` }}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div 
-              className="h-7 w-7 rounded-full flex items-center justify-center"
+              className={cn("h-7 w-7 rounded-full flex items-center justify-center", compact && "h-5 w-5")}
               style={{ backgroundColor: stationColor + '20' }}
             >
-              <StationIcon className="h-4 w-4" style={{ color: stationColor }} />
+              <StationIcon className={cn("h-4 w-4", compact && "h-3 w-3")} style={{ color: stationColor }} />
             </div>
             <div>
-              <span className="font-semibold text-sm">{stationName}</span>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className={cn("font-semibold text-sm", compact && "text-xs")}>{stationName}</span>
+              <div className={cn("flex items-center gap-1.5 text-xs text-muted-foreground", compact && "hidden")}>
                 <span>{getOrderOriginLabel()}</span>
                 <span>•</span>
                 <span className="font-mono">#{order.id.slice(-4).toUpperCase()}</span>
               </div>
             </div>
           </div>
-          <KdsSlaIndicator createdAt={order.created_at} size="sm" />
+          <KdsSlaIndicator createdAt={order.created_at} size={compact ? "sm" : "md"} showBackground />
         </div>
         
-        {order.customer_name && (
+        {!compact && order.customer_name && (
           <p className="text-xs text-primary font-medium mt-1">{order.customer_name}</p>
         )}
         
-        <KdsItemCounter currentIndex={1} totalItems={items.length} />
+        {!compact && <KdsItemCounter currentIndex={1} totalItems={items.length} />}
+        {compact && items.length > 1 && (
+          <span className="text-xs text-muted-foreground">{items.length} itens</span>
+        )}
       </CardHeader>
       
-      <CardContent className="px-4 pb-3 space-y-3">
+      <CardContent className={cn("px-4 pb-3 space-y-3", compact && "px-3 pb-2 space-y-2")}>
         {/* Itens aguardando */}
         {waitingItems.length > 0 && (
-          <div className="space-y-2">
-            {waitingItems.map((item) => (
+          <div className={cn("space-y-2", compact && "space-y-1")}>
+            {(compact ? waitingItems.slice(0, 2) : waitingItems).map((item) => (
               <div 
                 key={item.id} 
-                className="flex items-center justify-between gap-2 p-2 bg-muted/50 rounded-lg border"
+                className={cn(
+                  "flex items-center justify-between gap-2 p-2 bg-muted/50 rounded-lg border",
+                  compact && "p-1.5"
+                )}
               >
                 {renderItemContent(item)}
                 
                 <Button 
-                  size="sm" 
+                  size={compact ? "icon" : "sm"}
                   variant="outline"
                   onClick={() => onStartItem(item.id)}
                   disabled={isProcessing}
+                  className={compact ? "h-7 w-7" : ""}
                 >
-                  <Play className="h-3 w-3" />
+                  <Play className={cn("h-3 w-3", compact && "h-2.5 w-2.5")} />
                 </Button>
               </div>
             ))}
+            {compact && waitingItems.length > 2 && (
+              <p className="text-xs text-muted-foreground text-center">+{waitingItems.length - 2} mais...</p>
+            )}
           </div>
         )}
         
         {/* Itens em progresso */}
         {inProgressItems.length > 0 && (
-          <div className="space-y-2">
+          <div className={cn("space-y-2", compact && "space-y-1")}>
             {inProgressItems.map((item) => (
               <div 
                 key={item.id} 
-                className="p-2 rounded-lg border-2"
+                className={cn("p-2 rounded-lg border-2", compact && "p-1.5")}
                 style={{ borderColor: stationColor, backgroundColor: stationColor + '10' }}
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap mb-1">
-                      <Badge variant="secondary" className="text-xs">Em andamento</Badge>
-                    </div>
+                    {!compact && (
+                      <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                        <Badge variant="secondary" className="text-xs">Em andamento</Badge>
+                      </div>
+                    )}
                     {renderItemContent(item, true)}
-                    {item.station_started_at && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Iniciado há {Math.floor((Date.now() - new Date(item.station_started_at).getTime()) / 60000)} min
-                      </p>
+                    {!compact && item.station_started_at && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <KdsSlaIndicator createdAt={item.station_started_at} size="sm" />
+                      </div>
                     )}
                   </div>
                 </div>
                 
-                <div className="flex gap-2 mt-2">
+                <div className={cn("flex gap-2 mt-2", compact && "mt-1.5")}>
                   {onSkipItem && !isLastStation && (
                     <Button 
-                      size="sm" 
+                      size={compact ? "sm" : "sm"}
                       variant="outline"
                       onClick={() => onSkipItem(item.id)}
                       disabled={isProcessing}
-                      className="flex-1"
+                      className={cn("flex-1", compact && "h-7 text-xs")}
                     >
-                      <SkipForward className="h-3 w-3 mr-1" />
-                      Pular
+                      <SkipForward className={cn("h-3 w-3 mr-1", compact && "h-2.5 w-2.5")} />
+                      {!compact && "Pular"}
                     </Button>
                   )}
                   <Button 
-                    size="sm" 
+                    size={compact ? "sm" : "sm"}
                     onClick={() => onCompleteItem(item.id)}
                     disabled={isProcessing}
-                    className="flex-1"
+                    className={cn("flex-1", compact && "h-7 text-xs")}
                     style={{ backgroundColor: stationColor }}
                   >
                     {isLastStation ? (
                       <>
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Concluir
+                        <CheckCircle className={cn("h-3 w-3 mr-1", compact && "h-2.5 w-2.5")} />
+                        {!compact && "Concluir"}
                       </>
                     ) : (
                       <>
-                        <ArrowRight className="h-3 w-3 mr-1" />
-                        Próxima
+                        <ArrowRight className={cn("h-3 w-3 mr-1", compact && "h-2.5 w-2.5")} />
+                        {!compact && "Próxima"}
                       </>
                     )}
                   </Button>
@@ -335,7 +350,7 @@ export function KdsStationCard({
         )}
         
         {/* Observações do pedido */}
-        {displayOrderNotes && (
+        {!compact && displayOrderNotes && (
           <div className="text-xs text-orange-600 bg-orange-500/10 rounded p-2">
             <strong>Obs pedido:</strong> {displayOrderNotes}
           </div>

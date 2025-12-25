@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { useKdsSettings, KdsOperationMode } from '@/hooks/useKdsSettings';
 import { useKdsStations } from '@/hooks/useKdsStations';
 import { useKdsDevice } from '@/hooks/useKdsDevice';
-import { ChefHat, Printer, Monitor, Factory, Clock, Circle, X, Plus, AlertTriangle, ChevronDown } from 'lucide-react';
+import { ChefHat, Printer, Monitor, Factory, Clock, Circle, X, Plus, AlertTriangle, ChevronDown, Layers } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -506,15 +506,33 @@ export function KdsSettingsSection() {
         <CardContent className="space-y-6">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="font-medium">Mostrar quantidade de pessoas</Label>
+              <Label className="font-medium flex items-center gap-2">
+                <Layers className="h-4 w-4" />
+                Modo compacto (alta demanda)
+              </Label>
               <p className="text-sm text-muted-foreground">
-                Exibe "X pessoas" das mesas no KDS
+                Exibe mais pedidos por tela com cards menores
               </p>
             </div>
             <Switch 
-              checked={settings.showPartySize ?? true}
-              onCheckedChange={(showPartySize) => updateSettings({ showPartySize })} 
+              checked={settings.compactMode ?? false}
+              onCheckedChange={(compactMode) => updateSettings({ compactMode })} 
             />
+          </div>
+
+          <div className="border-t pt-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="font-medium">Mostrar quantidade de pessoas</Label>
+                <p className="text-sm text-muted-foreground">
+                  Exibe "X pessoas" das mesas no KDS
+                </p>
+              </div>
+              <Switch 
+                checked={settings.showPartySize ?? true}
+                onCheckedChange={(showPartySize) => updateSettings({ showPartySize })} 
+              />
+            </div>
           </div>
 
           <div className="border-t pt-4">

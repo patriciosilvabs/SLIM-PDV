@@ -12,7 +12,7 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { useAuth } from '@/contexts/AuthContext';
 import { AccessDenied } from '@/components/auth/AccessDenied';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp, Ban, History, Trash2, CalendarDays, LogOut } from 'lucide-react';
+import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp, Ban, History, Trash2, CalendarDays, LogOut, Layers } from 'lucide-react';
 import logoSlim from '@/assets/logo-slim.png';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -97,7 +97,7 @@ export default function KDS() {
     }
   });
   const { playKdsNewOrderSound, playMaxWaitAlertSound, playOrderCancelledSound, settings } = useAudioNotification();
-  const { settings: kdsSettings, hasSpecialBorder } = useKdsSettings();
+  const { settings: kdsSettings, hasSpecialBorder, updateSettings: updateKdsSettings } = useKdsSettings();
   
   // Bottleneck alerts for production line mode
   const isProductionLineMode = kdsSettings.operationMode === 'production_line';
@@ -895,6 +895,7 @@ export default function KDS() {
   }) => {
     const origin = getOrderOrigin(order);
     const OriginIcon = origin.icon;
+    const isCompact = kdsSettings.compactMode;
     
     // Get items that need preparation
     const itemsToShow = order.order_items?.filter(item => item.status === 'pending' || item.status === 'preparing') || [];
@@ -906,50 +907,60 @@ export default function KDS() {
       return hasSpecialBorder(itemText);
     });
 
+    // Limit items shown in compact mode
+    const displayItems = isCompact ? itemsToShow.slice(0, 3) : itemsToShow;
+    const hiddenItemsCount = isCompact ? Math.max(0, itemsToShow.length - 3) : 0;
+
     return (
       <Card className={cn(
-        "mb-3 shadow-md transition-all",
+        "shadow-md transition-all",
+        isCompact ? "mb-1.5" : "mb-3",
         hasSpecialBorderItem && "ring-2 ring-amber-500 ring-offset-2 ring-offset-background"
       )}>
-        <CardHeader className="pb-2 pt-3 px-4">
+        <CardHeader className={cn(
+          "pb-2 pt-3 px-4",
+          isCompact && "pb-1 pt-2 px-3"
+        )}>
           <div className="flex items-center justify-between">
-            <Badge className={cn("py-1 px-2 text-xs font-bold", origin.color)}>
-              <OriginIcon className="h-3.5 w-3.5 mr-1" />
+            <Badge className={cn("py-1 px-2 text-xs font-bold", origin.color, isCompact && "py-0.5 px-1.5")}>
+              <OriginIcon className={cn("h-3.5 w-3.5 mr-1", isCompact && "h-3 w-3")} />
               {origin.label}
             </Badge>
-            <KdsSlaIndicator createdAt={order.updated_at || order.created_at} size="md" />
+            <KdsSlaIndicator createdAt={order.updated_at || order.created_at} size={isCompact ? "sm" : "md"} showBackground />
           </div>
-          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+          <div className={cn("flex items-center gap-2 mt-1 text-xs text-muted-foreground", isCompact && "mt-0.5")}>
             <span className="font-mono">#{order.id.slice(-4).toUpperCase()}</span>
-            {order.customer_name && (
+            {!isCompact && order.customer_name && (
               <span className="font-medium text-primary">• {order.customer_name}</span>
             )}
-            {totalItems > 1 && (
-              <KdsItemCounter currentIndex={1} totalItems={totalItems} label="Pizza" />
+            {isCompact ? (
+              totalItems > 0 && <span>{totalItems} {totalItems === 1 ? 'item' : 'itens'}</span>
+            ) : (
+              totalItems > 1 && <KdsItemCounter currentIndex={1} totalItems={totalItems} label="Pizza" />
             )}
           </div>
         </CardHeader>
-        <CardContent className="px-4 pb-3">
-          <div className="space-y-2 mb-3 border rounded-lg p-2 bg-background/50">
-            {itemsToShow.map((item, idx) => {
+        <CardContent className={cn("px-4 pb-3", isCompact && "px-3 pb-2")}>
+          <div className={cn("space-y-2 mb-3 border rounded-lg p-2 bg-background/50", isCompact && "space-y-1 mb-2 p-1.5")}>
+            {displayItems.map((item, idx) => {
               const itemText = `${item.product?.name || ''} ${item.notes || ''} ${item.extras?.map(e => e.extra_name).join(' ') || ''}`;
               
               return (
-                <div key={idx} className="text-sm">
+                <div key={idx} className={cn("text-sm", isCompact && "text-xs")}>
                   <div className="flex items-start gap-1">
                     <span className="font-bold text-primary">{item.quantity}x</span>
                     <div className="flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-medium">{item.product?.name || 'Produto'}</span>
-                        {item.variation?.name && (
+                        <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
+                        {!isCompact && item.variation?.name && (
                           <span className="text-muted-foreground">({item.variation.name})</span>
                         )}
-                        <KdsBorderBadge text={itemText} />
+                        {!isCompact && <KdsBorderBadge text={itemText} />}
                       </div>
                     </div>
                   </div>
-                  {/* Extras/Complementos */}
-                  {item.extras && item.extras.length > 0 && (
+                  {/* Extras/Complementos - hide in compact */}
+                  {!isCompact && item.extras && item.extras.length > 0 && (
                     <div className="text-xs text-blue-600 dark:text-blue-400 ml-5 mt-0.5">
                       + {item.extras.map(e => 
                           e.extra_name.includes(': ') 
@@ -958,15 +969,18 @@ export default function KDS() {
                         ).join(', ')}
                     </div>
                   )}
-                  {/* Observações do item */}
-                  {item.notes && (
+                  {/* Observações do item - hide in compact */}
+                  {!isCompact && item.notes && (
                     <div className="text-xs text-orange-500 ml-5 mt-0.5">📝 {item.notes}</div>
                   )}
                 </div>
               );
             })}
+            {hiddenItemsCount > 0 && (
+              <p className="text-xs text-muted-foreground text-center">+{hiddenItemsCount} mais...</p>
+            )}
           </div>
-          {order.notes && (
+          {!isCompact && order.notes && (
             <div className="text-xs text-orange-600 dark:text-orange-400 bg-orange-500/10 rounded p-2 mb-3">
               <strong>Obs:</strong> {order.notes}
             </div>
@@ -974,22 +988,22 @@ export default function KDS() {
           <div className="flex gap-2">
             {showStartButton && (
               <Button 
-                size="sm" 
-                className="flex-1 bg-blue-600 hover:bg-blue-700"
+                size={isCompact ? "sm" : "sm"}
+                className={cn("flex-1 bg-blue-600 hover:bg-blue-700", isCompact && "h-7 text-xs")}
                 onClick={() => handleStartPreparation(order.id)}
               >
-                <Play className="h-4 w-4 mr-1" />
-                Iniciar
+                <Play className={cn("h-4 w-4 mr-1", isCompact && "h-3 w-3")} />
+                {isCompact ? '▶' : 'Iniciar'}
               </Button>
             )}
             {showReadyButton && (
               <Button 
-                size="sm" 
-                className="flex-1 bg-green-600 hover:bg-green-700"
+                size={isCompact ? "sm" : "sm"}
+                className={cn("flex-1 bg-green-600 hover:bg-green-700", isCompact && "h-7 text-xs")}
                 onClick={() => handleMarkReady(order.id)}
               >
-                <CheckCircle className="h-4 w-4 mr-1" />
-                Pronto
+                <CheckCircle className={cn("h-4 w-4 mr-1", isCompact && "h-3 w-3")} />
+                {isCompact ? '✓' : 'Pronto'}
               </Button>
             )}
           </div>
@@ -1075,38 +1089,45 @@ export default function KDS() {
     headerColor: string;
     showStartButton?: boolean;
     showReadyButton?: boolean;
-  }) => (
-    <div className="flex-1 min-w-[280px] lg:min-w-[320px]">
-      <div className={cn("rounded-t-lg p-3 flex items-center justify-between", headerColor)}>
-        <div className="flex items-center gap-2">
-          <Icon className="h-5 w-5" />
-          <span className="font-bold">{title}</span>
-        </div>
-        <Badge variant="secondary" className="text-base px-2.5 py-0.5">
-          {orders.length}
-        </Badge>
-      </div>
-      <ScrollArea className={cn(
-        "bg-muted/30 rounded-b-lg p-2",
-        isFullscreen ? "h-[calc(100vh-200px)]" : "h-[calc(100vh-280px)]"
-      )}>
-        {orders.length === 0 ? (
-          <div className="text-center text-muted-foreground py-8">
-            <p className="text-sm">Nenhum pedido</p>
+  }) => {
+    const isCompact = kdsSettings.compactMode;
+    
+    return (
+      <div className={cn("flex-1", isCompact ? "min-w-[200px] lg:min-w-[240px]" : "min-w-[280px] lg:min-w-[320px]")}>
+        <div className={cn("rounded-t-lg p-3 flex items-center justify-between", headerColor, isCompact && "p-2")}>
+          <div className="flex items-center gap-2">
+            <Icon className={cn("h-5 w-5", isCompact && "h-4 w-4")} />
+            <span className={cn("font-bold", isCompact && "text-sm")}>{title}</span>
           </div>
-        ) : (
-          orders.map(order => (
-            <OrderCard 
-              key={order.id} 
-              order={order} 
-              showStartButton={showStartButton}
-              showReadyButton={showReadyButton}
-            />
-          ))
-        )}
-      </ScrollArea>
-    </div>
-  );
+          <Badge variant="secondary" className={cn("text-base px-2.5 py-0.5", isCompact && "text-sm px-2 py-0")}>
+            {orders.length}
+          </Badge>
+        </div>
+        <ScrollArea className={cn(
+          "bg-muted/30 rounded-b-lg",
+          isCompact ? "p-1.5" : "p-2",
+          isFullscreen ? "h-[calc(100vh-200px)]" : "h-[calc(100vh-280px)]"
+        )}>
+          {orders.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">
+              <p className="text-sm">Nenhum pedido</p>
+            </div>
+          ) : (
+            <div className={cn(isCompact && "grid grid-cols-1 xl:grid-cols-2 gap-1.5")}>
+              {orders.map(order => (
+                <OrderCard 
+                  key={order.id} 
+                  order={order} 
+                  showStartButton={showStartButton}
+                  showReadyButton={showReadyButton}
+                />
+              ))}
+            </div>
+          )}
+        </ScrollArea>
+      </div>
+    );
+  };
 
   const KDSContent = () => (
     <div className={cn("p-4 h-full", isFullscreen && "p-6")}>
@@ -1177,6 +1198,17 @@ export default function KDS() {
               <span className="hidden sm:inline">{soundEnabled ? 'Som ON' : 'Som OFF'}</span>
             </Button>
           )}
+          
+          {/* Compact Mode Toggle */}
+          <Button
+            variant={kdsSettings.compactMode ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => updateKdsSettings({ compactMode: !kdsSettings.compactMode })}
+            className="gap-1.5"
+          >
+            <Layers className="h-4 w-4" />
+            <span className="hidden sm:inline">{kdsSettings.compactMode ? 'Compacto' : 'Normal'}</span>
+          </Button>
           
           <Button
             variant="outline"
