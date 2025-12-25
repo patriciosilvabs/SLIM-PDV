@@ -2527,6 +2527,12 @@ export default function Tables() {
                             {item.notes && (
                               <p className="text-xs text-amber-600 mt-1 italic">📝 {item.notes}</p>
                             )}
+                            {/* Data/Hora de criação do item */}
+                            {item.created_at && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                📅 {format(new Date(item.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                              </p>
+                            )}
                           </div>
                           <span className="font-medium ml-2">{formatCurrency(item.total_price)}</span>
                         </div>
