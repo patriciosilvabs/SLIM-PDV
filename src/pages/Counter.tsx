@@ -543,6 +543,13 @@ export default function Counter() {
       }
 
       // Create order with final values
+      console.log('[Counter] Creating order with:', {
+        order_type: orderType,
+        status: 'pending',
+        total: finalTotal,
+        itemsCount: orderItems.length
+      });
+      
       const order = await createOrder.mutateAsync({
         order_type: orderType,
         customer_name: customerName || null,
@@ -554,8 +561,15 @@ export default function Counter() {
         total: finalTotal,
         status: 'pending', // Goes to KDS for preparation
       });
+      
+      console.log('[Counter] Order created:', {
+        orderId: order.id,
+        status: order.status,
+        order_type: order.order_type
+      });
 
       // Add order items
+      console.log('[Counter] Adding order items:', orderItems.length);
       for (const item of orderItems) {
         const orderItem = await addOrderItem.mutateAsync({
           order_id: order.id,
@@ -566,6 +580,11 @@ export default function Counter() {
           total_price: item.total_price,
           notes: item.notes || null,
           status: 'pending',
+        });
+        console.log('[Counter] Order item created:', {
+          orderItemId: orderItem.id,
+          status: orderItem.status,
+          productId: item.product_id
         });
 
         if (item.complements && item.complements.length > 0) {

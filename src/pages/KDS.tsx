@@ -60,6 +60,15 @@ export default function KDS() {
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const { data: orders = [], isLoading, refetch } = useOrders(['pending', 'preparing', 'ready', 'delivered', 'cancelled']);
+  
+  // DEBUG: Log all orders received
+  console.log('[KDS] All orders received:', orders.map(o => ({
+    id: o.id.slice(-4),
+    status: o.status,
+    order_type: o.order_type,
+    itemsCount: o.order_items?.length ?? 0,
+    created_at: o.created_at
+  })));
   const { updateOrder, updateOrderItem } = useOrderMutations();
   const queryClient = useQueryClient();
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -278,10 +287,16 @@ export default function KDS() {
   // Filter active orders (pending, preparing, ready) - only orders with items
   const activeOrders = orders.filter(order => {
     const isActive = order.status === 'pending' || order.status === 'preparing' || order.status === 'ready';
-    if (!isActive) return false;
+    if (!isActive) {
+      console.log('[KDS] Order filtered out (not active):', order.id.slice(-4), 'status:', order.status);
+      return false;
+    }
     
     // Don't show orders without items (table just opened)
-    if ((order.order_items?.length ?? 0) === 0) return false;
+    if ((order.order_items?.length ?? 0) === 0) {
+      console.log('[KDS] Order filtered out (no items):', order.id.slice(-4));
+      return false;
+    }
 
     if (orderTypeFilter === 'all') return true;
     if (orderTypeFilter === 'table') return order.order_type === 'dine_in';
@@ -289,6 +304,15 @@ export default function KDS() {
     if (orderTypeFilter === 'delivery') return order.order_type === 'delivery';
     return true;
   });
+  
+  // DEBUG: Log filtered orders
+  console.log('[KDS] Active orders after filter:', activeOrders.map(o => ({
+    id: o.id.slice(-4),
+    status: o.status,
+    order_type: o.order_type,
+    itemsCount: o.order_items?.length ?? 0
+  })));
+  console.log('[KDS] Current filter:', orderTypeFilter);
 
   // Count by type (unfiltered) - only orders with items
   const allActiveOrders = orders.filter(
