@@ -449,6 +449,134 @@ export type Database = {
         }
         Relationships: []
       }
+      kds_devices: {
+        Row: {
+          created_at: string | null
+          device_id: string
+          id: string
+          is_active: boolean | null
+          last_seen_at: string | null
+          name: string
+          operation_mode: string | null
+          station_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          device_id: string
+          id?: string
+          is_active?: boolean | null
+          last_seen_at?: string | null
+          name: string
+          operation_mode?: string | null
+          station_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          device_id?: string
+          id?: string
+          is_active?: boolean | null
+          last_seen_at?: string | null
+          name?: string
+          operation_mode?: string | null
+          station_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kds_devices_station_id_fkey"
+            columns: ["station_id"]
+            isOneToOne: false
+            referencedRelation: "kds_stations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kds_station_logs: {
+        Row: {
+          action: string
+          created_at: string | null
+          duration_seconds: number | null
+          id: string
+          notes: string | null
+          order_item_id: string
+          performed_by: string | null
+          station_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          duration_seconds?: number | null
+          id?: string
+          notes?: string | null
+          order_item_id: string
+          performed_by?: string | null
+          station_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          duration_seconds?: number | null
+          id?: string
+          notes?: string | null
+          order_item_id?: string
+          performed_by?: string | null
+          station_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kds_station_logs_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kds_station_logs_station_id_fkey"
+            columns: ["station_id"]
+            isOneToOne: false
+            referencedRelation: "kds_stations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kds_stations: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          description: string | null
+          icon: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          sort_order: number | null
+          station_type: string
+          updated_at: string | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          sort_order?: number | null
+          station_type?: string
+          updated_at?: string | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          sort_order?: number | null
+          station_type?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       order_item_extras: {
         Row: {
           extra_id: string | null
@@ -491,11 +619,15 @@ export type Database = {
       order_items: {
         Row: {
           created_at: string | null
+          current_station_id: string | null
           id: string
           notes: string | null
           order_id: string
           product_id: string | null
           quantity: number
+          station_completed_at: string | null
+          station_started_at: string | null
+          station_status: string | null
           status: Database["public"]["Enums"]["order_status"] | null
           total_price: number
           unit_price: number
@@ -503,11 +635,15 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          current_station_id?: string | null
           id?: string
           notes?: string | null
           order_id: string
           product_id?: string | null
           quantity?: number
+          station_completed_at?: string | null
+          station_started_at?: string | null
+          station_status?: string | null
           status?: Database["public"]["Enums"]["order_status"] | null
           total_price: number
           unit_price: number
@@ -515,17 +651,28 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          current_station_id?: string | null
           id?: string
           notes?: string | null
           order_id?: string
           product_id?: string | null
           quantity?: number
+          station_completed_at?: string | null
+          station_started_at?: string | null
+          station_status?: string | null
           status?: Database["public"]["Enums"]["order_status"] | null
           total_price?: number
           unit_price?: number
           variation_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "order_items_current_station_id_fkey"
+            columns: ["current_station_id"]
+            isOneToOne: false
+            referencedRelation: "kds_stations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "order_items_order_id_fkey"
             columns: ["order_id"]
