@@ -1173,9 +1173,14 @@ export function PrinterSettings() {
                 <Switch 
                   checked={autoPrintKitchenTicket}
                   onCheckedChange={toggleAutoPrintKitchenTicket}
-                  disabled={!printerCtx.canPrintToKitchen}
                 />
               </div>
+              
+              {autoPrintKitchenTicket && !printerCtx.canPrintToKitchen && (
+                <p className="text-xs text-amber-600 ml-3">
+                  ⚠️ Ativado, mas a impressora da cozinha não está conectada. Conecte o QZ Tray e configure a impressora.
+                </p>
+              )}
               
               {/* Duplicate Kitchen Ticket Option */}
               {autoPrintKitchenTicket && (
@@ -1192,15 +1197,8 @@ export function PrinterSettings() {
                   <Switch 
                     checked={duplicateKitchenTicket}
                     onCheckedChange={toggleDuplicateKitchenTicket}
-                    disabled={!printerCtx.canPrintToKitchen}
                   />
                 </div>
-              )}
-              
-              {!printerCtx.canPrintToKitchen && autoPrintKitchenTicket && (
-                <p className="text-xs text-amber-600">
-                  ⚠️ Configure a impressora da cozinha para ativar a impressão automática
-                </p>
               )}
 
               <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
@@ -1213,13 +1211,12 @@ export function PrinterSettings() {
                 <Switch 
                   checked={autoPrintCustomerReceipt}
                   onCheckedChange={toggleAutoPrintCustomerReceipt}
-                  disabled={!printerCtx.canPrintToCashier}
                 />
               </div>
               
-              {!printerCtx.canPrintToCashier && autoPrintCustomerReceipt && (
-                <p className="text-xs text-amber-600">
-                  ⚠️ Configure a impressora do caixa para ativar a impressão automática
+              {autoPrintCustomerReceipt && !printerCtx.canPrintToCashier && (
+                <p className="text-xs text-amber-600 ml-3">
+                  ⚠️ Ativado, mas a impressora do caixa não está conectada. Conecte o QZ Tray e configure a impressora.
                 </p>
               )}
             </div>
