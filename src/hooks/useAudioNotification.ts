@@ -25,6 +25,7 @@ const defaultSettings: NotificationSettings = {
     orderCancelled: true,
     bottleneckAlert: true,
     stationChange: true,
+    itemDelayAlert: true,
   },
   selectedSounds: {
     newOrder: 'beepClassic',
@@ -37,6 +38,7 @@ const defaultSettings: NotificationSettings = {
     orderCancelled: 'urgentAlert',
     bottleneckAlert: 'urgentAlert',
     stationChange: 'bell',
+    itemDelayAlert: 'urgentAlert',
   },
   customSoundUrls: {
     newOrder: PREDEFINED_SOUNDS.beepClassic.data,
@@ -49,6 +51,7 @@ const defaultSettings: NotificationSettings = {
     orderCancelled: PREDEFINED_SOUNDS.urgentAlert.data,
     bottleneckAlert: PREDEFINED_SOUNDS.urgentAlert.data,
     stationChange: PREDEFINED_SOUNDS.bell.data,
+    itemDelayAlert: PREDEFINED_SOUNDS.urgentAlert.data,
   },
 };
 
@@ -100,6 +103,7 @@ export function useAudioNotification() {
   const playOrderCancelledSound = useCallback(() => playSound('orderCancelled'), [playSound]);
   const playBottleneckAlertSound = useCallback(() => playSound('bottleneckAlert'), [playSound]);
   const playStationChangeSound = useCallback(() => playSound('stationChange'), [playSound]);
+  const playItemDelayAlertSound = useCallback(() => playSound('itemDelayAlert'), [playSound]);
 
   const updateSettings = useCallback((updates: Partial<NotificationSettings>) => {
     setSettings(prev => ({ ...prev, ...updates }));
@@ -153,5 +157,6 @@ export function useAudioNotification() {
     playOrderCancelledSound,
     playBottleneckAlertSound,
     playStationChangeSound,
+    playItemDelayAlertSound,
   };
 }

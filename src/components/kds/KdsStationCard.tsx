@@ -11,7 +11,17 @@ import { useMemo, useState, useEffect } from 'react';
 import { differenceInMinutes } from 'date-fns';
 
 // Timer visual para tempo na estação
-function StationTimer({ startedAt, createdAt }: { startedAt?: string | null; createdAt: string }) {
+function StationTimer({ 
+  startedAt, 
+  createdAt,
+  greenMinutes = 5,
+  yellowMinutes = 10
+}: { 
+  startedAt?: string | null; 
+  createdAt: string;
+  greenMinutes?: number;
+  yellowMinutes?: number;
+}) {
   const [elapsed, setElapsed] = useState(0);
   
   const referenceTime = startedAt || createdAt;
@@ -29,9 +39,9 @@ function StationTimer({ startedAt, createdAt }: { startedAt?: string | null; cre
     return () => clearInterval(interval);
   }, [referenceTime]);
   
-  const colorClass = elapsed < 5 
+  const colorClass = elapsed < greenMinutes 
     ? 'text-green-600 bg-green-500/10' 
-    : elapsed < 10 
+    : elapsed < yellowMinutes 
       ? 'text-yellow-600 bg-yellow-500/10' 
       : 'text-red-600 bg-red-500/10';
   
@@ -177,7 +187,12 @@ export function KdsStationCard({
                 <span className="text-xs text-muted-foreground">({item.variation.name})</span>
               )}
             </div>
-            <StationTimer startedAt={item.station_started_at} createdAt={item.created_at} />
+            <StationTimer 
+              startedAt={item.station_started_at} 
+              createdAt={item.created_at} 
+              greenMinutes={settings.timerGreenMinutes}
+              yellowMinutes={settings.timerYellowMinutes}
+            />
           </div>
           {/* Borda - APENAS o fundo da tarja pisca */}
           {borderInfo && (
@@ -213,7 +228,12 @@ export function KdsStationCard({
                 <span className="text-xs text-muted-foreground">({item.variation.name})</span>
               )}
             </div>
-            <StationTimer startedAt={item.station_started_at} createdAt={item.created_at} />
+            <StationTimer 
+              startedAt={item.station_started_at} 
+              createdAt={item.created_at} 
+              greenMinutes={settings.timerGreenMinutes}
+              yellowMinutes={settings.timerYellowMinutes}
+            />
           </div>
           {/* Sabores */}
           {flavors.length > 0 && (
@@ -246,10 +266,15 @@ export function KdsStationCard({
             )}
             <KdsBorderBadge text={itemText} />
           </div>
-          <StationTimer startedAt={item.station_started_at} createdAt={item.created_at} />
-        </div>
-        {/* Sabores */}
-        {flavors.length > 0 && (
+            <StationTimer 
+              startedAt={item.station_started_at} 
+              createdAt={item.created_at} 
+              greenMinutes={settings.timerGreenMinutes}
+              yellowMinutes={settings.timerYellowMinutes}
+            />
+          </div>
+          {/* Sabores */}
+          {flavors.length > 0 && (
           <p className="text-sm text-blue-600 mt-0.5">
             🍕 {flavors.join(' + ')}
           </p>

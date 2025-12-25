@@ -27,6 +27,7 @@ import { KdsProductionLineView } from '@/components/kds/KdsProductionLineView';
 import { KdsMetricsDashboard } from '@/components/kds/KdsMetricsDashboard';
 import { KdsBottleneckIndicator } from '@/components/kds/KdsBottleneckIndicator';
 import { useBottleneckAlerts } from '@/hooks/useBottleneckAlerts';
+import { useItemDelayAlert } from '@/hooks/useItemDelayAlert';
 
 type OrderTypeFilter = 'all' | 'table' | 'takeaway' | 'delivery';
 
@@ -102,6 +103,10 @@ export default function KDS() {
   // Bottleneck alerts for production line mode
   const isProductionLineMode = kdsSettings.operationMode === 'production_line';
   const { bottlenecks, hasActiveAlerts } = useBottleneckAlerts(isProductionLineMode, soundEnabled);
+  
+  // Item delay alert (plays sound when items exceed time threshold)
+  useItemDelayAlert();
+  
   const [metricsDialogOpen, setMetricsDialogOpen] = useState(false);
   const notifiedOrdersRef = useRef<Set<string>>(new Set());
   const previousOrdersRef = useRef<Order[]>([]);

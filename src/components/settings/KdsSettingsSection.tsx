@@ -368,15 +368,118 @@ export function KdsSettingsSection() {
         </Card>
       )}
 
+      {/* Indicador de Tempo por Item */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Clock className="h-5 w-5" />
+            Indicador de Tempo por Item
+          </CardTitle>
+          <CardDescription>
+            Configure os tempos para o timer individual de cada item na estação
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label className="font-medium flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full bg-green-500"></span>
+                Verde (OK)
+              </Label>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-sm text-muted-foreground">Até</span>
+                <Select
+                  value={String(settings.timerGreenMinutes ?? 5)}
+                  onValueChange={(value) => updateSettings({ timerGreenMinutes: Number(value) })}
+                >
+                  <SelectTrigger className="w-24">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[2, 3, 4, 5, 6, 7, 8, 10].map(n => (
+                      <SelectItem key={n} value={String(n)}>{n} min</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <Label className="font-medium flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full bg-yellow-500"></span>
+                Amarelo (Atenção)
+              </Label>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-sm text-muted-foreground">Até</span>
+                <Select
+                  value={String(settings.timerYellowMinutes ?? 10)}
+                  onValueChange={(value) => updateSettings({ timerYellowMinutes: Number(value) })}
+                >
+                  <SelectTrigger className="w-24">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[5, 8, 10, 12, 15, 18, 20].map(n => (
+                      <SelectItem key={n} value={String(n)}>{n} min</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-sm text-muted-foreground">
+            Acima de {settings.timerYellowMinutes ?? 10} minutos, o timer ficará <span className="text-red-500 font-medium">vermelho</span>.
+          </p>
+
+          <div className="border-t pt-4 mt-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="font-medium flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-red-500" />
+                  Alerta sonoro de item atrasado
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Toca um som quando algum item ultrapassa o tempo limite na estação
+                </p>
+              </div>
+              <Switch
+                checked={settings.delayAlertEnabled ?? true}
+                onCheckedChange={(delayAlertEnabled) => updateSettings({ delayAlertEnabled })}
+              />
+            </div>
+
+            {(settings.delayAlertEnabled ?? true) && (
+              <div className="mt-3">
+                <Label className="text-sm text-muted-foreground">Alertar após</Label>
+                <Select
+                  value={String(settings.delayAlertMinutes ?? 10)}
+                  onValueChange={(value) => updateSettings({ delayAlertMinutes: Number(value) })}
+                >
+                  <SelectTrigger className="w-32 mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[5, 8, 10, 12, 15, 20, 25, 30].map(n => (
+                      <SelectItem key={n} value={String(n)}>{n} minutos</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* SLA Visual */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Clock className="h-5 w-5" />
-            SLA Visual (Semáforo)
+            SLA Visual (Semáforo do Pedido)
           </CardTitle>
           <CardDescription>
-            Configure os tempos para indicação visual de urgência
+            Configure os tempos para indicação visual de urgência do pedido completo
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
