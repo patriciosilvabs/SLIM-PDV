@@ -490,6 +490,54 @@ export type Database = {
           },
         ]
       }
+      kds_global_settings: {
+        Row: {
+          auto_print_cancellations: boolean
+          border_keywords: string[]
+          bottleneck_settings: Json
+          cancellation_alert_interval: number
+          cancellation_alerts_enabled: boolean
+          created_at: string
+          highlight_special_borders: boolean
+          id: string
+          operation_mode: string
+          show_pending_column: boolean
+          sla_green_minutes: number
+          sla_yellow_minutes: number
+          updated_at: string
+        }
+        Insert: {
+          auto_print_cancellations?: boolean
+          border_keywords?: string[]
+          bottleneck_settings?: Json
+          cancellation_alert_interval?: number
+          cancellation_alerts_enabled?: boolean
+          created_at?: string
+          highlight_special_borders?: boolean
+          id?: string
+          operation_mode?: string
+          show_pending_column?: boolean
+          sla_green_minutes?: number
+          sla_yellow_minutes?: number
+          updated_at?: string
+        }
+        Update: {
+          auto_print_cancellations?: boolean
+          border_keywords?: string[]
+          bottleneck_settings?: Json
+          cancellation_alert_interval?: number
+          cancellation_alerts_enabled?: boolean
+          created_at?: string
+          highlight_special_borders?: boolean
+          id?: string
+          operation_mode?: string
+          show_pending_column?: boolean
+          sla_green_minutes?: number
+          sla_yellow_minutes?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       kds_station_logs: {
         Row: {
           action: string
