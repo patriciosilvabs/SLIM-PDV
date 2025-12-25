@@ -146,11 +146,12 @@ export function KdsStationCard({
               <span className="text-xs text-muted-foreground">({item.variation.name})</span>
             )}
           </div>
-          {/* Borda - PISCANDO em destaque */}
+          {/* Borda - APENAS o fundo da tarja pisca */}
           {borderInfo && (
             <div className="mt-1">
-              <span className="inline-flex px-2 py-0.5 bg-amber-500 text-amber-950 rounded font-bold text-sm animate-pulse">
-                🟡 {borderInfo}
+              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden">
+                <span className="absolute inset-0 bg-amber-500 animate-pulse"></span>
+                <span className="relative z-10 text-amber-950">🟡 {borderInfo}</span>
               </span>
             </div>
           )}
@@ -176,11 +177,14 @@ export function KdsStationCard({
               🍕 {flavors.join(' + ')}
             </p>
           )}
-          {/* Observações - PISCANDO */}
+          {/* Observações - APENAS o fundo da tarja pisca */}
           {item.notes && (
-            <p className="text-sm text-orange-500 mt-0.5 animate-pulse font-bold">
-              📝 {item.notes}
-            </p>
+            <div className="mt-1">
+              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden">
+                <span className="absolute inset-0 bg-orange-500 animate-pulse"></span>
+                <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
+              </span>
+            </div>
           )}
         </div>
       );
@@ -218,7 +222,7 @@ export function KdsStationCard({
   return (
     <Card className={cn(
       "shadow-md transition-all",
-      hasSpecialBorderInItems && "ring-2 ring-amber-500 animate-pulse",
+      hasSpecialBorderInItems && "ring-2 ring-amber-500",
       compact && "shadow-sm"
     )}>
       <CardHeader 
