@@ -1309,12 +1309,20 @@ export default function Tables() {
                     const isSelected = selectedTable?.id === table.id;
                     const isOrderReady = order?.status === 'ready';
                     const isOrderDelivered = order?.status === 'delivered' && table.status !== 'available';
+                    const isOrderPreparing = order?.status === 'preparing';
+                    const isOrderPending = order?.status === 'pending';
                     
                     // Check for partial payments
                     const tablePaymentInfo = tablePaymentsMap.get(table.id);
                     const hasPartialPayment = tablePaymentInfo && 
                       tablePaymentInfo.totalPaid > 0 && 
                       tablePaymentInfo.totalPaid < tablePaymentInfo.orderTotal;
+                    
+                    // Calculate wait time
+                    const waitMinutes = order?.created_at 
+                      ? Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000)
+                      : 0;
+                    const waitTimeColor = waitMinutes < 10 ? 'text-green-200' : waitMinutes < 20 ? 'text-yellow-200' : 'text-red-200';
                     
                     return (
                       <Card
@@ -1325,7 +1333,8 @@ export default function Tables() {
                           isSelected && 'ring-2 ring-primary ring-offset-2',
                           isOrderReady && 'ring-2 ring-green-500 ring-offset-2 animate-pulse',
                           isOrderDelivered && !isOrderReady && 'ring-2 ring-blue-500 ring-offset-2',
-                          hasPartialPayment && !isOrderReady && !isOrderDelivered && 'ring-2 ring-orange-500 ring-offset-2'
+                          isOrderPreparing && !isOrderReady && !isOrderDelivered && 'ring-2 ring-amber-500 ring-offset-2',
+                          hasPartialPayment && !isOrderReady && !isOrderDelivered && !isOrderPreparing && 'ring-2 ring-orange-500 ring-offset-2'
                         )}
                         onClick={() => handleTableClick(table)}
                       >
@@ -1335,6 +1344,21 @@ export default function Tables() {
                             <Badge className="bg-orange-500 text-white shadow-lg text-[10px] px-1.5">
                               <Wallet className="h-3 w-3 mr-0.5" />
                               {formatCurrency(tablePaymentInfo.totalPaid)}
+                            </Badge>
+                          </div>
+                        )}
+                        {isOrderPending && !isOrderReady && !isOrderDelivered && (
+                          <div className="absolute -top-2 -right-2 z-10">
+                            <Badge className="bg-yellow-500 text-white shadow-lg text-[10px]">
+                              <Clock className="h-3 w-3 mr-1" />
+                              Aguardando
+                            </Badge>
+                          </div>
+                        )}
+                        {isOrderPreparing && !isOrderReady && !isOrderDelivered && (
+                          <div className="absolute -top-2 -right-2 z-10">
+                            <Badge className="bg-amber-500 text-white shadow-lg animate-pulse text-[10px]">
+                              🍳 Produzindo
                             </Badge>
                           </div>
                         )}
@@ -1365,6 +1389,13 @@ export default function Tables() {
                             <p className="text-xs mt-1 opacity-75">
                               {order.order_items?.length || 0} itens
                             </p>
+                          )}
+                          {/* Wait time indicator for occupied tables */}
+                          {order && table.status === 'occupied' && order.status !== 'delivered' && waitMinutes > 0 && (
+                            <div className={cn("text-xs mt-1 font-medium flex items-center justify-center gap-1", waitTimeColor)}>
+                              <Clock className="h-3 w-3" />
+                              {waitMinutes >= 60 ? `${Math.floor(waitMinutes / 60)}h ${waitMinutes % 60}min` : `${waitMinutes}min`}
+                            </div>
                           )}
                           {/* Partial Payment Info */}
                           {hasPartialPayment && (
@@ -1415,6 +1446,28 @@ export default function Tables() {
                   </CardHeader>
 
                   <CardContent className="flex-1 flex flex-col space-y-4 overflow-hidden">
+                    {/* Pending Banner - Awaiting production */}
+                    {selectedOrder?.status === 'pending' && !isClosingBill && (
+                      <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-700 dark:text-yellow-400 p-3 rounded-lg flex items-center gap-2">
+                        <Clock className="h-5 w-5" />
+                        <div>
+                          <p className="font-medium">Aguardando Produção</p>
+                          <p className="text-xs opacity-80">O pedido ainda não entrou na cozinha</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Preparing Banner - In production */}
+                    {selectedOrder?.status === 'preparing' && !isClosingBill && (
+                      <div className="bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 p-3 rounded-lg flex items-center gap-2 animate-pulse">
+                        <span className="text-xl">🍳</span>
+                        <div>
+                          <p className="font-medium">Em Produção</p>
+                          <p className="text-xs opacity-80">A cozinha está preparando o pedido</p>
+                        </div>
+                      </div>
+                    )}
+                    
                     {/* Ready Alert Banner - Clickable to mark as delivered */}
                     {selectedOrder?.status === 'ready' && !isClosingBill && (
                       <button 
