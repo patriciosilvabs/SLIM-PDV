@@ -6,7 +6,7 @@ import { KdsBorderBadge } from './KdsBorderHighlight';
 import { KdsItemCounter } from './KdsItemCounter';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { cn } from '@/lib/utils';
-import { Play, CheckCircle, SkipForward, Circle, Layers, Flame, ChefHat, ArrowRight } from 'lucide-react';
+import { CheckCircle, Circle, Layers, Flame, ChefHat, ArrowRight } from 'lucide-react';
 import { useMemo } from 'react';
 
 interface OrderItem {
@@ -238,10 +238,8 @@ export function KdsStationCard({
               <StationIcon className={cn("h-4 w-4", compact && "h-3 w-3")} style={{ color: stationColor }} />
             </div>
             <div>
-              <span className={cn("font-semibold text-sm", compact && "text-xs")}>{stationName}</span>
+              <span className={cn("font-semibold text-sm", compact && "text-xs")}>{getOrderOriginLabel()}</span>
               <div className={cn("flex items-center gap-1.5 text-xs text-muted-foreground", compact && "hidden")}>
-                <span>{getOrderOriginLabel()}</span>
-                <span>•</span>
                 <span className="font-mono">#{order.id.slice(-4).toUpperCase()}</span>
               </div>
             </div>
@@ -274,13 +272,13 @@ export function KdsStationCard({
                 {renderItemContent(item)}
                 
                 <Button 
-                  size={compact ? "icon" : "sm"}
+                  size="sm"
                   variant="outline"
                   onClick={() => onStartItem(item.id)}
                   disabled={isProcessing}
-                  className={compact ? "h-7 w-7" : ""}
+                  className={cn(compact && "h-7 text-xs")}
                 >
-                  <Play className={cn("h-3 w-3", compact && "h-2.5 w-2.5")} />
+                  Iniciar
                 </Button>
               </div>
             ))}
@@ -301,11 +299,6 @@ export function KdsStationCard({
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    {!compact && (
-                      <div className="flex items-center gap-1.5 flex-wrap mb-1">
-                        <Badge variant="secondary" className="text-xs">Em andamento</Badge>
-                      </div>
-                    )}
                     {renderItemContent(item, true)}
                     {!compact && item.station_started_at && (
                       <div className="flex items-center gap-1 mt-1">
@@ -316,18 +309,6 @@ export function KdsStationCard({
                 </div>
                 
                 <div className={cn("flex gap-2 mt-2", compact && "mt-1.5")}>
-                  {onSkipItem && !isLastStation && (
-                    <Button 
-                      size={compact ? "sm" : "sm"}
-                      variant="outline"
-                      onClick={() => onSkipItem(item.id)}
-                      disabled={isProcessing}
-                      className={cn("flex-1", compact && "h-7 text-xs")}
-                    >
-                      <SkipForward className={cn("h-3 w-3 mr-1", compact && "h-2.5 w-2.5")} />
-                      {!compact && "Pular"}
-                    </Button>
-                  )}
                   <Button 
                     size={compact ? "sm" : "sm"}
                     onClick={() => onCompleteItem(item.id)}
