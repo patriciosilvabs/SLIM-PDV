@@ -7,11 +7,10 @@ import { useKdsStations } from '@/hooks/useKdsStations';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { KdsSlaIndicator } from './KdsSlaIndicator';
 import { cn } from '@/lib/utils';
-import { Factory, Circle, CheckCircle, Package, Clock, XCircle } from 'lucide-react';
-import { differenceInMinutes } from 'date-fns';
+import { Factory, Circle, CheckCircle, Package, Clock, XCircle, CheckCheck } from 'lucide-react';
+import { differenceInMinutes, isToday, format } from 'date-fns';
 import type { Order as UseOrdersOrder } from '@/hooks/useOrders';
 import { useState, useEffect } from 'react';
-
 interface OrderItem {
   id: string;
   order_id: string;
@@ -37,6 +36,7 @@ interface Order {
   created_at: string;
   updated_at: string;
   ready_at?: string | null;
+  delivered_at?: string | null;
   total?: number | null;
   order_items?: OrderItem[];
 }
@@ -319,9 +319,20 @@ export function KdsProductionLineReadOnly({
     return typedOrders.filter(o => 
       (o as any).is_draft !== true &&
       (o.order_type === 'takeaway' || o.order_type === 'delivery') &&
-      (o.status === 'preparing' || o.status === 'ready')
+      (o.status === 'preparing' || o.status === 'ready' || o.status === 'delivered')
     );
   }, [typedOrders]);
+
+  // Delivered orders from today for review
+  const deliveredOrdersToday = useMemo(() => {
+    return filteredOrders
+      .filter(o => o.status === 'delivered' && isToday(new Date(o.delivered_at || o.updated_at)))
+      .sort((a, b) => {
+        const dateA = new Date(a.delivered_at || a.updated_at);
+        const dateB = new Date(b.delivered_at || b.updated_at);
+        return dateB.getTime() - dateA.getTime(); // Most recent first
+      });
+  }, [filteredOrders]);
 
   // Group items by station
   const itemsByStation = useMemo(() => {
@@ -390,8 +401,8 @@ export function KdsProductionLineReadOnly({
       <div className={cn(
         "grid gap-6",
         orderStatusStation 
-          ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-4" 
-          : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+          ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-5" 
+          : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
       )}>
         {productionStations.map((station) => {
           const stationOrders = itemsByStation.get(station.id) || [];
@@ -487,6 +498,77 @@ export function KdsProductionLineReadOnly({
             </ScrollArea>
           </div>
         )}
+
+        {/* Delivered Orders Column (Today only) */}
+        <div>
+          <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-green-500/10">
+            <div className="h-6 w-6 rounded-full flex items-center justify-center bg-green-500/30">
+              <CheckCheck className="h-3 w-3 text-green-600" />
+            </div>
+            <span className="font-semibold text-sm">Entregues Hoje</span>
+            <Badge variant="secondary" className="ml-auto text-xs">
+              {deliveredOrdersToday.length}
+            </Badge>
+          </div>
+
+          <ScrollArea className="h-[calc(100vh-320px)]">
+            {deliveredOrdersToday.length === 0 ? (
+              <div className="text-center text-muted-foreground text-sm py-8">
+                Nenhum pedido entregue hoje
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {deliveredOrdersToday.map((order) => (
+                  <Card key={order.id} className="shadow-sm opacity-80">
+                    <CardHeader 
+                      className="pb-2 pt-3 px-3"
+                      style={{ borderTop: '3px solid #22C55E' }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs text-green-600 border-green-600">
+                            {order.order_type === 'delivery' ? 'DELIVERY' : 'BALCÃO'}
+                          </Badge>
+                          <span className="text-xs font-mono text-muted-foreground">
+                            #{order.id.slice(-4).toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-green-600 font-medium">
+                          <CheckCheck className="h-3 w-3" />
+                          {format(new Date(order.delivered_at || order.updated_at), 'HH:mm')}
+                        </div>
+                      </div>
+                      {order.customer_name && (
+                        <p className="text-xs text-muted-foreground mt-1">{order.customer_name}</p>
+                      )}
+                    </CardHeader>
+                    
+                    <CardContent className="px-3 pb-3">
+                      <div className="space-y-1">
+                        {order.order_items?.slice(0, 3).map((item) => (
+                          <div key={item.id} className="text-xs text-muted-foreground flex items-center gap-1">
+                            <span className="font-medium">{item.quantity}x</span>
+                            <span className="truncate">{item.product?.name || 'Produto'}</span>
+                          </div>
+                        ))}
+                        {(order.order_items?.length || 0) > 3 && (
+                          <p className="text-xs text-muted-foreground">
+                            +{(order.order_items?.length || 0) - 3} itens
+                          </p>
+                        )}
+                      </div>
+                      {order.total != null && (
+                        <div className="text-sm font-semibold text-right pt-2 border-t mt-2 text-green-600">
+                          R$ {order.total.toFixed(2)}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        </div>
       </div>
     </div>
   );
