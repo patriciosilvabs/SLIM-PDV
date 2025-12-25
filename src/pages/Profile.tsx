@@ -31,6 +31,7 @@ const roleLabels: Record<AppRole, string> = {
   cashier: 'Caixa',
   waiter: 'Garçom',
   kitchen: 'Cozinha',
+  kds: 'KDS',
 };
 
 const roleColors: Record<AppRole, string> = {
@@ -38,6 +39,7 @@ const roleColors: Record<AppRole, string> = {
   cashier: 'bg-primary/20 text-primary',
   waiter: 'bg-info/20 text-info',
   kitchen: 'bg-warning/20 text-warning',
+  kds: 'bg-orange-500/20 text-orange-600',
 };
 
 export default function Profile() {

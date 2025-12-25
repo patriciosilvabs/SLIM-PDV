@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-export type AppRole = 'admin' | 'cashier' | 'waiter' | 'kitchen';
+export type AppRole = 'admin' | 'cashier' | 'waiter' | 'kitchen' | 'kds';
 
 export interface UserRole {
   id: string;
@@ -38,6 +38,7 @@ export function useUserRole() {
     isCashier: roles.includes('cashier'),
     isWaiter: roles.includes('waiter'),
     isKitchen: roles.includes('kitchen'),
+    isKds: roles.includes('kds'),
     hasRole: (role: AppRole) => roles.includes(role),
     hasAnyRole: (allowedRoles: AppRole[]) => allowedRoles.some(r => roles.includes(r)),
   };
