@@ -7,8 +7,9 @@ import { useKdsStations } from '@/hooks/useKdsStations';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { useKdsWorkflow } from '@/hooks/useKdsWorkflow';
 import { KdsStationCard } from './KdsStationCard';
+import { KdsOrderStatusCard } from './KdsOrderStatusCard';
 import { cn } from '@/lib/utils';
-import { Factory, Play, Circle } from 'lucide-react';
+import { Factory, Play, Circle, CheckCircle } from 'lucide-react';
 import type { Order as UseOrdersOrder } from '@/hooks/useOrders';
 
 // Extend the order item type with optional station fields
@@ -36,6 +37,7 @@ interface Order {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  ready_at?: string | null;
   order_items?: OrderItem[];
 }
 
@@ -45,13 +47,14 @@ interface KdsProductionLineViewProps {
 }
 
 export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineViewProps) {
-  const { activeStations, isLoading: stationsLoading } = useKdsStations();
+  const { activeStations, productionStations, orderStatusStation, isLoading: stationsLoading } = useKdsStations();
   const { settings } = useKdsSettings();
   const { 
     startItemAtStation, 
     completeItemAtStation, 
     skipItemToNextStation,
-    initializeOrderForProductionLine 
+    initializeOrderForProductionLine,
+    finalizeOrderFromStatus
   } = useKdsWorkflow();
 
   // Cast orders to local type for internal use
@@ -63,8 +66,10 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
     const nonDraftOrders = typedOrders.filter(o => (o as any).is_draft !== true);
 
     if (!settings.assignedStationId) {
-      // Se não tiver praça atribuída, mostra todos os pedidos ativos
-      return nonDraftOrders.filter(o => o.status === 'pending' || o.status === 'preparing');
+      // Se não tiver praça atribuída, mostra todos os pedidos ativos (incluindo ready para status)
+      return nonDraftOrders.filter(o => 
+        o.status === 'pending' || o.status === 'preparing' || o.status === 'ready'
+      );
     }
 
     // Filtrar pedidos que têm itens nesta praça
@@ -126,6 +131,25 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
   const handleInitializeOrder = (orderId: string) => {
     initializeOrderForProductionLine.mutate(orderId);
   };
+
+  const handleFinalizeOrder = (orderId: string) => {
+    finalizeOrderFromStatus.mutate(orderId);
+  };
+
+  // Pedidos prontos na estação de status
+  const readyOrdersInStatus = useMemo(() => {
+    if (!orderStatusStation) return [];
+    
+    return filteredOrders
+      .filter(order => order.status === 'ready')
+      .map(order => {
+        const itemsInStation = order.order_items?.filter(
+          item => item.current_station_id === orderStatusStation.id
+        ) || [];
+        return { order, items: itemsInStation };
+      })
+      .filter(entry => entry.items.length > 0);
+  }, [filteredOrders, orderStatusStation]);
 
   if (stationsLoading || isLoading) {
     return (
@@ -280,13 +304,18 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
         </div>
       )}
 
-      {/* Colunas por praça */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {activeStations.map((station, idx) => {
+      {/* Colunas por praça de produção */}
+      <div className={cn(
+        "grid gap-6",
+        orderStatusStation 
+          ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-4" 
+          : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+      )}>
+        {productionStations.map((station, idx) => {
           const stationOrders = itemsByStation.get(station.id) || [];
           const totalItems = stationOrders.reduce((acc, o) => acc + o.items.length, 0);
           const isFirstStation = idx === 0;
-          const isLastStation = idx === activeStations.length - 1;
+          const isLastStation = idx === productionStations.length - 1;
 
           return (
             <div key={station.id}>
@@ -335,6 +364,48 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
             </div>
           );
         })}
+
+        {/* Coluna de Status do Pedido */}
+        {orderStatusStation && (
+          <div>
+            <div 
+              className="flex items-center gap-2 mb-3 p-2 rounded-lg"
+              style={{ backgroundColor: orderStatusStation.color + '15' }}
+            >
+              <div 
+                className="h-6 w-6 rounded-full flex items-center justify-center"
+                style={{ backgroundColor: orderStatusStation.color + '30' }}
+              >
+                <CheckCircle className="h-3 w-3" style={{ color: orderStatusStation.color }} />
+              </div>
+              <span className="font-semibold text-sm">{orderStatusStation.name}</span>
+              <Badge variant="secondary" className="ml-auto text-xs">
+                {readyOrdersInStatus.length}
+              </Badge>
+            </div>
+
+            <ScrollArea className="h-[calc(100vh-320px)]">
+              {readyOrdersInStatus.length === 0 ? (
+                <div className="text-center text-muted-foreground text-sm py-8">
+                  Nenhum pedido pronto
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {readyOrdersInStatus.map(({ order, items }) => (
+                    <KdsOrderStatusCard
+                      key={order.id}
+                      order={order}
+                      items={items}
+                      stationColor={orderStatusStation.color}
+                      onFinalize={handleFinalizeOrder}
+                      isProcessing={finalizeOrderFromStatus.isPending}
+                    />
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </div>
+        )}
       </div>
     </div>
   );

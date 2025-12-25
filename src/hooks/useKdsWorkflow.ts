@@ -18,7 +18,7 @@ interface OrderItem {
 
 export function useKdsWorkflow() {
   const queryClient = useQueryClient();
-  const { activeStations, getNextStation } = useKdsStations();
+  const { activeStations, getNextStation, orderStatusStation, isLastProductionStation } = useKdsStations();
   const { logAction } = useKdsStationLogs();
   const { user } = useAuth();
 
@@ -106,36 +106,62 @@ export function useKdsWorkflow() {
 
         return { itemId, nextStationId: nextStation.id, isComplete: false };
       } else {
-        // Última praça - marcar item como entregue
-        // Primeiro buscar o order_id do item
+        // Última praça de produção - marcar pedido como ready
         const { data: itemData } = await supabase
           .from('order_items')
           .select('order_id')
           .eq('id', itemId)
           .single();
 
-        const { error } = await supabase
-          .from('order_items')
-          .update({
-            current_station_id: null,
-            station_status: 'done',
-            station_completed_at: now,
-            status: 'delivered',
-          })
-          .eq('id', itemId);
+        // Se tiver estação de status do pedido, mover o item para lá
+        if (orderStatusStation) {
+          const { error } = await supabase
+            .from('order_items')
+            .update({
+              current_station_id: orderStatusStation.id,
+              station_status: 'waiting',
+              station_started_at: null,
+              station_completed_at: now,
+            })
+            .eq('id', itemId);
 
-        if (error) throw error;
+          if (error) throw error;
 
-        // Verificar se todos os itens do pedido estão prontos
+          // Log de entrada na estação de status
+          await logAction.mutateAsync({
+            orderItemId: itemId,
+            stationId: orderStatusStation.id,
+            action: 'entered',
+          });
+        } else {
+          // Sem estação de status - marcar item como done diretamente
+          const { error } = await supabase
+            .from('order_items')
+            .update({
+              current_station_id: null,
+              station_status: 'done',
+              station_completed_at: now,
+              status: 'delivered',
+            })
+            .eq('id', itemId);
+
+          if (error) throw error;
+        }
+
+        // Verificar se todos os itens do pedido terminaram a produção
         if (itemData?.order_id) {
           const { data: allItems } = await supabase
             .from('order_items')
-            .select('id, station_status')
+            .select('id, current_station_id, station_status')
             .eq('order_id', itemData.order_id);
 
-          const allItemsDone = allItems?.every(item => item.station_status === 'done');
+          // Todos estão na estação order_status ou já finalizados
+          const allItemsReady = allItems?.every(item => 
+            (orderStatusStation && item.current_station_id === orderStatusStation.id) ||
+            item.station_status === 'done'
+          );
 
-          if (allItemsDone) {
+          if (allItemsReady) {
             // Atualizar pedido para 'ready'
             await supabase
               .from('orders')
@@ -147,7 +173,7 @@ export function useKdsWorkflow() {
           }
         }
 
-        return { itemId, nextStationId: null, isComplete: true };
+        return { itemId, nextStationId: orderStatusStation?.id || null, isComplete: !orderStatusStation };
       }
     },
     onSuccess: (result) => {
@@ -199,6 +225,64 @@ export function useKdsWorkflow() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       toast.info('Item pulado para próxima praça');
+    },
+  });
+
+  // Finalizar pedido na estação de status (marcar como entregue)
+  const finalizeOrderFromStatus = useMutation({
+    mutationFn: async (orderId: string) => {
+      const now = new Date().toISOString();
+
+      // Buscar todos os itens do pedido na estação order_status
+      const { data: items, error: fetchError } = await supabase
+        .from('order_items')
+        .select('id, current_station_id')
+        .eq('order_id', orderId);
+
+      if (fetchError) throw fetchError;
+
+      // Marcar todos os itens como done
+      for (const item of items || []) {
+        if (item.current_station_id && orderStatusStation?.id === item.current_station_id) {
+          // Log de conclusão
+          await logAction.mutateAsync({
+            orderItemId: item.id,
+            stationId: item.current_station_id,
+            action: 'completed',
+          });
+        }
+
+        await supabase
+          .from('order_items')
+          .update({
+            current_station_id: null,
+            station_status: 'done',
+            station_completed_at: now,
+            status: 'delivered',
+          })
+          .eq('id', item.id);
+      }
+
+      // Atualizar pedido para delivered
+      const { error } = await supabase
+        .from('orders')
+        .update({ 
+          status: 'delivered',
+          delivered_at: now
+        })
+        .eq('id', orderId);
+
+      if (error) throw error;
+
+      return { orderId };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast.success('Pedido entregue!');
+    },
+    onError: (error) => {
+      toast.error('Erro ao finalizar pedido');
+      console.error(error);
     },
   });
 
@@ -267,7 +351,9 @@ export function useKdsWorkflow() {
     completeItemAtStation,
     skipItemToNextStation,
     initializeOrderForProductionLine,
+    finalizeOrderFromStatus,
     getItemsByStation,
     getWaitingItems,
+    orderStatusStation,
   };
 }

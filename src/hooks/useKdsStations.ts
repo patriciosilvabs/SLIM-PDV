@@ -15,12 +15,13 @@ export interface KdsStation {
   updated_at: string;
 }
 
-export type StationType = 'prep_start' | 'assembly' | 'oven_expedite' | 'custom';
+export type StationType = 'prep_start' | 'assembly' | 'oven_expedite' | 'order_status' | 'custom';
 
 export const STATION_TYPE_LABELS: Record<StationType, string> = {
-  prep_start: 'Início e Bordas',
-  assembly: 'Montagem',
-  oven_expedite: 'Forno e Expedição',
+  prep_start: 'Em preparação',
+  assembly: 'Produzindo',
+  oven_expedite: 'Finalização',
+  order_status: 'Status do Pedido',
   custom: 'Personalizada',
 };
 
@@ -42,6 +43,12 @@ export function useKdsStations() {
   });
 
   const activeStations = stations.filter(s => s.is_active);
+  
+  // Estações de produção (exclui order_status)
+  const productionStations = activeStations.filter(s => s.station_type !== 'order_status');
+  
+  // Estação de status do pedido
+  const orderStatusStation = activeStations.find(s => s.station_type === 'order_status');
 
   const createStation = useMutation({
     mutationFn: async (station: Omit<KdsStation, 'id' | 'created_at' | 'updated_at'>) => {
@@ -121,16 +128,24 @@ export function useKdsStations() {
     return stations.find(s => s.station_type === type && s.is_active);
   };
 
-  // Buscar próxima praça na sequência
+  // Buscar próxima praça na sequência (apenas praças de produção)
   const getNextStation = (currentStationId: string): KdsStation | undefined => {
-    const currentIndex = activeStations.findIndex(s => s.id === currentStationId);
-    if (currentIndex === -1 || currentIndex >= activeStations.length - 1) return undefined;
-    return activeStations[currentIndex + 1];
+    const currentIndex = productionStations.findIndex(s => s.id === currentStationId);
+    if (currentIndex === -1 || currentIndex >= productionStations.length - 1) return undefined;
+    return productionStations[currentIndex + 1];
+  };
+  
+  // Verificar se é a última estação de produção
+  const isLastProductionStation = (stationId: string): boolean => {
+    const currentIndex = productionStations.findIndex(s => s.id === stationId);
+    return currentIndex === productionStations.length - 1;
   };
 
   return {
     stations,
     activeStations,
+    productionStations,
+    orderStatusStation,
     isLoading,
     error,
     createStation,
@@ -139,5 +154,6 @@ export function useKdsStations() {
     toggleStationActive,
     getStationByType,
     getNextStation,
+    isLastProductionStation,
   };
 }
