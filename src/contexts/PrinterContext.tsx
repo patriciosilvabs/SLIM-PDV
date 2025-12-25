@@ -5,9 +5,11 @@ import {
   buildCustomerReceipt, 
   buildCashDrawerCommand,
   buildCancellationTicket,
+  buildPartialPaymentReceipt,
   KitchenTicketData,
   CustomerReceiptData,
   CancellationTicketData,
+  PartialPaymentReceiptData,
   PrintFontSize,
   INIT,
   ALIGN_CENTER,
@@ -56,6 +58,7 @@ interface PrinterContextValue {
     duplicate?: boolean
   ) => Promise<boolean>;
   printCustomerReceipt: (data: CustomerReceiptData) => Promise<boolean>;
+  printPartialPaymentReceipt: (data: PartialPaymentReceiptData) => Promise<boolean>;
   printCancellationTicket: (data: CancellationTicketData) => Promise<boolean>;
   openCashDrawer: () => Promise<boolean>;
   testPrint: (printerName: string) => Promise<boolean>;
@@ -346,6 +349,41 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const printPartialPaymentReceipt = async (data: PartialPaymentReceiptData): Promise<boolean> => {
+    if (!qz.config.cashierPrinter) {
+      console.warn('No cashier printer configured');
+      return false;
+    }
+
+    try {
+      const currentReceiptFontSize = (localStorage.getItem('pdv_receipt_font_size') as PrintFontSize) || 'normal';
+      const currentLineSpacing = parseInt(localStorage.getItem('pdv_line_spacing') || '0');
+      const currentLeftMargin = parseInt(localStorage.getItem('pdv_left_margin') || '0');
+      const currentAsciiMode = localStorage.getItem('pdv_ascii_mode') === 'true';
+      const currentCharSpacing = parseInt(localStorage.getItem('pdv_char_spacing') || '1');
+      const currentTopMargin = parseInt(localStorage.getItem('pdv_top_margin') || '0');
+      const currentBottomMarginReceipt = parseInt(localStorage.getItem('pdv_bottom_margin_receipt') || '4');
+      
+      const receiptData = buildPartialPaymentReceipt(
+        data,
+        qz.config.paperWidth,
+        currentReceiptFontSize,
+        currentLineSpacing,
+        currentLeftMargin,
+        currentAsciiMode,
+        currentCharSpacing,
+        currentTopMargin,
+        currentBottomMarginReceipt
+      );
+      
+      await qz.printToCashier(receiptData);
+      return true;
+    } catch (err) {
+      console.error('Failed to print partial payment receipt:', err);
+      return false;
+    }
+  };
+
   const openCashDrawer = async (): Promise<boolean> => {
     if (!qz.config.cashierPrinter) {
       console.warn('No cashier printer configured');
@@ -377,6 +415,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
     printKitchenTicket,
     printKitchenTicketsBySector,
     printCustomerReceipt,
+    printPartialPaymentReceipt,
     printCancellationTicket,
     openCashDrawer,
     testPrint: qz.testPrint,
