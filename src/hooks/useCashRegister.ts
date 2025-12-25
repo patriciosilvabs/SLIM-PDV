@@ -142,22 +142,27 @@ export function useCashRegisterMutations() {
 
       // Only close the order/table if NOT a partial payment
       if (!payment.is_partial) {
-        // Update order status to delivered and set delivered_at timestamp
-        await supabase
-          .from('orders')
-          .update({ 
-            status: 'delivered',
-            delivered_at: new Date().toISOString()
-          })
-          .eq('id', payment.order_id);
-
-        // Update table status if it's a dine-in order
+        // Get order type and table_id first
         const { data: order } = await supabase
           .from('orders')
-          .select('table_id')
+          .select('table_id, order_type')
           .eq('id', payment.order_id)
           .single();
         
+        // Only mark as delivered if it's a dine_in order (mesa)
+        // Takeaway and delivery orders need to go through KDS first
+        if (order?.order_type === 'dine_in') {
+          await supabase
+            .from('orders')
+            .update({ 
+              status: 'delivered',
+              delivered_at: new Date().toISOString()
+            })
+            .eq('id', payment.order_id);
+        }
+        // For takeaway/delivery: status stays as 'pending' to appear in KDS
+
+        // Update table status if it's a dine-in order with a table
         if (order?.table_id) {
           await supabase
             .from('tables')
