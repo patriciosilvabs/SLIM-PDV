@@ -175,9 +175,12 @@ export function useOrderMutations() {
 
   const addOrderItem = useMutation({
     mutationFn: async (item: Omit<OrderItem, 'id' | 'created_at' | 'product'>) => {
+      // Obter usuário atual para registrar quem adicionou o item
+      const { data: userData } = await supabase.auth.getUser();
+      
       const { data, error } = await supabase
         .from('order_items')
-        .insert(item)
+        .insert({ ...item, added_by: userData.user?.id })
         .select()
         .single();
       

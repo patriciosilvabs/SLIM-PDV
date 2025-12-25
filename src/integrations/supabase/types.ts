@@ -684,6 +684,7 @@ export type Database = {
       }
       order_items: {
         Row: {
+          added_by: string | null
           created_at: string | null
           current_station_id: string | null
           id: string
@@ -700,6 +701,7 @@ export type Database = {
           variation_id: string | null
         }
         Insert: {
+          added_by?: string | null
           created_at?: string | null
           current_station_id?: string | null
           id?: string
@@ -716,6 +718,7 @@ export type Database = {
           variation_id?: string | null
         }
         Update: {
+          added_by?: string | null
           created_at?: string | null
           current_station_id?: string | null
           id?: string

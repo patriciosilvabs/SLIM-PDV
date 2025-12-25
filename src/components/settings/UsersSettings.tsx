@@ -7,11 +7,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useAllUsers, AppRole, UserWithRoles } from '@/hooks/useUserRole';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
-import { Users, UserPlus, Edit, X, Eye, EyeOff, Key } from 'lucide-react';
+import { Users, UserPlus, Edit, X, Eye, EyeOff, Key, Trash2 } from 'lucide-react';
 import { UserPermissionsDialog } from '@/components/settings/UserPermissionsDialog';
 
 const roleLabels: Record<AppRole, string> = {
@@ -50,7 +60,15 @@ export function UsersSettings() {
   const [isEditUserDialogOpen, setIsEditUserDialogOpen] = useState(false);
   const [userToEdit, setUserToEdit] = useState<UserWithRoles | null>(null);
   const [editUserName, setEditUserName] = useState('');
+  const [editUserEmail, setEditUserEmail] = useState('');
+  const [editUserPassword, setEditUserPassword] = useState('');
+  const [showEditPassword, setShowEditPassword] = useState(false);
   const [isSavingUser, setIsSavingUser] = useState(false);
+
+  // Delete user state
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<UserWithRoles | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
 
   // Permissions dialog state
   const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
@@ -82,33 +100,86 @@ export function UsersSettings() {
   const handleOpenEditUser = (user: UserWithRoles) => {
     setUserToEdit(user);
     setEditUserName(user.name);
+    setEditUserEmail('');
+    setEditUserPassword('');
+    setShowEditPassword(false);
     setIsEditUserDialogOpen(true);
   };
 
-  const handleUpdateUserName = async () => {
-    if (!userToEdit || !editUserName.trim()) return;
+  const handleUpdateUser = async () => {
+    if (!userToEdit) return;
     
     setIsSavingUser(true);
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ name: editUserName.trim().toUpperCase() })
-        .eq('id', userToEdit.id);
+      // Se tem email ou senha, usar Edge Function
+      if (editUserEmail || editUserPassword) {
+        const { data, error } = await supabase.functions.invoke('admin-update-user', {
+          body: { 
+            userId: userToEdit.id,
+            name: editUserName.trim(),
+            email: editUserEmail.trim() || undefined,
+            password: editUserPassword || undefined
+          }
+        });
+
+        if (error) throw error;
+        if (data.error) throw new Error(data.error);
+      } else {
+        // Só atualizar nome no perfil
+        const { error } = await supabase
+          .from('profiles')
+          .update({ name: editUserName.trim().toUpperCase() })
+          .eq('id', userToEdit.id);
+        
+        if (error) throw error;
+      }
       
-      if (error) throw error;
-      
-      toast({ title: 'Nome atualizado com sucesso!' });
+      toast({ title: 'Usuário atualizado com sucesso!' });
       refetch();
       setIsEditUserDialogOpen(false);
       setUserToEdit(null);
     } catch (error: any) {
       toast({ 
-        title: 'Erro ao atualizar nome', 
+        title: 'Erro ao atualizar usuário', 
         description: error.message, 
         variant: 'destructive' 
       });
     } finally {
       setIsSavingUser(false);
+    }
+  };
+
+  const handleOpenDeleteUser = (user: UserWithRoles) => {
+    setUserToDelete(user);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+    
+    setIsDeletingUser(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-delete-user', {
+        body: { userId: userToDelete.id }
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      
+      toast({ title: 'Usuário excluído com sucesso!' });
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ['all-users'] });
+      queryClient.invalidateQueries({ queryKey: ['has-admins'] });
+    } catch (error: any) {
+      toast({ 
+        title: 'Erro ao excluir usuário', 
+        description: error.message, 
+        variant: 'destructive' 
+      });
+    } finally {
+      setIsDeletingUser(false);
+      setIsDeleteDialogOpen(false);
+      setUserToDelete(null);
     }
   };
 
@@ -244,7 +315,7 @@ export function UsersSettings() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleOpenEditUser(user)}
-                          title="Editar nome"
+                          title="Editar usuário"
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -255,6 +326,15 @@ export function UsersSettings() {
                           title="Gerenciar permissões"
                         >
                           <Key className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenDeleteUser(user)}
+                          title="Excluir usuário"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </TableCell>
@@ -281,17 +361,76 @@ export function UsersSettings() {
                 placeholder="Nome completo"
               />
             </div>
+            <div className="space-y-2">
+              <Label>Email (opcional - deixe vazio para manter)</Label>
+              <Input
+                type="email"
+                value={editUserEmail}
+                onChange={(e) => setEditUserEmail(e.target.value)}
+                placeholder="Novo email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Nova Senha (opcional - deixe vazio para manter)</Label>
+              <div className="relative">
+                <Input
+                  type={showEditPassword ? 'text' : 'password'}
+                  value={editUserPassword}
+                  onChange={(e) => setEditUserPassword(e.target.value)}
+                  placeholder="Mínimo 6 caracteres"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3"
+                  onClick={() => setShowEditPassword(!showEditPassword)}
+                >
+                  {showEditPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+              {editUserPassword && editUserPassword.length < 6 && (
+                <p className="text-xs text-destructive">A senha deve ter pelo menos 6 caracteres</p>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditUserDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleUpdateUserName} disabled={isSavingUser}>
+            <Button 
+              onClick={handleUpdateUser} 
+              disabled={isSavingUser || (editUserPassword.length > 0 && editUserPassword.length < 6)}
+            >
               {isSavingUser ? 'Salvando...' : 'Salvar'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete User Alert Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Usuário</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o usuário <strong>{userToDelete?.name}</strong>?
+              <br /><br />
+              Esta ação é irreversível. Todos os dados do usuário serão removidos permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingUser}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteUser}
+              disabled={isDeletingUser}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeletingUser ? 'Excluindo...' : 'Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Create User Dialog */}
       <Dialog open={isCreateUserDialogOpen} onOpenChange={setIsCreateUserDialogOpen}>
