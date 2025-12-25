@@ -433,7 +433,13 @@ export default function Tables() {
   }, [orders, tables, idleTableSettings, audioSettings.enabled, playIdleTableAlertSound, updateTable, updateOrder]);
 
   const getTableOrder = (tableId: string) => {
-    return orders?.find(o => o.table_id === tableId && o.status !== 'cancelled');
+    const table = tables?.find(t => t.id === tableId);
+    // Se a mesa está livre, não retorna pedidos 'delivered'
+    return orders?.find(o => 
+      o.table_id === tableId && 
+      o.status !== 'cancelled' &&
+      (table?.status !== 'available' || o.status !== 'delivered')
+    );
   };
 
   // Mark order as delivered
@@ -1423,7 +1429,7 @@ export default function Tables() {
                             </Badge>
                           </div>
                         )}
-                        {isOrderDelivered && !isOrderReady && (
+                        {isOrderDelivered && !isOrderReady && table.status !== 'available' && (
                           <div className="absolute -top-2 -right-2 z-10">
                             <Badge className="bg-blue-500 text-white shadow-lg">
                               <Check className="h-3 w-3 mr-1" />
@@ -1438,7 +1444,7 @@ export default function Tables() {
                             <span>{table.capacity}</span>
                           </div>
                           <p className="text-xs mt-2 font-medium">{statusLabels[table.status]}</p>
-                          {order && (
+                          {order && table.status !== 'available' && (
                             <p className="text-xs mt-1 opacity-75">
                               {order.order_items?.length || 0} itens
                             </p>
