@@ -2794,7 +2794,7 @@ export default function Tables() {
 
       {/* Payment Modal */}
       <Dialog open={paymentModalOpen} onOpenChange={setPaymentModalOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {selectedPaymentMethod && paymentMethodIcons[selectedPaymentMethod]}
@@ -2809,7 +2809,7 @@ export default function Tables() {
                 value={paymentAmount}
                 onChange={(e) => setPaymentAmount(e.target.value)}
                 placeholder="0,00"
-                className="text-lg font-bold text-center"
+                className="text-lg font-bold text-center w-full"
                 autoFocus
               />
               {selectedPaymentMethod === 'cash' && (
@@ -2824,19 +2824,20 @@ export default function Tables() {
                 value={paymentObservation}
                 onChange={(e) => setPaymentObservation(e.target.value)}
                 placeholder="Ex: Cartão final 1234"
+                className="w-full"
               />
             </div>
           </div>
-          <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-between">
-            <Button variant="outline" onClick={() => setPaymentModalOpen(false)} className="sm:flex-none">
+          <DialogFooter className="flex flex-col gap-2 sm:flex-row">
+            <Button variant="outline" onClick={() => setPaymentModalOpen(false)}>
               Cancelar
             </Button>
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex gap-2 flex-1 sm:justify-end">
               <Button 
                 variant="secondary" 
                 onClick={handlePartialPayment}
                 disabled={createPayment.isPending}
-                className="flex items-center gap-2"
+                className="flex items-center justify-center gap-2"
               >
                 <ArrowRight className="h-4 w-4" />
                 Pagar e continuar
