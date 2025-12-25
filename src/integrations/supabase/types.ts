@@ -501,6 +501,7 @@ export type Database = {
           highlight_special_borders: boolean
           id: string
           operation_mode: string
+          show_party_size: boolean
           show_pending_column: boolean
           sla_green_minutes: number
           sla_yellow_minutes: number
@@ -516,6 +517,7 @@ export type Database = {
           highlight_special_borders?: boolean
           id?: string
           operation_mode?: string
+          show_party_size?: boolean
           show_pending_column?: boolean
           sla_green_minutes?: number
           sla_yellow_minutes?: number
@@ -531,6 +533,7 @@ export type Database = {
           highlight_special_borders?: boolean
           id?: string
           operation_mode?: string
+          show_party_size?: boolean
           show_pending_column?: boolean
           sla_green_minutes?: number
           sla_yellow_minutes?: number

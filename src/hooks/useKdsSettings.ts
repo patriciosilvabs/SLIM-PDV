@@ -29,6 +29,7 @@ export interface KdsGlobalSettings {
   highlightSpecialBorders: boolean;
   borderKeywords: string[];
   bottleneckSettings: BottleneckSettings;
+  showPartySize: boolean;
 }
 
 // Device-specific settings (stored in localStorage)
@@ -71,6 +72,7 @@ const defaultGlobalSettings: KdsGlobalSettings = {
   highlightSpecialBorders: true,
   borderKeywords: ['borda', 'recheada', 'chocolate', 'catupiry', 'cheddar'],
   bottleneckSettings: defaultBottleneckSettings,
+  showPartySize: true,
 };
 
 const getDeviceSettings = (): KdsDeviceSettings => {
@@ -160,6 +162,7 @@ export function useKdsSettings() {
       highlightSpecialBorders: dbSettings.highlight_special_borders ?? defaultGlobalSettings.highlightSpecialBorders,
       borderKeywords: dbSettings.border_keywords ?? defaultGlobalSettings.borderKeywords,
       bottleneckSettings: parseBottleneckSettings(dbSettings.bottleneck_settings),
+      showPartySize: dbSettings.show_party_size ?? defaultGlobalSettings.showPartySize,
     };
   }, [dbSettings]);
 
@@ -184,6 +187,7 @@ export function useKdsSettings() {
       if (updates.highlightSpecialBorders !== undefined) dbUpdates.highlight_special_borders = updates.highlightSpecialBorders;
       if (updates.borderKeywords !== undefined) dbUpdates.border_keywords = updates.borderKeywords;
       if (updates.bottleneckSettings !== undefined) dbUpdates.bottleneck_settings = updates.bottleneckSettings;
+      if (updates.showPartySize !== undefined) dbUpdates.show_party_size = updates.showPartySize;
 
       const { error } = await supabase
         .from('kds_global_settings')
@@ -216,6 +220,7 @@ export function useKdsSettings() {
     if (updates.highlightSpecialBorders !== undefined) globalUpdates.highlightSpecialBorders = updates.highlightSpecialBorders;
     if (updates.borderKeywords !== undefined) globalUpdates.borderKeywords = updates.borderKeywords;
     if (updates.bottleneckSettings !== undefined) globalUpdates.bottleneckSettings = updates.bottleneckSettings;
+    if (updates.showPartySize !== undefined) globalUpdates.showPartySize = updates.showPartySize;
 
     // Update device settings locally
     if (Object.keys(deviceUpdates).length > 0) {
