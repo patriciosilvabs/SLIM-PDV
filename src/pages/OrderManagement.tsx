@@ -169,6 +169,7 @@ export default function OrderManagement() {
           cancellation_reason: reason,
           cancelled_by: user?.id,
           cancelled_at: new Date().toISOString(),
+          status_before_cancellation: selectedOrderToCancel.status,
         })
         .eq('id', selectedOrderToCancel.id);
       
