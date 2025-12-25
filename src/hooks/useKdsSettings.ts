@@ -4,6 +4,7 @@ interface KdsSettings {
   showPendingColumn: boolean;
   cancellationAlertInterval: number; // Intervalo em segundos (1-10)
   cancellationAlertsEnabled: boolean; // Habilita/desabilita alertas de cancelamento
+  autoPrintCancellations: boolean; // Impressão automática de cancelamentos na cozinha
 }
 
 const STORAGE_KEY = 'pdv_kds_settings';
@@ -12,6 +13,7 @@ const defaultSettings: KdsSettings = {
   showPendingColumn: true,
   cancellationAlertInterval: 3, // 3 segundos (padrão)
   cancellationAlertsEnabled: true, // Habilitado por padrão
+  autoPrintCancellations: true, // Impressão automática habilitada por padrão
 };
 
 export function useKdsSettings() {

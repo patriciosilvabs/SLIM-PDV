@@ -3,7 +3,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
-import { ChefHat } from 'lucide-react';
+import { ChefHat, Printer } from 'lucide-react';
 
 export function KdsSettingsSection() {
   const { settings: kdsSettings, updateSettings: updateKdsSettings } = useKdsSettings();
@@ -76,6 +76,27 @@ export function KdsSettingsSection() {
                 <SelectItem value="10">10 segundos</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+        </div>
+
+        <div className="border-t pt-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label className="font-medium flex items-center gap-2">
+                <Printer className="h-4 w-4" />
+                Impressão Automática de Cancelamentos
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Quando ativado, imprime automaticamente um comprovante de cancelamento 
+                na impressora da cozinha.
+              </p>
+            </div>
+            <Switch 
+              checked={kdsSettings.autoPrintCancellations ?? true}
+              onCheckedChange={(autoPrintCancellations) => 
+                updateKdsSettings({ autoPrintCancellations })
+              }
+            />
           </div>
         </div>
       </CardContent>
