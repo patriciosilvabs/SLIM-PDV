@@ -48,36 +48,46 @@ const KitchenReceipt = forwardRef<HTMLDivElement, KitchenReceiptProps>(
 
         {/* Items */}
         <div style={{ marginBottom: '2mm' }}>
-          <div style={{ fontWeight: 'bold', borderBottom: '1px solid black', paddingBottom: '1mm', marginBottom: '2mm' }}>
-            ITENS DO PEDIDO
-          </div>
-          {order.order_items?.map((item, index) => (
-            <div key={item.id} style={{ marginBottom: '3mm' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontWeight: 'bold', fontSize: '14px' }}>
-                  {item.quantity}x
-                </span>
-                <span style={{ flex: 1, marginLeft: '2mm', fontSize: '14px', fontWeight: 'bold' }}>
-                  {item.product?.name}
-                </span>
-              </div>
-              {item.notes && (
-                <div style={{ 
-                  marginLeft: '5mm', 
-                  fontSize: '11px', 
-                  fontStyle: 'italic',
-                  backgroundColor: '#f0f0f0',
-                  padding: '1mm 2mm',
-                  marginTop: '1mm'
-                }}>
-                  OBS: {item.notes}
-                </div>
-              )}
-              {index < (order.order_items?.length || 0) - 1 && (
-                <div style={{ borderBottom: '1px dotted #ccc', marginTop: '2mm' }} />
-              )}
+            <div style={{ fontWeight: 'bold', borderBottom: '1px solid black', paddingBottom: '1mm', marginBottom: '2mm' }}>
+              ITENS DO PEDIDO
             </div>
-          ))}
+            {order.order_items?.map((item, index) => (
+              <div key={item.id} style={{ marginBottom: '3mm' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontWeight: 'bold', fontSize: '14px' }}>
+                    {item.quantity}x
+                  </span>
+                  <span style={{ flex: 1, marginLeft: '2mm', fontSize: '14px', fontWeight: 'bold' }}>
+                    {item.product?.name}
+                  </span>
+                </div>
+                {item.notes && (
+                  <div style={{ 
+                    marginLeft: '5mm', 
+                    fontSize: '11px', 
+                    fontStyle: 'italic',
+                    backgroundColor: '#f0f0f0',
+                    padding: '1mm 2mm',
+                    marginTop: '1mm'
+                  }}>
+                    OBS: {item.notes}
+                  </div>
+                )}
+                {item.added_by_profile?.name && (
+                  <div style={{ 
+                    marginLeft: '5mm', 
+                    fontSize: '10px', 
+                    color: '#0066cc',
+                    marginTop: '1mm'
+                  }}>
+                    [{item.added_by_profile.name}]
+                  </div>
+                )}
+                {index < (order.order_items?.length || 0) - 1 && (
+                  <div style={{ borderBottom: '1px dotted #ccc', marginTop: '2mm' }} />
+                )}
+              </div>
+            ))}
         </div>
 
         {/* Notes */}
@@ -116,6 +126,7 @@ function orderToTicketData(order: Order): KitchenTicketData {
       variation: item.variation?.name,
       extras: item.extras?.map(e => e.extra_name.split(': ').slice(1).join(': ') || e.extra_name),
       notes: item.notes,
+      addedBy: item.added_by_profile?.name,
     })) || [],
     notes: order.notes,
     createdAt: order.created_at,
@@ -239,6 +250,7 @@ function printWithBrowser(order: Order, paperWidth: '58mm' | '80mm' = '80mm') {
               <span class="product-name">${escapeHtml(item.product?.name) || 'Item'}</span>
             </div>
             ${item.notes ? `<div class="notes">OBS: ${escapeHtml(item.notes)}</div>` : ''}
+            ${item.added_by_profile?.name ? `<div style="font-size: 10px; color: #0066cc; margin-left: 5mm; margin-top: 1mm">[${escapeHtml(item.added_by_profile.name)}]</div>` : ''}
             ${index < (order.order_items?.length || 0) - 1 ? '<div class="item-separator"></div>' : ''}
           </div>
         `).join('') || ''}

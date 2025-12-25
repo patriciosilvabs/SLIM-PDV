@@ -11,6 +11,7 @@ interface OrderItem {
   product?: { name: string };
   variation?: { name: string } | null;
   extras?: { extra_name: string; price: number }[];
+  added_by_profile?: { name: string } | null;
 }
 
 interface KitchenOrderProps {
@@ -48,6 +49,7 @@ function printWithBrowser(props: KitchenOrderProps) {
         </div>
       `).join('') : ''}
       ${item.notes ? `<div style="font-size: 11px; color: #c00; margin-top: 4px;">OBS: ${escapeHtml(item.notes)}</div>` : ''}
+      ${item.added_by_profile?.name ? `<div style="font-size: 10px; color: #0066cc; margin-top: 2px;">[${escapeHtml(item.added_by_profile.name)}]</div>` : ''}
     </div>
   `).join('');
 
@@ -161,6 +163,7 @@ function propsToTicketData(props: KitchenOrderProps): KitchenTicketData {
       variation: item.variation?.name,
       extras: item.extras?.map(e => e.extra_name.split(': ').slice(1).join(': ') || e.extra_name),
       notes: item.notes,
+      addedBy: item.added_by_profile?.name,
     })),
     notes: props.notes,
     createdAt: props.createdAt,

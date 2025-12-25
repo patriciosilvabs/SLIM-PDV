@@ -1924,6 +1924,42 @@ export default function Tables() {
                             <span>Total</span>
                             <span className="text-primary">{formatCurrency(finalTotal)}</span>
                           </div>
+
+                          {/* Resumo por Garçom */}
+                          {(() => {
+                            const waiterSummary = selectedOrder?.order_items?.reduce((acc, item) => {
+                              const waiterName = item.added_by_profile?.name || 'Não identificado';
+                              if (!acc[waiterName]) {
+                                acc[waiterName] = { count: 0, total: 0 };
+                              }
+                              acc[waiterName].count += item.quantity;
+                              acc[waiterName].total += Number(item.total_price);
+                              return acc;
+                            }, {} as Record<string, { count: number; total: number }>);
+
+                            const waiterEntries = Object.entries(waiterSummary || {});
+                            
+                            if (waiterEntries.length <= 1) return null;
+                            
+                            return (
+                              <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Users className="h-4 w-4 text-blue-600" />
+                                  <span className="text-sm font-medium text-blue-700 dark:text-blue-400">Resumo por Garçom</span>
+                                </div>
+                                <div className="space-y-1">
+                                  {waiterEntries.map(([name, data]) => (
+                                    <div key={name} className="flex items-center justify-between text-sm">
+                                      <span className="text-muted-foreground">
+                                        👤 {name} ({data.count} {data.count === 1 ? 'item' : 'itens'})
+                                      </span>
+                                      <span className="font-medium">{formatCurrency(data.total)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
 
                         {/* Bill Splitting Section */}
