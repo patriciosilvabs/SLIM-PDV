@@ -1686,6 +1686,12 @@ export default function Tables() {
                                           📝 {item.notes}
                                         </p>
                                       )}
+                                      {/* Data/Hora de criação do item */}
+                                      {item.created_at && (
+                                        <p className="text-xs text-muted-foreground mt-1 pl-2">
+                                          📅 {format(new Date(item.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                                        </p>
+                                      )}
                                     </div>
                                     <div className="flex items-center gap-1 ml-2">
                                       <span className="text-sm font-medium">
