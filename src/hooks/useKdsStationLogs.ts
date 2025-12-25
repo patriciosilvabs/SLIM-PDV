@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useKdsStations } from './useKdsStations';
 
 export interface KdsStationLog {
   id: string;
@@ -11,6 +12,36 @@ export interface KdsStationLog {
   duration_seconds: number | null;
   notes: string | null;
   created_at: string;
+}
+
+export interface StationMetrics {
+  stationId: string;
+  stationName: string;
+  stationColor: string;
+  totalCompleted: number;
+  averageSeconds: number;
+  averageMinutes: number;
+  minSeconds: number;
+  maxSeconds: number;
+  currentQueue: number;
+  inProgress: number;
+}
+
+export interface PerformanceDataPoint {
+  hour: string;
+  stationId: string;
+  avgSeconds: number;
+  count: number;
+}
+
+export interface BottleneckInfo {
+  stationId: string;
+  stationName: string;
+  stationColor: string;
+  avgTime: number;
+  queueSize: number;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  reason: string;
 }
 
 export function useKdsStationLogs() {
@@ -114,4 +145,205 @@ export function useKdsStationLogs() {
     useItemLogs,
     useStationMetrics,
   };
+}
+
+// Hook para métricas consolidadas de todas as praças
+export function useAllStationsMetrics() {
+  const { activeStations } = useKdsStations();
+
+  return useQuery({
+    queryKey: ['kds-all-stations-metrics', activeStations.map(s => s.id)],
+    queryFn: async () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      // Buscar logs de completados
+      const { data: logsData, error: logsError } = await supabase
+        .from('kds_station_logs')
+        .select('*')
+        .eq('action', 'completed')
+        .gte('created_at', yesterday.toISOString());
+
+      if (logsError) throw logsError;
+
+      // Buscar itens em cada praça (fila atual)
+      const { data: itemsData, error: itemsError } = await supabase
+        .from('order_items')
+        .select('current_station_id, station_status')
+        .not('current_station_id', 'is', null)
+        .neq('station_status', 'done');
+
+      if (itemsError) throw itemsError;
+
+      const logs = logsData as KdsStationLog[];
+      const items = itemsData || [];
+
+      const metrics: StationMetrics[] = activeStations.map(station => {
+        const stationLogs = logs.filter(l => l.station_id === station.id);
+        const durations = stationLogs
+          .map(l => l.duration_seconds)
+          .filter((d): d is number => d !== null);
+
+        const averageSeconds = durations.length > 0
+          ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+          : 0;
+
+        const queueItems = items.filter(
+          i => i.current_station_id === station.id && i.station_status === 'waiting'
+        );
+        const inProgressItems = items.filter(
+          i => i.current_station_id === station.id && i.station_status === 'in_progress'
+        );
+
+        return {
+          stationId: station.id,
+          stationName: station.name,
+          stationColor: station.color,
+          totalCompleted: stationLogs.length,
+          averageSeconds,
+          averageMinutes: Math.round(averageSeconds / 60),
+          minSeconds: durations.length > 0 ? Math.min(...durations) : 0,
+          maxSeconds: durations.length > 0 ? Math.max(...durations) : 0,
+          currentQueue: queueItems.length,
+          inProgress: inProgressItems.length,
+        };
+      });
+
+      return metrics;
+    },
+    enabled: activeStations.length > 0,
+    staleTime: 1000 * 30, // 30 segundos
+    refetchInterval: 1000 * 60, // Atualiza a cada minuto
+  });
+}
+
+// Hook para histórico de performance por hora
+export function useStationPerformanceHistory() {
+  const { activeStations } = useKdsStations();
+
+  return useQuery({
+    queryKey: ['kds-performance-history', activeStations.map(s => s.id)],
+    queryFn: async () => {
+      const sixHoursAgo = new Date();
+      sixHoursAgo.setHours(sixHoursAgo.getHours() - 6);
+
+      const { data, error } = await supabase
+        .from('kds_station_logs')
+        .select('*')
+        .eq('action', 'completed')
+        .gte('created_at', sixHoursAgo.toISOString())
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      const logs = data as KdsStationLog[];
+
+      // Agrupar por hora e praça
+      const hourlyData: Record<string, Record<string, { total: number; count: number }>> = {};
+
+      logs.forEach(log => {
+        const hour = new Date(log.created_at).toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }).split(':')[0] + ':00';
+
+        if (!hourlyData[hour]) hourlyData[hour] = {};
+        if (!hourlyData[hour][log.station_id]) {
+          hourlyData[hour][log.station_id] = { total: 0, count: 0 };
+        }
+
+        if (log.duration_seconds) {
+          hourlyData[hour][log.station_id].total += log.duration_seconds;
+          hourlyData[hour][log.station_id].count += 1;
+        }
+      });
+
+      // Converter para array de pontos
+      const dataPoints: PerformanceDataPoint[] = [];
+      Object.entries(hourlyData).forEach(([hour, stations]) => {
+        Object.entries(stations).forEach(([stationId, data]) => {
+          dataPoints.push({
+            hour,
+            stationId,
+            avgSeconds: data.count > 0 ? Math.round(data.total / data.count) : 0,
+            count: data.count,
+          });
+        });
+      });
+
+      return {
+        dataPoints,
+        stations: activeStations,
+      };
+    },
+    enabled: activeStations.length > 0,
+    staleTime: 1000 * 60 * 2, // 2 minutos
+  });
+}
+
+// Hook para análise de gargalos
+export function useBottleneckAnalysis() {
+  const { data: metrics } = useAllStationsMetrics();
+  const { activeStations } = useKdsStations();
+
+  return useQuery({
+    queryKey: ['kds-bottleneck-analysis', metrics],
+    queryFn: async () => {
+      if (!metrics || metrics.length === 0) return [];
+
+      const avgAllStations = metrics.reduce((sum, m) => sum + m.averageSeconds, 0) / metrics.length;
+      
+      const bottlenecks: BottleneckInfo[] = [];
+
+      metrics.forEach(m => {
+        let severity: BottleneckInfo['severity'] = 'low';
+        let reason = '';
+
+        // Análise de gargalo por tempo
+        const timeRatio = avgAllStations > 0 ? m.averageSeconds / avgAllStations : 0;
+        if (timeRatio > 1.8) {
+          severity = 'critical';
+          reason = `Tempo ${Math.round((timeRatio - 1) * 100)}% acima da média`;
+        } else if (timeRatio > 1.4) {
+          severity = 'high';
+          reason = `Tempo ${Math.round((timeRatio - 1) * 100)}% acima da média`;
+        } else if (timeRatio > 1.2) {
+          severity = 'medium';
+          reason = `Tempo ${Math.round((timeRatio - 1) * 100)}% acima da média`;
+        }
+
+        // Análise de fila acumulada
+        if (m.currentQueue > 8) {
+          severity = 'critical';
+          reason = `Fila com ${m.currentQueue} itens acumulados`;
+        } else if (m.currentQueue > 5) {
+          if (severity !== 'critical') severity = 'high';
+          reason = reason || `Fila com ${m.currentQueue} itens`;
+        } else if (m.currentQueue > 3) {
+          if (severity === 'low') severity = 'medium';
+          reason = reason || `Fila com ${m.currentQueue} itens`;
+        }
+
+        if (severity !== 'low') {
+          bottlenecks.push({
+            stationId: m.stationId,
+            stationName: m.stationName,
+            stationColor: m.stationColor,
+            avgTime: m.averageSeconds,
+            queueSize: m.currentQueue,
+            severity,
+            reason,
+          });
+        }
+      });
+
+      // Ordenar por severidade
+      const severityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+      bottlenecks.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+
+      return bottlenecks;
+    },
+    enabled: !!metrics && metrics.length > 0,
+    staleTime: 1000 * 30,
+  });
 }

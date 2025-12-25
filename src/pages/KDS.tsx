@@ -21,6 +21,7 @@ import { KdsSlaIndicator } from '@/components/kds/KdsSlaIndicator';
 import { KdsItemCounter } from '@/components/kds/KdsItemCounter';
 import { KdsBorderBadge } from '@/components/kds/KdsBorderHighlight';
 import { KdsProductionLineView } from '@/components/kds/KdsProductionLineView';
+import { KdsMetricsDashboard } from '@/components/kds/KdsMetricsDashboard';
 
 type OrderTypeFilter = 'all' | 'table' | 'takeaway' | 'delivery';
 
@@ -1114,6 +1115,9 @@ export default function KDS() {
         )}
         
         <div className="flex items-center gap-2 relative">
+          {/* Metrics Dashboard Button */}
+          <KdsMetricsDashboard />
+          
           {/* Cancellation History Panel */}
           <CancellationHistoryPanel />
           
