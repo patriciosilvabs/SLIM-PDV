@@ -24,6 +24,7 @@ const defaultSettings: NotificationSettings = {
     idleTableAlert: true,
     orderCancelled: true,
     bottleneckAlert: true,
+    stationChange: true,
   },
   selectedSounds: {
     newOrder: 'beepClassic',
@@ -35,6 +36,7 @@ const defaultSettings: NotificationSettings = {
     idleTableAlert: 'dingDong',
     orderCancelled: 'urgentAlert',
     bottleneckAlert: 'urgentAlert',
+    stationChange: 'bell',
   },
   customSoundUrls: {
     newOrder: PREDEFINED_SOUNDS.beepClassic.data,
@@ -46,6 +48,7 @@ const defaultSettings: NotificationSettings = {
     idleTableAlert: PREDEFINED_SOUNDS.dingDong.data,
     orderCancelled: PREDEFINED_SOUNDS.urgentAlert.data,
     bottleneckAlert: PREDEFINED_SOUNDS.urgentAlert.data,
+    stationChange: PREDEFINED_SOUNDS.bell.data,
   },
 };
 
@@ -96,6 +99,7 @@ export function useAudioNotification() {
   const playIdleTableAlertSound = useCallback(() => playSound('idleTableAlert'), [playSound]);
   const playOrderCancelledSound = useCallback(() => playSound('orderCancelled'), [playSound]);
   const playBottleneckAlertSound = useCallback(() => playSound('bottleneckAlert'), [playSound]);
+  const playStationChangeSound = useCallback(() => playSound('stationChange'), [playSound]);
 
   const updateSettings = useCallback((updates: Partial<NotificationSettings>) => {
     setSettings(prev => ({ ...prev, ...updates }));
@@ -148,5 +152,6 @@ export function useAudioNotification() {
     playIdleTableAlertSound,
     playOrderCancelledSound,
     playBottleneckAlertSound,
+    playStationChangeSound,
   };
 }

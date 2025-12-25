@@ -22,7 +22,127 @@ export function useKdsWorkflow() {
   const { logAction } = useKdsStationLogs();
   const { user } = useAuth();
 
-  // Iniciar item em uma praça
+  // Mover item diretamente para a próxima estação (clique único)
+  const moveItemToNextStation = useMutation({
+    mutationFn: async ({ itemId, currentStationId }: { itemId: string; currentStationId: string }) => {
+      const now = new Date().toISOString();
+      
+      // Log de conclusão na estação atual
+      await logAction.mutateAsync({
+        orderItemId: itemId,
+        stationId: currentStationId,
+        action: 'completed',
+      });
+
+      // Buscar próxima praça de produção
+      const nextStation = getNextStation(currentStationId);
+
+      if (nextStation) {
+        // Mover para próxima praça
+        const { error } = await supabase
+          .from('order_items')
+          .update({
+            current_station_id: nextStation.id,
+            station_status: 'waiting',
+            station_started_at: null,
+            station_completed_at: now,
+          })
+          .eq('id', itemId);
+
+        if (error) throw error;
+
+        // Log de entrada na nova praça
+        await logAction.mutateAsync({
+          orderItemId: itemId,
+          stationId: nextStation.id,
+          action: 'entered',
+        });
+
+        return { itemId, nextStationId: nextStation.id, isComplete: false };
+      } else {
+        // Última praça de produção - mover para order_status ou marcar como ready
+        const { data: itemData } = await supabase
+          .from('order_items')
+          .select('order_id')
+          .eq('id', itemId)
+          .single();
+
+        // Se tiver estação de status do pedido, mover o item para lá
+        if (orderStatusStation) {
+          const { error } = await supabase
+            .from('order_items')
+            .update({
+              current_station_id: orderStatusStation.id,
+              station_status: 'waiting',
+              station_started_at: null,
+              station_completed_at: now,
+            })
+            .eq('id', itemId);
+
+          if (error) throw error;
+
+          // Log de entrada na estação de status
+          await logAction.mutateAsync({
+            orderItemId: itemId,
+            stationId: orderStatusStation.id,
+            action: 'entered',
+          });
+        } else {
+          // Sem estação de status - marcar item como done diretamente
+          const { error } = await supabase
+            .from('order_items')
+            .update({
+              current_station_id: null,
+              station_status: 'done',
+              station_completed_at: now,
+              status: 'delivered',
+            })
+            .eq('id', itemId);
+
+          if (error) throw error;
+        }
+
+        // Verificar se todos os itens do pedido terminaram a produção
+        if (itemData?.order_id) {
+          const { data: allItems } = await supabase
+            .from('order_items')
+            .select('id, current_station_id, station_status')
+            .eq('order_id', itemData.order_id);
+
+          // Todos estão na estação order_status ou já finalizados
+          const allItemsReady = allItems?.every(item => 
+            (orderStatusStation && item.current_station_id === orderStatusStation.id) ||
+            item.station_status === 'done'
+          );
+
+          if (allItemsReady) {
+            // Atualizar pedido para 'ready'
+            await supabase
+              .from('orders')
+              .update({ 
+                status: 'ready',
+                ready_at: new Date().toISOString()
+              })
+              .eq('id', itemData.order_id);
+          }
+        }
+
+        return { itemId, nextStationId: orderStatusStation?.id || null, isComplete: !orderStatusStation };
+      }
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      if (result.isComplete) {
+        toast.success('Item concluído!');
+      }
+    },
+    onError: (error) => {
+      toast.error('Erro ao mover item');
+      console.error(error);
+    },
+  });
+
+  // Iniciar item em uma praça (mantido para compatibilidade)
   const startItemAtStation = useMutation({
     mutationFn: async ({ itemId, stationId }: { itemId: string; stationId: string }) => {
       const now = new Date().toISOString();
@@ -56,7 +176,7 @@ export function useKdsWorkflow() {
     },
   });
 
-  // Completar item na praça atual e mover para próxima
+  // Completar item na praça atual e mover para próxima (mantido para compatibilidade)
   const completeItemAtStation = useMutation({
     mutationFn: async ({ itemId, currentStationId }: { itemId: string; currentStationId: string }) => {
       const now = new Date().toISOString();
@@ -347,6 +467,7 @@ export function useKdsWorkflow() {
   };
 
   return {
+    moveItemToNextStation,
     startItemAtStation,
     completeItemAtStation,
     skipItemToNextStation,
