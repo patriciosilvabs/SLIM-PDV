@@ -30,6 +30,7 @@ export interface KdsGlobalSettings {
   borderKeywords: string[];
   bottleneckSettings: BottleneckSettings;
   showPartySize: boolean;
+  compactMode: boolean;
 }
 
 // Device-specific settings (stored in localStorage)
@@ -73,6 +74,7 @@ const defaultGlobalSettings: KdsGlobalSettings = {
   borderKeywords: ['borda', 'recheada', 'chocolate', 'catupiry', 'cheddar'],
   bottleneckSettings: defaultBottleneckSettings,
   showPartySize: true,
+  compactMode: false,
 };
 
 const getDeviceSettings = (): KdsDeviceSettings => {
@@ -163,6 +165,7 @@ export function useKdsSettings() {
       borderKeywords: dbSettings.border_keywords ?? defaultGlobalSettings.borderKeywords,
       bottleneckSettings: parseBottleneckSettings(dbSettings.bottleneck_settings),
       showPartySize: dbSettings.show_party_size ?? defaultGlobalSettings.showPartySize,
+      compactMode: dbSettings.compact_mode ?? defaultGlobalSettings.compactMode,
     };
   }, [dbSettings]);
 
@@ -188,6 +191,7 @@ export function useKdsSettings() {
       if (updates.borderKeywords !== undefined) dbUpdates.border_keywords = updates.borderKeywords;
       if (updates.bottleneckSettings !== undefined) dbUpdates.bottleneck_settings = updates.bottleneckSettings;
       if (updates.showPartySize !== undefined) dbUpdates.show_party_size = updates.showPartySize;
+      if (updates.compactMode !== undefined) dbUpdates.compact_mode = updates.compactMode;
 
       const { error } = await supabase
         .from('kds_global_settings')
@@ -221,6 +225,7 @@ export function useKdsSettings() {
     if (updates.borderKeywords !== undefined) globalUpdates.borderKeywords = updates.borderKeywords;
     if (updates.bottleneckSettings !== undefined) globalUpdates.bottleneckSettings = updates.bottleneckSettings;
     if (updates.showPartySize !== undefined) globalUpdates.showPartySize = updates.showPartySize;
+    if (updates.compactMode !== undefined) globalUpdates.compactMode = updates.compactMode;
 
     // Update device settings locally
     if (Object.keys(deviceUpdates).length > 0) {
