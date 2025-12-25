@@ -1,3 +1,4 @@
+// PrinterContext - Provides printer functionality throughout the app
 import React, { createContext, useContext, ReactNode } from 'react';
 import { useQzTray, PrinterConfig, PrintDataItem, QzConnectionStatus } from '@/hooks/useQzTray';
 import { 
