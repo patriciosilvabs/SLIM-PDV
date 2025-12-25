@@ -20,6 +20,7 @@ import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'rec
 import { KdsSlaIndicator } from '@/components/kds/KdsSlaIndicator';
 import { KdsItemCounter } from '@/components/kds/KdsItemCounter';
 import { KdsBorderBadge } from '@/components/kds/KdsBorderHighlight';
+import { KdsProductionLineView } from '@/components/kds/KdsProductionLineView';
 
 type OrderTypeFilter = 'all' | 'table' | 'takeaway' | 'delivery';
 
@@ -1242,11 +1243,13 @@ export default function KDS() {
         </div>
       )}
 
-      {/* Kanban Board */}
+      {/* Kanban Board or Production Line View */}
       {isLoading ? (
         <div className="flex items-center justify-center h-64">
           <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
+      ) : kdsSettings.operationMode === 'production_line' ? (
+        <KdsProductionLineView orders={orders} isLoading={isLoading} />
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {kdsSettings.showPendingColumn && (
