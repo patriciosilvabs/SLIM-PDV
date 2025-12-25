@@ -9,9 +9,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useAuth } from '@/contexts/AuthContext';
 import { AccessDenied } from '@/components/auth/AccessDenied';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp, Ban, History, Trash2, CalendarDays } from 'lucide-react';
+import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp, Ban, History, Trash2, CalendarDays, LogOut } from 'lucide-react';
+import logoSlim from '@/assets/logo-slim.png';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
@@ -1328,6 +1330,46 @@ export default function KDS() {
     </div>
   );
 
+  // Header component for employee mode (clean, no sidebar)
+  const EmployeeKdsHeader = () => {
+    const { user, signOut } = useAuth();
+    
+    return (
+      <header className="fixed top-0 left-0 right-0 h-14 bg-background border-b z-50 flex items-center justify-between px-4">
+        {/* Left side - empty for balance */}
+        <div className="flex-1" />
+        
+        {/* Right side - Logo + Profile */}
+        <div className="flex items-center gap-4">
+          <img 
+            src={logoSlim} 
+            alt="Logo" 
+            className="h-8 object-contain" 
+          />
+          
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+              <span className="text-sm font-medium">
+                {user?.email?.charAt(0).toUpperCase() || 'U'}
+              </span>
+            </div>
+            <span className="text-sm text-muted-foreground hidden sm:block">
+              {user?.user_metadata?.name || user?.email?.split('@')[0] || 'Usuário'}
+            </span>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={signOut}
+              title="Sair"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </header>
+    );
+  };
+
   // Fullscreen mode - render without PDVLayout
   if (isFullscreen) {
     return (
@@ -1337,7 +1379,19 @@ export default function KDS() {
     );
   }
 
-  // Normal mode - render with PDVLayout
+  // Employee mode (non-manager) - render with minimal header, no sidebar
+  if (!isManager) {
+    return (
+      <div className="min-h-screen bg-background">
+        <EmployeeKdsHeader />
+        <div className="pt-14">
+          <KDSContent />
+        </div>
+      </div>
+    );
+  }
+
+  // Manager/Admin mode - render with full PDVLayout
   return (
     <PDVLayout>
       <KDSContent />
