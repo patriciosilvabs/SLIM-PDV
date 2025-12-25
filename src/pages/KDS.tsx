@@ -78,6 +78,7 @@ export default function KDS() {
   const { settings: kdsSettings } = useKdsSettings();
   const notifiedOrdersRef = useRef<Set<string>>(new Set());
   const previousOrdersRef = useRef<Order[]>([]);
+  const initialLoadRef = useRef(true);
   
   // Unconfirmed cancellations tracking - persists until kitchen confirms (loaded from localStorage)
   const [unconfirmedCancellations, setUnconfirmedCancellations] = useState<Map<string, Order>>(() => {
@@ -157,12 +158,6 @@ export default function KDS() {
 
   // Listen for scheduled announcements - MUST be called before any conditional returns
   useScheduledAnnouncements('kds', orderCounts);
-
-  // Permission check AFTER all hooks
-  if (!permissionsLoading && !hasPermission('kds_view')) {
-    return <AccessDenied permission="kds_view" />;
-  }
-
   // Helper function to get color status based on metric thresholds
   const getMetricStatus = (type: 'avg' | 'max' | 'delayed', value: number) => {
     if (type === 'avg') {
@@ -451,7 +446,6 @@ export default function KDS() {
   }, [orders, soundEnabled, settings.enabled, playKdsNewOrderSound, kdsSettings.showPendingColumn, kdsSettings.cancellationAlertsEnabled]);
 
   // Detect recent cancellations on initial load and restore unconfirmed ones
-  const initialLoadRef = useRef(true);
   useEffect(() => {
     if (!orders.length || !initialLoadRef.current) return;
     initialLoadRef.current = false;
@@ -559,6 +553,11 @@ export default function KDS() {
       }
     };
   }, [unconfirmedCancellations.size, soundEnabled, settings.enabled, playOrderCancelledSound, kdsSettings.cancellationAlertInterval, kdsSettings.cancellationAlertsEnabled]);
+
+  // Permission check AFTER all hooks
+  if (!permissionsLoading && !hasPermission('kds_view')) {
+    return <AccessDenied permission="kds_view" />;
+  }
 
   // Handler to confirm cancellation was acknowledged
   const handleConfirmCancellation = (orderId: string) => {
