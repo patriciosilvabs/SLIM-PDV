@@ -38,8 +38,10 @@ interface CancellationHistoryItem {
 
 const FILTER_STORAGE_KEY = 'kds-order-type-filter';
 const CANCELLATION_HISTORY_KEY = 'kds-cancellation-history';
+const UNCONFIRMED_CANCELLATIONS_KEY = 'kds-unconfirmed-cancellations';
 const MAX_WAIT_ALERT_THRESHOLD = 25; // minutes
 const MAX_WAIT_ALERT_COOLDOWN = 300000; // 5 minutes in ms
+const RECENT_CANCELLATION_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
 
 type HistoryPeriodFilter = 'today' | '7days' | '30days' | 'all';
 
@@ -56,7 +58,7 @@ const formatTimeDisplay = (minutes: number): string => {
 export default function KDS() {
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
-  const { data: orders = [], isLoading, refetch } = useOrders();
+  const { data: orders = [], isLoading, refetch } = useOrders(['pending', 'preparing', 'ready', 'delivered', 'cancelled']);
   const { updateOrder, updateOrderItem } = useOrderMutations();
   const queryClient = useQueryClient();
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -77,8 +79,21 @@ export default function KDS() {
   const notifiedOrdersRef = useRef<Set<string>>(new Set());
   const previousOrdersRef = useRef<Order[]>([]);
   
-  // Unconfirmed cancellations tracking - persists until kitchen confirms
-  const [unconfirmedCancellations, setUnconfirmedCancellations] = useState<Map<string, Order>>(new Map());
+  // Unconfirmed cancellations tracking - persists until kitchen confirms (loaded from localStorage)
+  const [unconfirmedCancellations, setUnconfirmedCancellations] = useState<Map<string, Order>>(() => {
+    try {
+      const stored = localStorage.getItem(UNCONFIRMED_CANCELLATIONS_KEY);
+      if (stored) {
+        const ids: string[] = JSON.parse(stored);
+        // We'll populate the Map after orders load in an effect
+        // For now, just store the IDs as a marker
+        return new Map(ids.map(id => [id, null as any]));
+      }
+    } catch (e) {
+      console.error('Error loading unconfirmed cancellations:', e);
+    }
+    return new Map();
+  });
   const cancelledSoundIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Cancellation history - persisted in localStorage
@@ -433,7 +448,79 @@ export default function KDS() {
     }
 
     previousOrdersRef.current = [...orders];
-  }, [orders, soundEnabled, settings.enabled, playKdsNewOrderSound, kdsSettings.showPendingColumn]);
+  }, [orders, soundEnabled, settings.enabled, playKdsNewOrderSound, kdsSettings.showPendingColumn, kdsSettings.cancellationAlertsEnabled]);
+
+  // Detect recent cancellations on initial load and restore unconfirmed ones
+  const initialLoadRef = useRef(true);
+  useEffect(() => {
+    if (!orders.length || !initialLoadRef.current) return;
+    initialLoadRef.current = false;
+    
+    // Get stored unconfirmed IDs (if any)
+    let storedUnconfirmedIds: string[] = [];
+    try {
+      const stored = localStorage.getItem(UNCONFIRMED_CANCELLATIONS_KEY);
+      if (stored) {
+        storedUnconfirmedIds = JSON.parse(stored);
+      }
+    } catch (e) {
+      console.error('Error reading stored unconfirmed cancellations:', e);
+    }
+    
+    // Find recently cancelled orders (within 30 minutes) OR orders from localStorage
+    const now = Date.now();
+    const recentCancellations = orders.filter(o => {
+      if (o.status !== 'cancelled') return false;
+      
+      // Check if it's in the stored unconfirmed list
+      if (storedUnconfirmedIds.includes(o.id)) return true;
+      
+      // Check if it was cancelled recently (within 30 min window)
+      const cancelledAt = (o as any).cancelled_at ? new Date((o as any).cancelled_at).getTime() : 
+                          o.updated_at ? new Date(o.updated_at).getTime() : 0;
+      const isRecent = (now - cancelledAt) < RECENT_CANCELLATION_WINDOW_MS;
+      
+      // Only include orders that were likely in production when cancelled
+      // (we can't know for sure, so we include all recent ones)
+      return isRecent;
+    });
+    
+    if (recentCancellations.length > 0 && kdsSettings.cancellationAlertsEnabled !== false) {
+      console.log('[KDS] Found unconfirmed cancellations on load:', recentCancellations.length);
+      
+      setUnconfirmedCancellations(prev => {
+        const newMap = new Map(prev);
+        recentCancellations.forEach(order => {
+          if (!newMap.has(order.id) || !newMap.get(order.id)) {
+            newMap.set(order.id, order);
+            // Show toast for each
+            toast.error(`🚫 PEDIDO #${order.id.slice(-4).toUpperCase()} CANCELADO!`, { 
+              description: (order as any).cancellation_reason || 'Confirme que viu este cancelamento',
+              duration: Infinity,
+              id: `cancel-${order.id}`,
+            });
+          }
+        });
+        return newMap;
+      });
+    }
+  }, [orders, kdsSettings.cancellationAlertsEnabled]);
+
+  // Persist unconfirmed cancellations to localStorage
+  useEffect(() => {
+    const ids = Array.from(unconfirmedCancellations.keys()).filter(id => 
+      unconfirmedCancellations.get(id) !== null
+    );
+    try {
+      if (ids.length > 0) {
+        localStorage.setItem(UNCONFIRMED_CANCELLATIONS_KEY, JSON.stringify(ids));
+      } else {
+        localStorage.removeItem(UNCONFIRMED_CANCELLATIONS_KEY);
+      }
+    } catch (e) {
+      console.error('Error persisting unconfirmed cancellations:', e);
+    }
+  }, [unconfirmedCancellations]);
 
   // Sound loop for unconfirmed cancellations
   useEffect(() => {

@@ -615,11 +615,29 @@ export default function Tables() {
       }
     }
 
-    // Auto-print kitchen ticket if enabled
-    if (autoPrintKitchenTicket && printer?.canPrintToKitchen && selectedTable) {
+    // Auto-print kitchen ticket if enabled - with detailed logging
+    console.log('[Print Debug] Checking auto-print conditions:', {
+      autoPrintKitchenTicket,
+      printerExists: !!printer,
+      canPrintToKitchen: printer?.canPrintToKitchen,
+      selectedTable: selectedTable?.number,
+    });
+    
+    if (!autoPrintKitchenTicket) {
+      console.log('[Print Debug] Auto-print disabled in settings');
+      // Only show info toast occasionally, not every time
+    } else if (!printer) {
+      console.log('[Print Debug] Printer context not available');
+      toast.info('Impressora não configurada. Configure em Configurações → Impressão.');
+    } else if (!printer.canPrintToKitchen) {
+      console.log('[Print Debug] Printer cannot print to kitchen');
+      toast.info('Impressora não conectada. Verifique QZ Tray.');
+    } else if (selectedTable) {
       try {
         // Check if we have active sectors with printers configured
         const activeSectors = (printSectors || []).filter(s => s?.is_active !== false && s?.printer_name);
+        
+        console.log('[Print Debug] Active sectors:', activeSectors.length);
         
         if (activeSectors.length > 0) {
           // Use sector-based printing
@@ -675,7 +693,8 @@ export default function Tables() {
           toast.success(duplicateKitchenTicket ? '🖨️ Comandas impressas (2x)' : '🖨️ Comanda impressa automaticamente');
         }
       } catch (err) {
-        console.error('Auto print failed:', err);
+        console.error('[Print Debug] Auto print failed:', err);
+        toast.error('Erro ao imprimir comanda. Verifique a impressora.');
       }
     }
   };
