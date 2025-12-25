@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { OfflineSyncProvider } from "@/contexts/OfflineSyncContext";
 import { PrinterProvider } from "@/contexts/PrinterContext";
+import { PrintQueueListener } from "@/components/PrintQueueListener";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
@@ -37,6 +38,7 @@ const App = () => (
     <AuthProvider>
       <OfflineSyncProvider>
         <PrinterProvider>
+          <PrintQueueListener />
           <TooltipProvider>
             <Toaster />
             <Sonner />
