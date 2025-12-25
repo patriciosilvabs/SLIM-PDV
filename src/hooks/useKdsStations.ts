@@ -15,12 +15,13 @@ export interface KdsStation {
   updated_at: string;
 }
 
-export type StationType = 'prep_start' | 'assembly' | 'oven_expedite' | 'order_status' | 'custom';
+export type StationType = 'prep_start' | 'item_assembly' | 'assembly' | 'oven_expedite' | 'order_status' | 'custom';
 
 export const STATION_TYPE_LABELS: Record<StationType, string> = {
   prep_start: 'Em preparação',
-  assembly: 'Produzindo',
-  oven_expedite: 'Finalização',
+  item_assembly: 'Item em montagem',
+  assembly: 'Em Produção',
+  oven_expedite: 'Item em Finalização',
   order_status: 'Status do Pedido',
   custom: 'Personalizada',
 };
