@@ -9,20 +9,11 @@ import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { AccessDenied } from '@/components/auth/AccessDenied';
 import { CancelOrderDialog } from '@/components/order/CancelOrderDialog';
+import { KdsReadOnlyOrderCard } from '@/components/kds/KdsReadOnlyOrderCard';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, Store, Truck, Clock, Package, CheckCircle2, XCircle, ChefHat, PackageCheck } from 'lucide-react';
+import { RefreshCw, Package, ChefHat, CheckCircle2, PackageCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-
-// Format time display in hours after 60 minutes
-const formatTimeDisplay = (minutes: number): string => {
-  if (minutes >= 60) {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`;
-  }
-  return `${minutes} min`;
-};
 
 type KanbanColumn = 'pending' | 'preparing' | 'ready' | 'delivered';
 
@@ -72,12 +63,12 @@ export default function OrderManagement() {
   const { updateOrder } = useOrderMutations();
   const queryClient = useQueryClient();
   const previousOrdersRef = useRef<Order[]>([]);
-  const handledStatusChangesRef = useRef<Set<string>>(new Set());
 
   // Cancel order state
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [selectedOrderToCancel, setSelectedOrderToCancel] = useState<Order | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isDelivering, setIsDelivering] = useState(false);
   const canCancelOrder = hasPermission('orders_cancel');
 
   // Filter only takeaway and delivery orders (not dine_in)
@@ -91,14 +82,10 @@ export default function OrderManagement() {
       orders.forEach(order => {
         const prevOrder = previousOrdersRef.current.find(o => o.id === order.id);
         if (prevOrder && prevOrder.status !== order.status) {
-          // Check if this change was made externally (e.g., by KDS)
-          const changeKey = `${order.id}-${order.status}`;
-          if (!handledStatusChangesRef.current.has(changeKey)) {
-            if (order.status === 'ready' && prevOrder.status === 'preparing') {
-              toast.success(`✅ Pedido #${order.id.slice(-4).toUpperCase()} pronto na cozinha!`, { duration: 5000 });
-            } else if (order.status === 'preparing' && prevOrder.status === 'pending') {
-              toast.info(`🍳 Pedido #${order.id.slice(-4).toUpperCase()} em preparo`);
-            }
+          if (order.status === 'ready' && prevOrder.status === 'preparing') {
+            toast.success(`✅ Pedido #${order.id.slice(-4).toUpperCase()} pronto na cozinha!`, { duration: 5000 });
+          } else if (order.status === 'preparing' && prevOrder.status === 'pending') {
+            toast.info(`🍳 Pedido #${order.id.slice(-4).toUpperCase()} em preparo`);
           }
         }
       });
@@ -134,31 +121,16 @@ export default function OrderManagement() {
     return filteredOrders.filter(order => order.status === status);
   };
 
-  // Setup realtime subscription
-  useEffect(() => {
-    const channel = supabase
-      .channel('order-management-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders' },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['orders'] });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
-
-  const handleStatusChange = async (orderId: string, newStatus: KanbanColumn) => {
+  // Handle marking order as delivered (only for takeaway orders)
+  const handleMarkDelivered = async (orderId: string) => {
     try {
-      handledStatusChangesRef.current.add(`${orderId}-${newStatus}`);
-      await updateOrder.mutateAsync({ id: orderId, status: newStatus });
-      toast.success(`Pedido movido para ${columns.find(c => c.id === newStatus)?.title}`);
+      setIsDelivering(true);
+      await updateOrder.mutateAsync({ id: orderId, status: 'delivered', delivered_at: new Date().toISOString() });
+      toast.success('Pedido marcado como entregue!');
     } catch (error) {
       toast.error('Erro ao atualizar status do pedido');
+    } finally {
+      setIsDelivering(false);
     }
   };
 
@@ -191,142 +163,9 @@ export default function OrderManagement() {
     }
   };
 
-  const getTimeInfo = (createdAt: string | null, status: string) => {
-    if (!createdAt) return { text: '--', color: 'text-muted-foreground' };
-    const minutes = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
-    const timeText = formatTimeDisplay(minutes);
-    
-    // Delivered orders show neutral color
-    if (status === 'delivered') return { text: timeText, color: 'text-muted-foreground' };
-    
-    if (minutes < 10) return { text: timeText, color: 'text-green-500' };
-    if (minutes < 20) return { text: timeText, color: 'text-yellow-500' };
-    return { text: timeText, color: 'text-red-500' };
-  };
-
-  // Get next status action
-  const getNextStatusAction = (currentStatus: string): { label: string; nextStatus: KanbanColumn; icon: React.ReactNode } | null => {
-    switch (currentStatus) {
-      case 'pending':
-        return { label: 'Iniciar Produção', nextStatus: 'preparing', icon: <ChefHat className="h-4 w-4" /> };
-      case 'preparing':
-        return { label: 'Marcar Pronto', nextStatus: 'ready', icon: <CheckCircle2 className="h-4 w-4" /> };
-      case 'ready':
-        return { label: 'Marcar Entregue', nextStatus: 'delivered', icon: <PackageCheck className="h-4 w-4" /> };
-      default:
-        return null;
-    }
-  };
-
-  const OrderCard = ({ order }: { order: Order }) => {
-    const isDelivery = order.order_type === 'delivery';
-    const timeInfo = getTimeInfo(order.created_at, order.status || 'pending');
-    const nextAction = getNextStatusAction(order.status || 'pending');
-    const isDelivered = order.status === 'delivered';
-    
-    return (
-      <Card className={cn("mb-3 hover:shadow-md transition-shadow", isDelivered && "opacity-70")}>
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-lg">#{order.id.slice(-4).toUpperCase()}</span>
-              {isDelivery ? (
-                <Badge variant="outline" className="bg-purple-500/10 text-purple-500 border-purple-500/30">
-                  <Truck className="h-3 w-3 mr-1" />
-                  Delivery
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="bg-orange-500/10 text-orange-500 border-orange-500/30">
-                  <Store className="h-3 w-3 mr-1" />
-                  Balcão
-                </Badge>
-              )}
-            </div>
-            <span className={cn("text-sm font-medium flex items-center gap-1", timeInfo.color)}>
-              <Clock className="h-3 w-3" />
-              {timeInfo.text}
-            </span>
-          </div>
-          
-          {order.customer_name && (
-            <p className="text-sm font-medium mb-2">{order.customer_name}</p>
-          )}
-          
-          <div className="border-t border-border pt-2 mt-2">
-            <div className="space-y-2 max-h-32 overflow-y-auto">
-              {order.order_items?.slice(0, 4).map((item: any, idx) => (
-                <div key={idx} className="text-xs">
-                  <p className="text-muted-foreground font-medium">
-                    {item.quantity}x {item.product?.name || 'Produto'}
-                    {item.variation?.name && ` (${item.variation.name})`}
-                  </p>
-                  {/* Sabores/Complementos */}
-                  {item.extras && item.extras.length > 0 && (
-                    <p className="text-muted-foreground/70 pl-2">
-                      {item.extras.map((e: any) => 
-                        e.extra_name.split(': ').slice(1).join(': ')
-                      ).join(', ')}
-                    </p>
-                  )}
-                  {/* Observações */}
-                  {item.notes && (
-                    <p className="text-amber-600/80 pl-2 italic">📝 {item.notes}</p>
-                  )}
-                </div>
-              ))}
-              {order.order_items && order.order_items.length > 4 && (
-                <p className="text-xs text-muted-foreground">
-                  +{order.order_items.length - 4} itens...
-                </p>
-              )}
-            </div>
-          </div>
-          
-          <div className="border-t border-border pt-2 mt-2 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-primary">
-                R$ {(order.total || 0).toFixed(2)}
-              </span>
-              {canCancelOrder && order.status !== 'delivered' && order.status !== 'cancelled' && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive hover:bg-destructive/10 h-7 px-2"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedOrderToCancel(order);
-                    setCancelDialogOpen(true);
-                  }}
-                >
-                  <XCircle className="h-4 w-4 mr-1" />
-                  Cancelar
-                </Button>
-              )}
-            </div>
-            
-            {/* Action button for status change */}
-            {nextAction && (
-              <Button
-                size="sm"
-                className={cn(
-                  "w-full",
-                  order.status === 'pending' && "bg-blue-500 hover:bg-blue-600",
-                  order.status === 'preparing' && "bg-green-500 hover:bg-green-600",
-                  order.status === 'ready' && "bg-muted-foreground hover:bg-muted-foreground/80"
-                )}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleStatusChange(order.id, nextAction.nextStatus);
-                }}
-              >
-                {nextAction.icon}
-                <span className="ml-1">{nextAction.label}</span>
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    );
+  const handleOpenCancelDialog = (order: Order) => {
+    setSelectedOrderToCancel(order);
+    setCancelDialogOpen(true);
   };
 
   return (
@@ -335,7 +174,7 @@ export default function OrderManagement() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Gestão de Pedidos</h1>
-            <p className="text-muted-foreground">Pedidos de Balcão e Delivery</p>
+            <p className="text-muted-foreground">Pedidos de Balcão e Delivery (visualização)</p>
           </div>
           <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
             <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
@@ -366,9 +205,18 @@ export default function OrderManagement() {
                         <p className="text-sm">Nenhum pedido</p>
                       </div>
                     ) : (
-                      columnOrders.map((order) => (
-                        <OrderCard key={order.id} order={order} />
-                      ))
+                      <div className="space-y-3">
+                        {columnOrders.map((order) => (
+                          <KdsReadOnlyOrderCard
+                            key={order.id}
+                            order={order}
+                            onMarkDelivered={handleMarkDelivered}
+                            onCancel={handleOpenCancelDialog}
+                            canCancel={canCancelOrder}
+                            isDelivering={isDelivering}
+                          />
+                        ))}
+                      </div>
                     )}
                   </ScrollArea>
                 </CardContent>
