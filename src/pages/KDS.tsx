@@ -105,12 +105,7 @@ export default function KDS() {
   const canChangeStatus = hasPermission('kds_change_status');
   const lastMetricUpdateRef = useRef<string>('');
 
-  // Permission check AFTER all hooks
-  if (!permissionsLoading && !hasPermission('kds_view')) {
-    return <AccessDenied permission="kds_view" />;
-  }
-
-  // Calculate order counts for condition-based announcements
+  // Calculate order counts for condition-based announcements (needed for hook below)
   const getWaitTimeMinutes = (createdAt: string | null): number => {
     if (!createdAt) return 0;
     return Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
@@ -144,6 +139,14 @@ export default function KDS() {
       : 0,
     delayedOrdersCount: waitTimesForAlerts.filter(t => t > defaultDelayThreshold).length
   };
+
+  // Listen for scheduled announcements - MUST be called before any conditional returns
+  useScheduledAnnouncements('kds', orderCounts);
+
+  // Permission check AFTER all hooks
+  if (!permissionsLoading && !hasPermission('kds_view')) {
+    return <AccessDenied permission="kds_view" />;
+  }
 
   // Helper function to get color status based on metric thresholds
   const getMetricStatus = (type: 'avg' | 'max' | 'delayed', value: number) => {
@@ -254,8 +257,7 @@ export default function KDS() {
     );
   };
 
-  // Listen for scheduled announcements (now with order counts for demand-based triggers)
-  useScheduledAnnouncements('kds', orderCounts);
+  // Save filter preference
 
   // Save filter preference
   useEffect(() => {
