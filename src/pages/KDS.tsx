@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
+import { useUserRole } from '@/hooks/useUserRole';
 import { AccessDenied } from '@/components/auth/AccessDenied';
 import { supabase } from '@/integrations/supabase/client';
 import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp, Ban, History, Trash2, CalendarDays } from 'lucide-react';
@@ -66,6 +67,8 @@ const formatTimeDisplay = (minutes: number): string => {
 export default function KDS() {
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
+  const { isAdmin } = useUserRole();
+  const isManager = isAdmin; // Admin/proprietário vê interface completa
   const { data: orders = [], isLoading, refetch } = useOrders(['pending', 'preparing', 'ready', 'delivered', 'cancelled']);
   
   // DEBUG: Log all orders received
@@ -1112,10 +1115,12 @@ export default function KDS() {
             </p>
           </div>
           
-          {/* Metrics Panel - Desktop inline */}
-          <div className="hidden lg:block">
-            <MetricsPanel />
-          </div>
+          {/* Metrics Panel - Desktop inline - ONLY FOR MANAGERS */}
+          {isManager && (
+            <div className="hidden lg:block">
+              <MetricsPanel />
+            </div>
+          )}
         </div>
         
         {/* Real-time clock (fullscreen only) */}
@@ -1131,35 +1136,41 @@ export default function KDS() {
         )}
         
         <div className="flex items-center gap-2 relative">
-          {/* Bottleneck Indicator - Production Line Mode */}
-          {isProductionLineMode && bottlenecks && bottlenecks.length > 0 && (
+          {/* Bottleneck Indicator - Production Line Mode - ONLY FOR MANAGERS */}
+          {isManager && isProductionLineMode && bottlenecks && bottlenecks.length > 0 && (
             <KdsBottleneckIndicator 
               bottlenecks={bottlenecks} 
               onOpenDashboard={() => setMetricsDialogOpen(true)} 
             />
           )}
           
-          {/* Metrics Dashboard Button */}
-          <KdsMetricsDashboard 
-            open={metricsDialogOpen}
-            onOpenChange={setMetricsDialogOpen}
-          />
+          {/* Metrics Dashboard Button - ONLY FOR MANAGERS */}
+          {isManager && (
+            <KdsMetricsDashboard 
+              open={metricsDialogOpen}
+              onOpenChange={setMetricsDialogOpen}
+            />
+          )}
           
-          {/* Cancellation History Panel */}
-          <CancellationHistoryPanel />
+          {/* Cancellation History Panel - ONLY FOR MANAGERS */}
+          {isManager && <CancellationHistoryPanel />}
           
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            className={cn(
-              "gap-1.5",
-              soundEnabled ? "text-green-600 border-green-600/50" : "text-muted-foreground"
-            )}
-          >
-            {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-            <span className="hidden sm:inline">{soundEnabled ? 'Som ON' : 'Som OFF'}</span>
-          </Button>
+          {/* Sound Toggle - ONLY FOR MANAGERS */}
+          {isManager && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className={cn(
+                "gap-1.5",
+                soundEnabled ? "text-green-600 border-green-600/50" : "text-muted-foreground"
+              )}
+            >
+              {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+              <span className="hidden sm:inline">{soundEnabled ? 'Som ON' : 'Som OFF'}</span>
+            </Button>
+          )}
+          
           <Button
             variant="outline"
             size="sm"
@@ -1175,13 +1186,15 @@ export default function KDS() {
         </div>
       </div>
 
-      {/* Metrics Panel - Mobile */}
-      <div className="lg:hidden mb-4">
-        <MetricsPanel />
-      </div>
+      {/* Metrics Panel - Mobile - ONLY FOR MANAGERS */}
+      {isManager && (
+        <div className="lg:hidden mb-4">
+          <MetricsPanel />
+        </div>
+      )}
 
-      {/* Metrics Chart (Collapsible) */}
-      {activeOrdersList.length > 0 && (
+      {/* Metrics Chart (Collapsible) - ONLY FOR MANAGERS */}
+      {isManager && activeOrdersList.length > 0 && (
         <Collapsible open={isChartOpen} onOpenChange={setIsChartOpen} className="mb-4">
           <CollapsibleTrigger asChild>
             <Button variant="outline" size="sm" className="w-full justify-between">
@@ -1198,57 +1211,59 @@ export default function KDS() {
         </Collapsible>
       )}
 
-      {/* Order Type Filter */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <Filter className="h-4 w-4 text-muted-foreground" />
-        <Button
-          variant={orderTypeFilter === 'all' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setOrderTypeFilter('all')}
-          className="gap-1.5"
-        >
-          Todos
-          <Badge variant="secondary" className="ml-1 text-xs">
-            {allActiveOrders.length}
-          </Badge>
-        </Button>
-        <Button
-          variant={orderTypeFilter === 'table' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setOrderTypeFilter('table')}
-          className="gap-1.5"
-        >
-          <UtensilsCrossed className="h-3.5 w-3.5" />
-          Mesa
-          <Badge variant="secondary" className="ml-1 text-xs">
-            {tableCount}
-          </Badge>
-        </Button>
-        <Button
-          variant={orderTypeFilter === 'takeaway' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setOrderTypeFilter('takeaway')}
-          className="gap-1.5"
-        >
-          <Store className="h-3.5 w-3.5" />
-          Balcão
-          <Badge variant="secondary" className="ml-1 text-xs">
-            {takeawayCount}
-          </Badge>
-        </Button>
-        <Button
-          variant={orderTypeFilter === 'delivery' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setOrderTypeFilter('delivery')}
-          className="gap-1.5"
-        >
-          <Truck className="h-3.5 w-3.5" />
-          Delivery
-          <Badge variant="secondary" className="ml-1 text-xs">
-            {deliveryCount}
-          </Badge>
-        </Button>
-      </div>
+      {/* Order Type Filter - ONLY FOR MANAGERS */}
+      {isManager && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <Button
+            variant={orderTypeFilter === 'all' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setOrderTypeFilter('all')}
+            className="gap-1.5"
+          >
+            Todos
+            <Badge variant="secondary" className="ml-1 text-xs">
+              {allActiveOrders.length}
+            </Badge>
+          </Button>
+          <Button
+            variant={orderTypeFilter === 'table' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setOrderTypeFilter('table')}
+            className="gap-1.5"
+          >
+            <UtensilsCrossed className="h-3.5 w-3.5" />
+            Mesa
+            <Badge variant="secondary" className="ml-1 text-xs">
+              {tableCount}
+            </Badge>
+          </Button>
+          <Button
+            variant={orderTypeFilter === 'takeaway' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setOrderTypeFilter('takeaway')}
+            className="gap-1.5"
+          >
+            <Store className="h-3.5 w-3.5" />
+            Balcão
+            <Badge variant="secondary" className="ml-1 text-xs">
+              {takeawayCount}
+            </Badge>
+          </Button>
+          <Button
+            variant={orderTypeFilter === 'delivery' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setOrderTypeFilter('delivery')}
+            className="gap-1.5"
+          >
+            <Truck className="h-3.5 w-3.5" />
+            Delivery
+            <Badge variant="secondary" className="ml-1 text-xs">
+              {deliveryCount}
+            </Badge>
+          </Button>
+        </div>
+      )}
 
       {/* Unconfirmed Cancellations Alert - Urgent Section */}
       {Array.from(unconfirmedCancellations.values()).filter((o): o is Order => o !== null).length > 0 && (
