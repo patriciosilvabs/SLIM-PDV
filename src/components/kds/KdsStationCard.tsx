@@ -53,6 +53,7 @@ const STATION_ICONS = {
   prep_start: Circle,
   assembly: Layers,
   oven_expedite: Flame,
+  order_status: CheckCircle,
   custom: ChefHat,
 };
 
@@ -135,7 +136,7 @@ export function KdsStationCard({
     const flavors = getFlavors(item.extras);
     const itemText = `${item.product?.name || ''} ${item.notes || ''} ${item.extras?.map(e => e.extra_name).join(' ') || ''}`;
     
-    // Início e Bordas (prep_start): Mostra tamanho + borda PISCANDO, esconde sabores e observações
+    // Em preparação (prep_start): Mostra tamanho + borda PISCANDO, esconde sabores e observações
     if (stationType === 'prep_start') {
       return (
         <div className="flex-1 min-w-0">
@@ -160,7 +161,7 @@ export function KdsStationCard({
       );
     }
     
-    // Montagem (assembly): Mostra sabores + observações PISCANDO
+    // Produzindo (assembly): Mostra sabores + observações PISCANDO
     if (stationType === 'assembly') {
       return (
         <div className="flex-1 min-w-0">
@@ -190,7 +191,7 @@ export function KdsStationCard({
       );
     }
     
-    // Forno e Expedição (oven_expedite) e outros: Mostra tudo sem piscar
+    // Finalização (oven_expedite) e outros: Mostra tudo sem piscar
     return (
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -265,20 +266,21 @@ export function KdsStationCard({
               <div 
                 key={item.id} 
                 className={cn(
-                  "flex items-center justify-between gap-2 p-2 bg-muted/50 rounded-lg border",
+                  "p-2 bg-muted/50 rounded-lg border",
                   compact && "p-1.5"
                 )}
               >
                 {renderItemContent(item)}
                 
                 <Button 
-                  size="sm"
-                  variant="outline"
+                  size={compact ? "sm" : "default"}
                   onClick={() => onStartItem(item.id)}
                   disabled={isProcessing}
-                  className={cn(compact && "h-7 text-xs")}
+                  className={cn("w-full mt-3", compact && "h-8 text-xs mt-2")}
+                  style={{ backgroundColor: stationColor }}
                 >
-                  Iniciar
+                  <ArrowRight className={cn("h-4 w-4 mr-2", compact && "h-3 w-3 mr-1")} />
+                  Próxima
                 </Button>
               </div>
             ))}
@@ -308,27 +310,25 @@ export function KdsStationCard({
                   </div>
                 </div>
                 
-                <div className={cn("flex gap-2 mt-2", compact && "mt-1.5")}>
-                  <Button 
-                    size={compact ? "sm" : "sm"}
-                    onClick={() => onCompleteItem(item.id)}
-                    disabled={isProcessing}
-                    className={cn("flex-1", compact && "h-7 text-xs")}
-                    style={{ backgroundColor: stationColor }}
-                  >
-                    {isLastStation ? (
-                      <>
-                        <CheckCircle className={cn("h-3 w-3 mr-1", compact && "h-2.5 w-2.5")} />
-                        {!compact && "Concluir"}
-                      </>
-                    ) : (
-                      <>
-                        <ArrowRight className={cn("h-3 w-3 mr-1", compact && "h-2.5 w-2.5")} />
-                        {!compact && "Próxima"}
-                      </>
-                    )}
-                  </Button>
-                </div>
+                <Button 
+                  size={compact ? "sm" : "default"}
+                  onClick={() => onCompleteItem(item.id)}
+                  disabled={isProcessing}
+                  className={cn("w-full mt-3", compact && "h-8 text-xs mt-2")}
+                  style={{ backgroundColor: stationColor }}
+                >
+                  {isLastStation ? (
+                    <>
+                      <CheckCircle className={cn("h-4 w-4 mr-2", compact && "h-3 w-3 mr-1")} />
+                      Concluir
+                    </>
+                  ) : (
+                    <>
+                      <ArrowRight className={cn("h-4 w-4 mr-2", compact && "h-3 w-3 mr-1")} />
+                      Próxima
+                    </>
+                  )}
+                </Button>
               </div>
             ))}
           </div>
