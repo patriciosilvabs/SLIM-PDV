@@ -23,6 +23,7 @@ const defaultSettings: NotificationSettings = {
     tableWaitAlert: true,
     idleTableAlert: true,
     orderCancelled: true,
+    bottleneckAlert: true,
   },
   selectedSounds: {
     newOrder: 'beepClassic',
@@ -33,6 +34,7 @@ const defaultSettings: NotificationSettings = {
     tableWaitAlert: 'bell',
     idleTableAlert: 'dingDong',
     orderCancelled: 'urgentAlert',
+    bottleneckAlert: 'urgentAlert',
   },
   customSoundUrls: {
     newOrder: PREDEFINED_SOUNDS.beepClassic.data,
@@ -43,6 +45,7 @@ const defaultSettings: NotificationSettings = {
     tableWaitAlert: PREDEFINED_SOUNDS.bell.data,
     idleTableAlert: PREDEFINED_SOUNDS.dingDong.data,
     orderCancelled: PREDEFINED_SOUNDS.urgentAlert.data,
+    bottleneckAlert: PREDEFINED_SOUNDS.urgentAlert.data,
   },
 };
 
@@ -92,6 +95,7 @@ export function useAudioNotification() {
   const playTableWaitAlertSound = useCallback(() => playSound('tableWaitAlert'), [playSound]);
   const playIdleTableAlertSound = useCallback(() => playSound('idleTableAlert'), [playSound]);
   const playOrderCancelledSound = useCallback(() => playSound('orderCancelled'), [playSound]);
+  const playBottleneckAlertSound = useCallback(() => playSound('bottleneckAlert'), [playSound]);
 
   const updateSettings = useCallback((updates: Partial<NotificationSettings>) => {
     setSettings(prev => ({ ...prev, ...updates }));
@@ -143,5 +147,6 @@ export function useAudioNotification() {
     playTableWaitAlertSound,
     playIdleTableAlertSound,
     playOrderCancelledSound,
+    playBottleneckAlertSound,
   };
 }

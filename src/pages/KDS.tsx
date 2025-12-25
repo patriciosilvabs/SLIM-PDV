@@ -22,6 +22,7 @@ import { KdsItemCounter } from '@/components/kds/KdsItemCounter';
 import { KdsBorderBadge } from '@/components/kds/KdsBorderHighlight';
 import { KdsProductionLineView } from '@/components/kds/KdsProductionLineView';
 import { KdsMetricsDashboard } from '@/components/kds/KdsMetricsDashboard';
+import { useBottleneckAlerts } from '@/hooks/useBottleneckAlerts';
 
 type OrderTypeFilter = 'all' | 'table' | 'takeaway' | 'delivery';
 
@@ -91,6 +92,10 @@ export default function KDS() {
   });
   const { playKdsNewOrderSound, playMaxWaitAlertSound, playOrderCancelledSound, settings } = useAudioNotification();
   const { settings: kdsSettings, hasSpecialBorder } = useKdsSettings();
+  
+  // Bottleneck alerts for production line mode
+  const isProductionLineMode = kdsSettings.operationMode === 'production_line';
+  useBottleneckAlerts(isProductionLineMode, soundEnabled);
   const notifiedOrdersRef = useRef<Set<string>>(new Set());
   const previousOrdersRef = useRef<Order[]>([]);
   const initialLoadRef = useRef(true);
