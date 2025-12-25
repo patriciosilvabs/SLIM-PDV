@@ -204,15 +204,6 @@ export default function Counter() {
     );
   }, [allOrders]);
 
-  // Permission check AFTER all hooks
-  if (!permissionsLoading && !hasPermission('counter_view')) {
-    return <AccessDenied permission="counter_view" />;
-  }
-
-  const activeCategories = categories?.filter(c => c.is_active !== false) || [];
-  const activeProducts = products?.filter(p => p.is_available !== false) || [];
-  const activeCombos = combos?.filter(c => c.is_active !== false) || [];
-
   // Auto-collapse sidebar on tablet
   useEffect(() => {
     if (isTablet) {
@@ -233,6 +224,10 @@ export default function Counter() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const activeCategories = categories?.filter(c => c.is_active !== false) || [];
+  const activeProducts = products?.filter(p => p.is_available !== false) || [];
+  const activeCombos = combos?.filter(c => c.is_active !== false) || [];
 
   // Filter products by category and search
   const filteredProducts = useMemo(() => {
@@ -292,17 +287,16 @@ export default function Counter() {
         e.preventDefault();
         searchInputRef.current?.focus();
       }
-      if (e.ctrlKey && e.key === 'p') {
-        e.preventDefault();
-        if (orderItems.length > 0 && !isCreatingOrder) {
-          handleCreateOrder();
-        }
-      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [orderItems, isCreatingOrder]);
+  }, []);
+
+  // Permission check AFTER all hooks
+  if (!permissionsLoading && !hasPermission('counter_view')) {
+    return <AccessDenied permission="counter_view" />;
+  }
 
   // Handle customer search input
   const handleCustomerSearchChange = (value: string) => {
