@@ -279,7 +279,10 @@ export default function Counter() {
 
   const finalTotal = afterDiscount + serviceAmount;
 
-  const paymentAmountNum = parseFloat(paymentAmount) || 0;
+  // For non-cash payments, amount equals total (no change/troco needed)
+  const paymentAmountNum = selectedPaymentMethod === 'cash' 
+    ? (parseFloat(paymentAmount) || 0)
+    : finalTotal;
   const changeAmount = Math.max(0, paymentAmountNum - finalTotal);
 
   // Keyboard shortcuts
