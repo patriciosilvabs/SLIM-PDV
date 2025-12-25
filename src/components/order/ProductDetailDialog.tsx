@@ -542,10 +542,11 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
             <div className="space-y-2">
               <Label>Observações</Label>
               <Textarea
-                placeholder="Ex: sem cebola, bem passado..."
+                placeholder="Ex: SEM CEBOLA, BEM PASSADO..."
                 value={notes}
-                onChange={(e) => setNotes(e.target.value)}
+                onChange={(e) => setNotes(e.target.value.toUpperCase())}
                 rows={2}
+                className="uppercase"
               />
             </div>
           </div>

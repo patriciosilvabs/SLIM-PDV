@@ -254,7 +254,64 @@ export function KdsStationCard({
       );
     }
     
-    // Finalização (oven_expedite) e outros: Mostra tudo sem piscar
+    // Finalização (oven_expedite): Mostra resumo de confirmação destacado
+    if (stationType === 'oven_expedite') {
+      return (
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-primary">{item.quantity}x</span>
+              <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
+              {item.variation?.name && (
+                <span className="text-xs text-muted-foreground">({item.variation.name})</span>
+              )}
+            </div>
+            <StationTimer 
+              startedAt={item.station_started_at} 
+              createdAt={item.created_at} 
+              greenMinutes={settings.timerGreenMinutes}
+              yellowMinutes={settings.timerYellowMinutes}
+            />
+          </div>
+          
+          {/* RESUMO DE CONFIRMAÇÃO */}
+          <div className="mt-2 p-2 bg-muted/50 rounded border-l-4 border-amber-500">
+            <p className="text-xs font-semibold text-muted-foreground mb-1">📋 CONFIRME ANTES DE FINALIZAR:</p>
+            
+            {/* Borda */}
+            {borderInfo && (
+              <div className="flex items-center gap-1 text-sm">
+                <span className="text-amber-600 font-medium">🟡 Borda:</span>
+                <span className="font-bold">{borderInfo}</span>
+              </div>
+            )}
+            
+            {/* Sabores */}
+            {flavors.length > 0 && (
+              <div className="flex items-center gap-1 text-sm">
+                <span className="text-blue-600 font-medium">🍕 Sabores:</span>
+                <span className="font-bold">{flavors.join(' + ')}</span>
+              </div>
+            )}
+            
+            {/* Observações */}
+            {item.notes && (
+              <div className="flex items-center gap-1 text-sm">
+                <span className="text-orange-600 font-medium">📝 Obs:</span>
+                <span className="font-bold">{item.notes}</span>
+              </div>
+            )}
+            
+            {/* Se não tem nada especial */}
+            {!borderInfo && flavors.length === 0 && !item.notes && (
+              <p className="text-sm text-muted-foreground">Sem complementos ou observações</p>
+            )}
+          </div>
+        </div>
+      );
+    }
+    
+    // Outros tipos de estação: Mostra tudo sem piscar
     return (
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-1.5 flex-wrap">
