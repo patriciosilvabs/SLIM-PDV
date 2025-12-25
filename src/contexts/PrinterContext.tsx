@@ -364,8 +364,30 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const currentTopMargin = parseInt(localStorage.getItem('pdv_top_margin') || '0');
       const currentBottomMarginReceipt = parseInt(localStorage.getItem('pdv_bottom_margin_receipt') || '4');
       
+      // Restaurant info
+      const currentRestaurantName = localStorage.getItem('pdv_restaurant_name') || 'Minha Pizzaria';
+      const currentRestaurantAddress = localStorage.getItem('pdv_restaurant_address') || '';
+      const currentRestaurantPhone = localStorage.getItem('pdv_restaurant_phone') || '';
+      const currentRestaurantCnpj = localStorage.getItem('pdv_restaurant_cnpj') || '';
+      
+      // Logo settings
+      const showLogo = localStorage.getItem('pdv_print_show_logo') === 'true';
+      const logoUrl = localStorage.getItem('pdv_restaurant_logo_url') || '';
+      const logoMaxWidth = parseInt(localStorage.getItem('pdv_logo_max_width') || '300');
+      
+      const shouldPrintLogo = showLogo && !!logoUrl;
+      
+      // Enrich data with restaurant info
+      const enrichedData: PartialPaymentReceiptData = {
+        ...data,
+        restaurantName: currentRestaurantName,
+        restaurantAddress: currentRestaurantAddress || undefined,
+        restaurantPhone: currentRestaurantPhone || undefined,
+        restaurantCnpj: currentRestaurantCnpj || undefined,
+      };
+      
       const receiptData = buildPartialPaymentReceipt(
-        data,
+        enrichedData,
         qz.config.paperWidth,
         currentReceiptFontSize,
         currentLineSpacing,
@@ -373,9 +395,51 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
         currentAsciiMode,
         currentCharSpacing,
         currentTopMargin,
-        currentBottomMarginReceipt
+        currentBottomMarginReceipt,
+        shouldPrintLogo // Skip restaurant name text when logo is enabled
       );
       
+      // If logo is enabled, build mixed array with image + text
+      if (shouldPrintLogo) {
+        const logoBase64 = await imageUrlToBase64Cached(logoUrl);
+        
+        if (logoBase64) {
+          // Resize image to configured max width
+          let resizedLogo = await resizeImage(logoBase64, logoMaxWidth);
+          
+          // Apply color mode conversion
+          const currentLogoPrintMode = localStorage.getItem('pdv_logo_print_mode') || 'original';
+          if (currentLogoPrintMode === 'grayscale') {
+            resizedLogo = await convertToGrayscale(resizedLogo);
+          } else if (currentLogoPrintMode === 'dithered') {
+            resizedLogo = await convertToDithered(resizedLogo);
+          }
+          
+          const pureBase64 = extractBase64Data(resizedLogo);
+          
+          // Build print array: init + center + logo image + spacing + receipt text
+          const printArray: PrintDataItem[] = [
+            INIT + ALIGN_CENTER,
+            {
+              type: 'raw',
+              format: 'image',
+              flavor: 'base64',
+              data: pureBase64,
+              options: {
+                language: 'ESCPOS',
+                dotDensity: 'double'
+              }
+            },
+            LF + LF,
+            receiptData
+          ];
+          
+          await qz.print(qz.config.cashierPrinter, printArray);
+          return true;
+        }
+      }
+      
+      // Fallback: print text-only receipt
       await qz.printToCashier(receiptData);
       return true;
     } catch (err) {

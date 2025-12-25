@@ -817,6 +817,11 @@ export interface PartialPaymentReceiptData {
   tableNumber?: number;
   customerName?: string;
   orderId: string;
+  // Restaurant info for header
+  restaurantName?: string;
+  restaurantAddress?: string;
+  restaurantPhone?: string;
+  restaurantCnpj?: string;
 }
 
 const partialPaymentMethodLabels: Record<string, string> = {
@@ -835,7 +840,8 @@ export function buildPartialPaymentReceipt(
   asciiMode: boolean = false,
   charSpacing: number = 1,
   topMargin: number = 0,
-  bottomMargin: number = 4
+  bottomMargin: number = 4,
+  skipRestaurantName: boolean = false
 ): string {
   const width = paperWidth === '58mm' ? 32 : 48;
   let receipt = '';
@@ -867,6 +873,29 @@ export function buildPartialPaymentReceipt(
   // Apply left margin
   if (leftMargin > 0) {
     receipt += GS + 'L' + String.fromCharCode(leftMargin) + '\x00';
+  }
+
+  // Restaurant header (only if not skipping for logo)
+  if (!skipRestaurantName && data.restaurantName) {
+    receipt += ALIGN_CENTER;
+    receipt += TEXT_BOLD;
+    receipt += TEXT_DOUBLE_SIZE;
+    receipt += processText(data.restaurantName.toUpperCase()) + LF;
+    receipt += fontCmd;
+    receipt += TEXT_BOLD_OFF;
+    
+    if (data.restaurantAddress) {
+      receipt += processText(data.restaurantAddress) + LF;
+    }
+    if (data.restaurantPhone) {
+      receipt += processText(data.restaurantPhone) + LF;
+    }
+    if (data.restaurantCnpj) {
+      receipt += 'CNPJ: ' + processText(data.restaurantCnpj) + LF;
+    }
+    
+    receipt += TEXT_NORMAL;
+    receipt += DASHED_LINE(width);
   }
 
   // Header
