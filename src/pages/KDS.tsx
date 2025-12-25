@@ -1248,7 +1248,7 @@ export default function KDS() {
       </div>
 
       {/* Unconfirmed Cancellations Alert - Urgent Section */}
-      {unconfirmedCancellations.size > 0 && (
+      {Array.from(unconfirmedCancellations.values()).filter((o): o is Order => o !== null).length > 0 && (
         <div className="mb-4 p-3 bg-destructive/10 border-2 border-destructive rounded-lg animate-pulse">
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle className="h-6 w-6 text-destructive animate-bounce" />
@@ -1256,17 +1256,19 @@ export default function KDS() {
               ⚠️ PEDIDO(S) CANCELADO(S) - ATENÇÃO!
             </h2>
             <Badge variant="destructive" className="ml-auto text-base">
-              {unconfirmedCancellations.size}
+              {Array.from(unconfirmedCancellations.values()).filter(o => o !== null).length}
             </Badge>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {Array.from(unconfirmedCancellations.values()).map(order => (
-              <CancelledOrderCard 
-                key={order.id} 
-                order={order}
-                onConfirm={() => handleConfirmCancellation(order.id)}
-              />
-            ))}
+            {Array.from(unconfirmedCancellations.values())
+              .filter((order): order is Order => order !== null)
+              .map(order => (
+                <CancelledOrderCard 
+                  key={order.id} 
+                  order={order}
+                  onConfirm={() => handleConfirmCancellation(order.id)}
+                />
+              ))}
           </div>
         </div>
       )}
