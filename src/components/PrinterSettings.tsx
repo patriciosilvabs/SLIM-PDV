@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { usePrinter } from '@/contexts/PrinterContext';
 import { useOrderSettings, PrintFontSize, LogoPrintMode } from '@/hooks/useOrderSettings';
 import { usePrintSectors, usePrintSectorMutations, PrintSector } from '@/hooks/usePrintSectors';
+import { usePrintServerMode } from '@/components/PrintQueueListener';
 import { invalidateLogoCache, clearLogoCache } from '@/utils/imageToBase64';
 import { buildFontSizeTestPrint } from '@/utils/escpos';
 import {
@@ -44,6 +45,7 @@ import {
   UtensilsCrossed,
   Image,
   Upload,
+  Server,
   type LucideIcon
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -133,6 +135,17 @@ export function PrinterSettings() {
   } = useOrderSettings();
   const [testingPrinter, setTestingPrinter] = useState<string | null>(null);
   const [testingFont, setTestingFont] = useState<'kitchen' | 'receipt' | null>(null);
+  
+  // Print server mode
+  const { isPrintServer, setIsPrintServer } = usePrintServerMode();
+  const [usePrintQueue, setUsePrintQueue] = useState(() => {
+    return localStorage.getItem('use_print_queue') === 'true';
+  });
+
+  // Persist print queue setting
+  useEffect(() => {
+    localStorage.setItem('use_print_queue', usePrintQueue.toString());
+  }, [usePrintQueue]);
   
   // Sector dialog state
   const [sectorDialogOpen, setSectorDialogOpen] = useState(false);
@@ -437,6 +450,62 @@ export function PrinterSettings() {
               printerCtx.updateConfig({ autoConnectOnLogin: checked })
             }
           />
+        </div>
+
+        {/* Print Queue / Centralized Printing Settings */}
+        <div className="space-y-4 p-4 rounded-lg border bg-muted/30">
+          <div className="flex items-center gap-2 mb-2">
+            <Server className="w-5 h-5 text-primary" />
+            <span className="font-semibold">Impressão Centralizada</span>
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-medium">Usar fila de impressão</div>
+              <div className="text-sm text-muted-foreground">
+                Permite que outros dispositivos enviem trabalhos para o servidor de impressão
+              </div>
+            </div>
+            <Switch
+              checked={usePrintQueue}
+              onCheckedChange={setUsePrintQueue}
+            />
+          </div>
+          
+          {usePrintQueue && (
+            <div className="flex items-center justify-between mt-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
+              <div>
+                <div className="font-medium text-primary">Este dispositivo é o servidor de impressão</div>
+                <div className="text-sm text-muted-foreground">
+                  {isPrintServer 
+                    ? 'Este computador processará todos os trabalhos de impressão da fila' 
+                    : 'Ative para que este computador imprima trabalhos enviados por outros dispositivos'}
+                </div>
+              </div>
+              <Switch
+                checked={isPrintServer}
+                onCheckedChange={setIsPrintServer}
+              />
+            </div>
+          )}
+          
+          {usePrintQueue && !isPrintServer && (
+            <Alert>
+              <Printer className="w-4 h-4" />
+              <AlertDescription>
+                As impressões serão enviadas para a fila. Configure um computador como servidor de impressão para processar os trabalhos.
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {usePrintQueue && isPrintServer && printerCtx.isConnected && (
+            <Alert className="border-green-500/50 bg-green-500/10">
+              <Check className="w-4 h-4 text-green-500" />
+              <AlertDescription className="text-green-700 dark:text-green-400">
+                Servidor de impressão ativo! Trabalhos da fila serão processados automaticamente.
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
 
         {/* Error Alert */}

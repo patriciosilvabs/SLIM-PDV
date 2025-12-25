@@ -37,6 +37,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { usePrinterOptional, SectorPrintItem } from '@/contexts/PrinterContext';
+import { useCentralizedPrinting } from '@/hooks/useCentralizedPrinting';
 import { KitchenTicketData, CancellationTicketData } from '@/utils/escpos';
 import { usePrintSectors } from '@/hooks/usePrintSectors';
 import { useProfile } from '@/hooks/useProfile';
@@ -113,6 +114,7 @@ export default function Tables() {
   const { getInitialOrderStatus, settings: kdsSettings } = useKdsSettings();
   const { autoPrintKitchenTicket, autoPrintCustomerReceipt, duplicateKitchenTicket } = useOrderSettings();
   const printer = usePrinterOptional();
+  const centralPrinting = useCentralizedPrinting();
   const { data: printSectors } = usePrintSectors();
   const { profile } = useProfile();
   const { data: tables, isLoading } = useTables();
@@ -675,75 +677,38 @@ export default function Tables() {
     if (!autoPrintKitchenTicket) {
       console.log('[Print Debug] Auto-print disabled in settings');
       // Only show info toast occasionally, not every time
-    } else if (!printer) {
-      console.log('[Print Debug] Printer context not available');
-      toast.info('Impressora não configurada. Configure em Configurações → Impressão.');
-    } else if (!printer.canPrintToKitchen) {
-      console.log('[Print Debug] Printer cannot print to kitchen');
-      toast.info('Impressora não conectada. Verifique QZ Tray.');
+    } else if (!centralPrinting.canPrintToKitchen) {
+      console.log('[Print Debug] Cannot print to kitchen (no printer or queue)');
+      toast.info('Impressora não configurada ou fila não habilitada.');
     } else if (selectedTable) {
       try {
-        // Check if we have active sectors with printers configured
-        const activeSectors = (printSectors || []).filter(s => s?.is_active !== false && s?.printer_name);
+        // Use centralized printing (queue or direct)
+        const sectorItems: SectorPrintItem[] = items.map(item => ({
+          quantity: item.quantity,
+          productName: item.product_name,
+          variation: item.variation_name,
+          extras: item.complements?.map(c => c.option_name),
+          notes: item.notes,
+          print_sector_id: item.print_sector_id,
+        }));
         
-        console.log('[Print Debug] Active sectors:', activeSectors.length);
-        
-        if (activeSectors.length > 0) {
-          // Use sector-based printing
-          const sectorItems: SectorPrintItem[] = items.map(item => ({
-            quantity: item.quantity,
-            productName: item.product_name,
-            variation: item.variation_name,
-            extras: item.complements?.map(c => c.option_name),
-            notes: item.notes,
-            print_sector_id: item.print_sector_id,
-          }));
-          
-          await printer.printKitchenTicketsBySector(
-            sectorItems,
-            {
-              orderNumber: order.id.slice(0, 8).toUpperCase(),
-              orderType: 'dine_in',
-              tableNumber: selectedTable.number,
-              customerName: order.customer_name || undefined,
-              notes: order.notes || undefined,
-              createdAt: new Date().toISOString(),
-            },
-            activeSectors,
-            duplicateKitchenTicket
-          );
-          
-          toast.success('🖨️ Comandas impressas por setor');
-        } else {
-          // Fallback: use default kitchen printer
-          const ticketData: KitchenTicketData = {
+        await centralPrinting.printKitchenTicketsBySector(
+          sectorItems,
+          {
             orderNumber: order.id.slice(0, 8).toUpperCase(),
             orderType: 'dine_in',
             tableNumber: selectedTable.number,
             customerName: order.customer_name || undefined,
-            items: items.map(item => ({
-              quantity: item.quantity,
-              productName: item.product_name,
-              variation: item.variation_name,
-              extras: item.complements?.map(c => c.option_name),
-              notes: item.notes,
-            })),
             notes: order.notes || undefined,
             createdAt: new Date().toISOString(),
-          };
-          
-          await printer.printKitchenTicket(ticketData);
-          
-          // Print duplicate for waiter if enabled
-          if (duplicateKitchenTicket) {
-            await printer.printKitchenTicket(ticketData);
-          }
-          
-          toast.success(duplicateKitchenTicket ? '🖨️ Comandas impressas (2x)' : '🖨️ Comanda impressa automaticamente');
-        }
+          },
+          duplicateKitchenTicket
+        );
+        
+        toast.success(centralPrinting.shouldQueue ? '🖨️ Comanda enviada para fila' : '🖨️ Comanda impressa');
       } catch (err) {
         console.error('[Print Debug] Auto print failed:', err);
-        toast.error('Erro ao imprimir comanda. Verifique a impressora.');
+        toast.error('Erro ao imprimir comanda.');
       }
     }
   };
