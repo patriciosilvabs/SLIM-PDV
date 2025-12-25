@@ -893,12 +893,13 @@ export default function Tables() {
       const occupiedTableIds = tables?.filter(t => t.status === 'occupied').map(t => t.id) || [];
       if (occupiedTableIds.length === 0) return [];
       
-      // Get orders for occupied tables
+      // Get orders for occupied tables (exclude closed/cancelled orders)
       const { data: activeOrders, error: ordersError } = await supabase
         .from('orders')
         .select('id, table_id, total')
         .in('table_id', occupiedTableIds)
-        .neq('status', 'cancelled');
+        .neq('status', 'cancelled')
+        .neq('status', 'delivered');
       
       if (ordersError) throw ordersError;
       if (!activeOrders?.length) return [];
