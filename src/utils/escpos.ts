@@ -140,20 +140,23 @@ export function getFontSizeCommand(fontSize: PrintFontSize): string {
 }
 
 // Build kitchen ticket
+export interface KitchenTicketItem {
+  quantity: number;
+  productName: string;
+  variation?: string | null;
+  extras?: string[];
+  notes?: string | null;
+  print_sector_id?: string | null;
+  addedBy?: string | null; // Nome do garçom que adicionou o item
+}
+
 export interface KitchenTicketData {
   orderNumber: string;
   orderType: 'dine_in' | 'takeaway' | 'delivery';
   tableNumber?: number;
   customerName?: string | null;
   sectorName?: string; // Name of the print sector
-  items: {
-    quantity: number;
-    productName: string;
-    variation?: string | null;
-    extras?: string[];
-    notes?: string | null;
-    print_sector_id?: string | null;
-  }[];
+  items: KitchenTicketItem[];
   notes?: string | null;
   createdAt: string;
 }
@@ -256,6 +259,11 @@ export function buildKitchenTicket(
       ticket += ` OBS: ${processText(item.notes)} ` + LF;
       ticket += GS + 'B' + '\x00'; // INVERT OFF
       ticket += fontCmd; // Volta para fonte configurada
+    }
+
+    // Nome do garçom que adicionou o item
+    if (item.addedBy) {
+      ticket += `  [${processText(item.addedBy)}]` + LF;
     }
 
     ticket += LF;

@@ -185,13 +185,19 @@ export function useOrderMutations() {
   });
 
   const addOrderItem = useMutation({
-    mutationFn: async (item: Omit<OrderItem, 'id' | 'created_at' | 'product'>) => {
+    mutationFn: async (item: Omit<OrderItem, 'id' | 'created_at' | 'product' | 'added_by' | 'added_by_profile'>) => {
       // Obter usuário atual para registrar quem adicionou o item
       const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id || null;
+      
+      console.log('[addOrderItem] Inserindo item com added_by:', userId);
       
       const { data, error } = await supabase
         .from('order_items')
-        .insert({ ...item, added_by: userData.user?.id })
+        .insert({ 
+          ...item, 
+          added_by: userId  // Garantir que seja sempre definido após o spread
+        })
         .select()
         .single();
       
