@@ -22,6 +22,7 @@ import { KdsItemCounter } from '@/components/kds/KdsItemCounter';
 import { KdsBorderBadge } from '@/components/kds/KdsBorderHighlight';
 import { KdsProductionLineView } from '@/components/kds/KdsProductionLineView';
 import { KdsMetricsDashboard } from '@/components/kds/KdsMetricsDashboard';
+import { KdsBottleneckIndicator } from '@/components/kds/KdsBottleneckIndicator';
 import { useBottleneckAlerts } from '@/hooks/useBottleneckAlerts';
 
 type OrderTypeFilter = 'all' | 'table' | 'takeaway' | 'delivery';
@@ -95,7 +96,8 @@ export default function KDS() {
   
   // Bottleneck alerts for production line mode
   const isProductionLineMode = kdsSettings.operationMode === 'production_line';
-  useBottleneckAlerts(isProductionLineMode, soundEnabled);
+  const { bottlenecks, hasActiveAlerts } = useBottleneckAlerts(isProductionLineMode, soundEnabled);
+  const [metricsDialogOpen, setMetricsDialogOpen] = useState(false);
   const notifiedOrdersRef = useRef<Set<string>>(new Set());
   const previousOrdersRef = useRef<Order[]>([]);
   const initialLoadRef = useRef(true);
@@ -1120,8 +1122,19 @@ export default function KDS() {
         )}
         
         <div className="flex items-center gap-2 relative">
+          {/* Bottleneck Indicator - Production Line Mode */}
+          {isProductionLineMode && bottlenecks && bottlenecks.length > 0 && (
+            <KdsBottleneckIndicator 
+              bottlenecks={bottlenecks} 
+              onOpenDashboard={() => setMetricsDialogOpen(true)} 
+            />
+          )}
+          
           {/* Metrics Dashboard Button */}
-          <KdsMetricsDashboard />
+          <KdsMetricsDashboard 
+            open={metricsDialogOpen}
+            onOpenChange={setMetricsDialogOpen}
+          />
           
           {/* Cancellation History Panel */}
           <CancellationHistoryPanel />

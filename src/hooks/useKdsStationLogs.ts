@@ -282,12 +282,23 @@ export function useStationPerformanceHistory() {
 }
 
 // Hook para análise de gargalos
-export function useBottleneckAnalysis() {
+export function useBottleneckAnalysis(customThresholds?: {
+  defaultMaxQueueSize: number;
+  defaultMaxTimeRatio: number;
+  stationOverrides: Record<string, { maxQueueSize?: number; maxTimeRatio?: number; alertsEnabled?: boolean }>;
+}) {
   const { data: metrics } = useAllStationsMetrics();
   const { activeStations } = useKdsStations();
 
+  // Default thresholds if not provided
+  const thresholds = customThresholds ?? {
+    defaultMaxQueueSize: 5,
+    defaultMaxTimeRatio: 1.5,
+    stationOverrides: {},
+  };
+
   return useQuery({
-    queryKey: ['kds-bottleneck-analysis', metrics],
+    queryKey: ['kds-bottleneck-analysis', metrics, thresholds],
     queryFn: async () => {
       if (!metrics || metrics.length === 0) return [];
 
@@ -296,30 +307,43 @@ export function useBottleneckAnalysis() {
       const bottlenecks: BottleneckInfo[] = [];
 
       metrics.forEach(m => {
+        // Get station-specific thresholds or defaults
+        const stationOverride = thresholds.stationOverrides[m.stationId];
+        
+        // Skip if alerts are disabled for this station
+        if (stationOverride?.alertsEnabled === false) return;
+
+        const maxQueueSize = stationOverride?.maxQueueSize ?? thresholds.defaultMaxQueueSize;
+        const maxTimeRatio = stationOverride?.maxTimeRatio ?? thresholds.defaultMaxTimeRatio;
+
         let severity: BottleneckInfo['severity'] = 'low';
         let reason = '';
 
-        // Análise de gargalo por tempo
+        // Análise de gargalo por tempo usando threshold configurado
         const timeRatio = avgAllStations > 0 ? m.averageSeconds / avgAllStations : 0;
-        if (timeRatio > 1.8) {
+        
+        // Calculate severity based on how much it exceeds the configured ratio
+        const timeExcessRatio = timeRatio / maxTimeRatio;
+        if (timeExcessRatio > 1.4) {
           severity = 'critical';
-          reason = `Tempo ${Math.round((timeRatio - 1) * 100)}% acima da média`;
-        } else if (timeRatio > 1.4) {
+          reason = `Tempo ${Math.round((timeRatio - 1) * 100)}% acima da média (limite: ${Math.round((maxTimeRatio - 1) * 100)}%)`;
+        } else if (timeExcessRatio > 1.15) {
           severity = 'high';
           reason = `Tempo ${Math.round((timeRatio - 1) * 100)}% acima da média`;
-        } else if (timeRatio > 1.2) {
+        } else if (timeRatio > maxTimeRatio) {
           severity = 'medium';
           reason = `Tempo ${Math.round((timeRatio - 1) * 100)}% acima da média`;
         }
 
-        // Análise de fila acumulada
-        if (m.currentQueue > 8) {
+        // Análise de fila acumulada usando threshold configurado
+        const queueExcessRatio = m.currentQueue / maxQueueSize;
+        if (queueExcessRatio > 1.6) {
           severity = 'critical';
-          reason = `Fila com ${m.currentQueue} itens acumulados`;
-        } else if (m.currentQueue > 5) {
+          reason = `Fila com ${m.currentQueue} itens (limite: ${maxQueueSize})`;
+        } else if (queueExcessRatio > 1.2) {
           if (severity !== 'critical') severity = 'high';
           reason = reason || `Fila com ${m.currentQueue} itens`;
-        } else if (m.currentQueue > 3) {
+        } else if (m.currentQueue > maxQueueSize) {
           if (severity === 'low') severity = 'medium';
           reason = reason || `Fila com ${m.currentQueue} itens`;
         }

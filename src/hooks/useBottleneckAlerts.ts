@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useBottleneckAnalysis, BottleneckInfo } from './useKdsStationLogs';
 import { useAudioNotification } from './useAudioNotification';
+import { useKdsSettings } from './useKdsSettings';
 import { toast } from 'sonner';
 
 const BOTTLENECK_ALERT_COOLDOWN = 5 * 60 * 1000; // 5 minutos entre alertas
@@ -12,8 +13,19 @@ interface AlertedBottleneck {
 }
 
 export function useBottleneckAlerts(enabled: boolean = true, soundEnabled: boolean = true) {
-  const { data: bottlenecks } = useBottleneckAnalysis();
-  const { playBottleneckAlertSound, settings } = useAudioNotification();
+  const { settings } = useKdsSettings();
+  const { bottleneckSettings } = settings;
+  
+  // Pass configured thresholds to the analysis hook
+  const { data: bottlenecks } = useBottleneckAnalysis(
+    bottleneckSettings.enabled ? {
+      defaultMaxQueueSize: bottleneckSettings.defaultMaxQueueSize,
+      defaultMaxTimeRatio: bottleneckSettings.defaultMaxTimeRatio,
+      stationOverrides: bottleneckSettings.stationOverrides,
+    } : undefined
+  );
+  
+  const { playBottleneckAlertSound, settings: audioSettings } = useAudioNotification();
   const alertedBottlenecksRef = useRef<Map<string, AlertedBottleneck>>(new Map());
   const lastCriticalAlertRef = useRef<number>(0);
 
@@ -75,17 +87,17 @@ export function useBottleneckAlerts(enabled: boolean = true, soundEnabled: boole
     // Som apenas para severidades críticas/altas e respeitando cooldown global
     if (
       soundEnabled &&
-      settings.enabled &&
+      audioSettings.enabled &&
       (bottleneck.severity === 'critical' || bottleneck.severity === 'high') &&
       now - lastCriticalAlertRef.current > 30000 // 30s entre sons
     ) {
       playBottleneckAlertSound();
       lastCriticalAlertRef.current = now;
     }
-  }, [soundEnabled, settings.enabled, playBottleneckAlertSound]);
+  }, [soundEnabled, audioSettings.enabled, playBottleneckAlertSound]);
 
   useEffect(() => {
-    if (!enabled || !bottlenecks || bottlenecks.length === 0) return;
+    if (!enabled || !bottleneckSettings.enabled || !bottlenecks || bottlenecks.length === 0) return;
 
     // Processa gargalos críticos e altos
     const significantBottlenecks = bottlenecks.filter(
@@ -105,11 +117,12 @@ export function useBottleneckAlerts(enabled: boolean = true, soundEnabled: boole
         alertedBottlenecksRef.current.delete(stationId);
       }
     });
-  }, [enabled, bottlenecks, shouldAlertBottleneck, triggerAlert]);
+  }, [enabled, bottleneckSettings.enabled, bottlenecks, shouldAlertBottleneck, triggerAlert]);
 
   return {
     bottlenecks,
     hasActiveAlerts: bottlenecks && bottlenecks.some(b => b.severity === 'critical' || b.severity === 'high'),
     criticalCount: bottlenecks?.filter(b => b.severity === 'critical').length || 0,
+    highCount: bottlenecks?.filter(b => b.severity === 'high').length || 0,
   };
 }
