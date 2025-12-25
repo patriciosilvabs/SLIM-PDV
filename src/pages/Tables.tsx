@@ -2827,22 +2827,24 @@ export default function Tables() {
               />
             </div>
           </div>
-          <DialogFooter className="flex flex-col gap-2 sm:flex-row">
-            <Button variant="outline" onClick={() => setPaymentModalOpen(false)}>
+          <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+            <Button variant="outline" onClick={() => setPaymentModalOpen(false)} className="sm:flex-none">
               Cancelar
             </Button>
-            <Button 
-              variant="secondary" 
-              onClick={handlePartialPayment}
-              disabled={createPayment.isPending}
-              className="flex items-center gap-2"
-            >
-              <ArrowRight className="h-4 w-4" />
-              Pagar e continuar
-            </Button>
-            <Button onClick={handleConfirmPayment}>
-              Adicionar
-            </Button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button 
+                variant="secondary" 
+                onClick={handlePartialPayment}
+                disabled={createPayment.isPending}
+                className="flex items-center gap-2"
+              >
+                <ArrowRight className="h-4 w-4" />
+                Pagar e continuar
+              </Button>
+              <Button onClick={handleConfirmPayment}>
+                Adicionar
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
