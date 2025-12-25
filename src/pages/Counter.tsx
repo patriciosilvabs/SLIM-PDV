@@ -118,7 +118,7 @@ export default function Counter() {
   const { createOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
   const { toast } = useToast();
   const { duplicateItems, autoPrintKitchenTicket, autoPrintCustomerReceipt, duplicateKitchenTicket } = useOrderSettings();
-  const { getInitialOrderStatus } = useKdsSettings();
+  const { getInitialOrderStatus, settings: kdsSettings } = useKdsSettings();
   const printer = usePrinterOptional();
   const { data: printSectors } = usePrintSectors();
   const { profile } = useProfile();
@@ -470,8 +470,9 @@ export default function Counter() {
       
       if (error) throw error;
       
-      // Print cancellation ticket to kitchen
-      if (printer?.canPrintToKitchen && orderToCancel.order_items && orderToCancel.order_items.length > 0) {
+      // Print cancellation ticket to kitchen (if enabled in settings)
+      const autoPrint = kdsSettings.autoPrintCancellations ?? true;
+      if (autoPrint && printer?.canPrintToKitchen && orderToCancel.order_items && orderToCancel.order_items.length > 0) {
         try {
           const cancellationData: CancellationTicketData = {
             orderNumber: orderToCancel.id,

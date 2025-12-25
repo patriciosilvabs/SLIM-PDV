@@ -110,7 +110,7 @@ export default function Tables() {
   const { settings: tableWaitSettings } = useTableWaitSettings();
   const { settings: idleTableSettings } = useIdleTableSettings();
   const { playOrderReadySound, playTableWaitAlertSound, playIdleTableAlertSound, settings: audioSettings } = useAudioNotification();
-  const { getInitialOrderStatus } = useKdsSettings();
+  const { getInitialOrderStatus, settings: kdsSettings } = useKdsSettings();
   const { autoPrintKitchenTicket, autoPrintCustomerReceipt, duplicateKitchenTicket } = useOrderSettings();
   const printer = usePrinterOptional();
   const { data: printSectors } = usePrintSectors();
@@ -773,8 +773,9 @@ export default function Tables() {
       
       if (orderError) throw orderError;
       
-      // Print cancellation ticket to kitchen
-      if (printer?.canPrintToKitchen && selectedOrder.order_items && selectedOrder.order_items.length > 0) {
+      // Print cancellation ticket to kitchen (if enabled in settings)
+      const autoPrint = kdsSettings.autoPrintCancellations ?? true;
+      if (autoPrint && printer?.canPrintToKitchen && selectedOrder.order_items && selectedOrder.order_items.length > 0) {
         try {
           const cancellationData: CancellationTicketData = {
             orderNumber: selectedOrder.id,
@@ -1287,7 +1288,7 @@ export default function Tables() {
                     const reservation = getTableReservation(table.id);
                     const isSelected = selectedTable?.id === table.id;
                     const isOrderReady = order?.status === 'ready';
-                    const isOrderDelivered = order?.status === 'delivered';
+                    const isOrderDelivered = order?.status === 'delivered' && table.status !== 'available';
                     
                     // Check for partial payments
                     const tablePaymentInfo = tablePaymentsMap.get(table.id);

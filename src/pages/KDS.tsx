@@ -10,7 +10,7 @@ import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { AccessDenied } from '@/components/auth/AccessDenied';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp, Ban, History } from 'lucide-react';
+import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp, Ban, History, Trash2, CalendarDays } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
@@ -37,8 +37,11 @@ interface CancellationHistoryItem {
 }
 
 const FILTER_STORAGE_KEY = 'kds-order-type-filter';
+const CANCELLATION_HISTORY_KEY = 'kds-cancellation-history';
 const MAX_WAIT_ALERT_THRESHOLD = 25; // minutes
 const MAX_WAIT_ALERT_COOLDOWN = 300000; // 5 minutes in ms
+
+type HistoryPeriodFilter = 'today' | '7days' | '30days' | 'all';
 
 // Format time display in hours after 60 minutes
 const formatTimeDisplay = (minutes: number): string => {
@@ -78,9 +81,26 @@ export default function KDS() {
   const [unconfirmedCancellations, setUnconfirmedCancellations] = useState<Map<string, Order>>(new Map());
   const cancelledSoundIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Cancellation history (last 10 confirmed cancellations)
-  const [cancellationHistory, setCancellationHistory] = useState<CancellationHistoryItem[]>([]);
+  // Cancellation history - persisted in localStorage
+  const [cancellationHistory, setCancellationHistory] = useState<CancellationHistoryItem[]>(() => {
+    try {
+      const stored = localStorage.getItem(CANCELLATION_HISTORY_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Convert date strings back to Date objects
+        return parsed.map((item: any) => ({
+          ...item,
+          cancelledAt: new Date(item.cancelledAt),
+          confirmedAt: new Date(item.confirmedAt),
+        }));
+      }
+    } catch (e) {
+      console.error('Error loading cancellation history:', e);
+    }
+    return [];
+  });
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [historyPeriodFilter, setHistoryPeriodFilter] = useState<HistoryPeriodFilter>('today');
   
   const canChangeStatus = hasPermission('kds_change_status');
   const lastMetricUpdateRef = useRef<string>('');
@@ -472,7 +492,16 @@ export default function KDS() {
         customerName: order.customer_name || undefined
       };
       
-      setCancellationHistory(prev => [historyItem, ...prev].slice(0, 10));
+      setCancellationHistory(prev => {
+        const updated = [historyItem, ...prev].slice(0, 100); // Keep max 100 items
+        // Persist to localStorage
+        try {
+          localStorage.setItem(CANCELLATION_HISTORY_KEY, JSON.stringify(updated));
+        } catch (e) {
+          console.error('Error saving cancellation history:', e);
+        }
+        return updated;
+      });
     }
     
     setUnconfirmedCancellations(prev => {
@@ -486,9 +515,48 @@ export default function KDS() {
     toast.success('Cancelamento confirmado', { duration: 2000 });
   };
 
-  // Cancellation History Panel Component
+  // Cancellation History Panel Component with filters
   const CancellationHistoryPanel = () => {
     if (cancellationHistory.length === 0) return null;
+    
+    // Filter history by period
+    const getFilteredHistory = () => {
+      const now = new Date();
+      return cancellationHistory.filter(item => {
+        const itemDate = new Date(item.confirmedAt);
+        switch (historyPeriodFilter) {
+          case 'today':
+            return itemDate.toDateString() === now.toDateString();
+          case '7days':
+            const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            return itemDate >= sevenDaysAgo;
+          case '30days':
+            const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            return itemDate >= thirtyDaysAgo;
+          default:
+            return true;
+        }
+      });
+    };
+    
+    const filteredHistory = getFilteredHistory();
+    
+    const handleClearHistory = () => {
+      setCancellationHistory([]);
+      try {
+        localStorage.removeItem(CANCELLATION_HISTORY_KEY);
+      } catch (e) {
+        console.error('Error clearing cancellation history:', e);
+      }
+      toast.success('Histórico limpo');
+    };
+    
+    const periodLabels: Record<HistoryPeriodFilter, string> = {
+      today: 'Hoje',
+      '7days': '7 dias',
+      '30days': '30 dias',
+      all: 'Todos',
+    };
     
     return (
       <Collapsible open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
@@ -502,43 +570,82 @@ export default function KDS() {
             {isHistoryOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="absolute right-0 top-full mt-2 z-50 w-80 sm:w-96">
+        <CollapsibleContent className="absolute right-0 top-full mt-2 z-50 w-80 sm:w-[420px]">
           <Card className="border shadow-lg">
             <CardHeader className="pb-2 pt-3 px-4">
-              <h3 className="font-semibold text-sm">Cancelamentos Confirmados</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-sm">Cancelamentos Confirmados</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-destructive hover:text-destructive"
+                  onClick={handleClearHistory}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1" />
+                  <span className="text-xs">Limpar</span>
+                </Button>
+              </div>
+              <div className="flex gap-1 mt-2">
+                {(Object.keys(periodLabels) as HistoryPeriodFilter[]).map((period) => (
+                  <Button
+                    key={period}
+                    variant={historyPeriodFilter === period ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setHistoryPeriodFilter(period)}
+                  >
+                    {periodLabels[period]}
+                  </Button>
+                ))}
+              </div>
             </CardHeader>
             <CardContent className="px-4 pb-3">
-              <ScrollArea className="max-h-[300px]">
-                <div className="space-y-2">
-                  {cancellationHistory.map((item, idx) => (
-                    <div 
-                      key={`${item.orderId}-${idx}`}
-                      className="flex flex-col p-2 bg-muted/50 rounded text-sm border"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold">#{item.orderNumber}</span>
-                          <Badge variant="outline" className="text-xs">{item.origin}</Badge>
+              {filteredHistory.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground text-sm">
+                  <CalendarDays className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  Nenhum cancelamento neste período
+                </div>
+              ) : (
+                <ScrollArea className="max-h-[350px]">
+                  <div className="space-y-2">
+                    {filteredHistory.map((item, idx) => (
+                      <div 
+                        key={`${item.orderId}-${idx}`}
+                        className="flex flex-col p-2.5 bg-muted/50 rounded text-sm border"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold">#{item.orderNumber}</span>
+                            <Badge variant="outline" className="text-xs">{item.origin}</Badge>
+                          </div>
+                          <span className="text-muted-foreground text-xs">
+                            {item.confirmedAt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                          </span>
                         </div>
                         {item.customerName && (
-                          <span className="text-muted-foreground text-xs truncate">{item.customerName}</span>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            Cliente: {item.customerName}
+                          </div>
                         )}
+                        <div className="text-xs text-destructive mt-1 font-medium">
+                          Motivo: {item.reason}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1 bg-background/50 p-1.5 rounded">
+                          {item.items.map((i, iIdx) => (
+                            <div key={iIdx}>
+                              {i.quantity}x {i.name}{i.variation ? ` (${i.variation})` : ''}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex justify-between text-xs text-muted-foreground mt-1.5 pt-1.5 border-t border-muted">
+                          <span>Cancelado: {item.cancelledAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span>Confirmado: {item.confirmedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
                       </div>
-                      <div className="text-xs text-destructive mt-1 font-medium">
-                        Motivo: {item.reason}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {item.items.slice(0, 2).map(i => `${i.quantity}x ${i.name}${i.variation ? ` (${i.variation})` : ''}`).join(', ')}
-                        {item.items.length > 2 && ` +${item.items.length - 2}`}
-                      </div>
-                      <div className="flex justify-between text-xs text-muted-foreground mt-1 pt-1 border-t border-muted">
-                        <span>Cancelado: {item.cancelledAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                        <span>Confirmado: {item.confirmedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
             </CardContent>
           </Card>
         </CollapsibleContent>
