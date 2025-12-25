@@ -506,16 +506,31 @@ export function KdsSettingsSection() {
         <CardContent className="space-y-6">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label className="font-medium">Exibir coluna "Pendente"</Label>
+              <Label className="font-medium">Mostrar quantidade de pessoas</Label>
               <p className="text-sm text-muted-foreground">
-                Quando desativado, pedidos entram direto em preparo. Útil para restaurantes
-                de alta demanda onde a produção inicia automaticamente.
+                Exibe "X pessoas" das mesas no KDS
               </p>
             </div>
             <Switch 
-              checked={settings.showPendingColumn} 
-              onCheckedChange={(showPendingColumn) => updateSettings({ showPendingColumn })} 
+              checked={settings.showPartySize ?? true}
+              onCheckedChange={(showPartySize) => updateSettings({ showPartySize })} 
             />
+          </div>
+
+          <div className="border-t pt-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="font-medium">Exibir coluna "Pendente"</Label>
+                <p className="text-sm text-muted-foreground">
+                  Quando desativado, pedidos entram direto em preparo. Útil para restaurantes
+                  de alta demanda onde a produção inicia automaticamente.
+                </p>
+              </div>
+              <Switch 
+                checked={settings.showPendingColumn} 
+                onCheckedChange={(showPendingColumn) => updateSettings({ showPendingColumn })} 
+              />
+            </div>
           </div>
 
           <div className="border-t pt-4">

@@ -7,6 +7,7 @@ import { KdsItemCounter } from './KdsItemCounter';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { cn } from '@/lib/utils';
 import { Play, CheckCircle, SkipForward, Circle, Layers, Flame, ChefHat, ArrowRight } from 'lucide-react';
+import { useMemo } from 'react';
 
 interface OrderItem {
   id: string;
@@ -54,6 +55,37 @@ const STATION_ICONS = {
   custom: ChefHat,
 };
 
+// Extrair informação da borda dos extras
+const getBorderInfo = (extras?: Array<{ extra_name: string }>): string | null => {
+  if (!extras || extras.length === 0) return null;
+  
+  const borderExtra = extras.find(e => {
+    const lower = e.extra_name.toLowerCase();
+    return lower.includes('borda') || lower.includes('massa');
+  });
+  
+  if (!borderExtra) return null;
+  
+  // "Massa & Borda: Borda de Chocolate" → "Borda de Chocolate"
+  const parts = borderExtra.extra_name.split(':');
+  return parts.length > 1 ? parts[1].trim() : borderExtra.extra_name;
+};
+
+// Extrair sabores dos extras
+const getFlavors = (extras?: Array<{ extra_name: string }>): string[] => {
+  if (!extras || extras.length === 0) return [];
+  
+  return extras
+    .filter(e => {
+      const lower = e.extra_name.toLowerCase();
+      return lower.includes('sabor') && !lower.includes('borda') && !lower.includes('massa');
+    })
+    .map(e => {
+      const parts = e.extra_name.split(':');
+      return parts.length > 1 ? parts[1].trim() : e.extra_name;
+    });
+};
+
 export function KdsStationCard({
   order,
   items,
@@ -67,7 +99,7 @@ export function KdsStationCard({
   onSkipItem,
   isProcessing,
 }: KdsStationCardProps) {
-  const { hasSpecialBorder } = useKdsSettings();
+  const { hasSpecialBorder, settings } = useKdsSettings();
   
   const StationIcon = STATION_ICONS[stationType as keyof typeof STATION_ICONS] || ChefHat;
   
@@ -81,10 +113,104 @@ export function KdsStationCard({
     return hasSpecialBorder(itemText);
   });
 
+  // Filtrar "X pessoas" das observações se a configuração estiver desativada
+  const displayOrderNotes = useMemo(() => {
+    if (!order.notes) return null;
+    if (settings.showPartySize) return order.notes;
+    // Remover "X pessoas" ou "X pessoa" das observações
+    return order.notes.replace(/\d+\s*pessoas?/gi, '').trim() || null;
+  }, [order.notes, settings.showPartySize]);
+
   const getOrderOriginLabel = () => {
     if (order.order_type === 'delivery') return 'DELIVERY';
     if (order.order_type === 'takeaway') return 'BALCÃO';
     return `MESA ${order.table?.number || '?'}`;
+  };
+
+  // Renderização contextual de item baseada no tipo da estação
+  const renderItemContent = (item: OrderItem, isInProgress: boolean = false) => {
+    const borderInfo = getBorderInfo(item.extras);
+    const flavors = getFlavors(item.extras);
+    const itemText = `${item.product?.name || ''} ${item.notes || ''} ${item.extras?.map(e => e.extra_name).join(' ') || ''}`;
+    
+    // Início e Bordas (prep_start): Mostra tamanho + borda PISCANDO, esconde sabores e observações
+    if (stationType === 'prep_start') {
+      return (
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-bold text-primary">{item.quantity}x</span>
+            <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
+            {item.variation?.name && (
+              <span className="text-xs text-muted-foreground">({item.variation.name})</span>
+            )}
+          </div>
+          {/* Borda - PISCANDO em destaque */}
+          {borderInfo && (
+            <div className="mt-1">
+              <span className="inline-flex px-2 py-0.5 bg-amber-500 text-amber-950 rounded font-bold text-sm animate-pulse">
+                🟡 {borderInfo}
+              </span>
+            </div>
+          )}
+          {/* NÃO mostra sabores e NÃO mostra observações na estação de início */}
+        </div>
+      );
+    }
+    
+    // Montagem (assembly): Mostra sabores + observações PISCANDO
+    if (stationType === 'assembly') {
+      return (
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-bold text-primary">{item.quantity}x</span>
+            <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
+            {item.variation?.name && (
+              <span className="text-xs text-muted-foreground">({item.variation.name})</span>
+            )}
+          </div>
+          {/* Sabores */}
+          {flavors.length > 0 && (
+            <p className="text-sm text-blue-600 mt-0.5">
+              🍕 {flavors.join(' + ')}
+            </p>
+          )}
+          {/* Observações - PISCANDO */}
+          {item.notes && (
+            <p className="text-sm text-orange-500 mt-0.5 animate-pulse font-bold">
+              📝 {item.notes}
+            </p>
+          )}
+        </div>
+      );
+    }
+    
+    // Forno e Expedição (oven_expedite) e outros: Mostra tudo sem piscar
+    return (
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="font-bold text-primary">{item.quantity}x</span>
+          <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
+          {item.variation?.name && (
+            <span className="text-xs text-muted-foreground">({item.variation.name})</span>
+          )}
+          <KdsBorderBadge text={itemText} />
+        </div>
+        {/* Sabores */}
+        {flavors.length > 0 && (
+          <p className="text-sm text-blue-600 mt-0.5">
+            🍕 {flavors.join(' + ')}
+          </p>
+        )}
+        {item.extras && item.extras.length > 0 && flavors.length === 0 && (
+          <p className="text-xs text-blue-600 mt-0.5 truncate">
+            + {item.extras.map(e => e.extra_name.split(': ').pop()).join(', ')}
+          </p>
+        )}
+        {item.notes && (
+          <p className="text-xs text-orange-500 mt-0.5">📝 {item.notes}</p>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -127,118 +253,91 @@ export function KdsStationCard({
         {/* Itens aguardando */}
         {waitingItems.length > 0 && (
           <div className="space-y-2">
-            {waitingItems.map((item, idx) => {
-              const itemText = `${item.product?.name || ''} ${item.notes || ''} ${item.extras?.map(e => e.extra_name).join(' ') || ''}`;
-              
-              return (
-                <div 
-                  key={item.id} 
-                  className="flex items-center justify-between gap-2 p-2 bg-muted/50 rounded-lg border"
+            {waitingItems.map((item) => (
+              <div 
+                key={item.id} 
+                className="flex items-center justify-between gap-2 p-2 bg-muted/50 rounded-lg border"
+              >
+                {renderItemContent(item)}
+                
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={() => onStartItem(item.id)}
+                  disabled={isProcessing}
                 >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-bold text-primary">{item.quantity}x</span>
-                      <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
-                      {item.variation?.name && (
-                        <span className="text-xs text-muted-foreground">({item.variation.name})</span>
-                      )}
-                      <KdsBorderBadge text={itemText} />
-                    </div>
-                    {item.extras && item.extras.length > 0 && (
-                      <p className="text-xs text-blue-600 mt-0.5 truncate">
-                        + {item.extras.map(e => e.extra_name.split(': ').pop()).join(', ')}
-                      </p>
-                    )}
-                    {item.notes && (
-                      <p className="text-xs text-orange-500 mt-0.5">📝 {item.notes}</p>
-                    )}
-                  </div>
-                  
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => onStartItem(item.id)}
-                    disabled={isProcessing}
-                  >
-                    <Play className="h-3 w-3" />
-                  </Button>
-                </div>
-              );
-            })}
+                  <Play className="h-3 w-3" />
+                </Button>
+              </div>
+            ))}
           </div>
         )}
         
         {/* Itens em progresso */}
         {inProgressItems.length > 0 && (
           <div className="space-y-2">
-            {inProgressItems.map((item) => {
-              const itemText = `${item.product?.name || ''} ${item.notes || ''} ${item.extras?.map(e => e.extra_name).join(' ') || ''}`;
-              
-              return (
-                <div 
-                  key={item.id} 
-                  className="p-2 rounded-lg border-2"
-                  style={{ borderColor: stationColor, backgroundColor: stationColor + '10' }}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <Badge variant="secondary" className="text-xs">Em andamento</Badge>
-                        <span className="font-bold">{item.quantity}x</span>
-                        <span className="font-medium">{item.product?.name}</span>
-                        <KdsBorderBadge text={itemText} />
-                      </div>
-                      {item.station_started_at && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Iniciado há {Math.floor((Date.now() - new Date(item.station_started_at).getTime()) / 60000)} min
-                        </p>
-                      )}
+            {inProgressItems.map((item) => (
+              <div 
+                key={item.id} 
+                className="p-2 rounded-lg border-2"
+                style={{ borderColor: stationColor, backgroundColor: stationColor + '10' }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                      <Badge variant="secondary" className="text-xs">Em andamento</Badge>
                     </div>
-                  </div>
-                  
-                  <div className="flex gap-2 mt-2">
-                    {onSkipItem && !isLastStation && (
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => onSkipItem(item.id)}
-                        disabled={isProcessing}
-                        className="flex-1"
-                      >
-                        <SkipForward className="h-3 w-3 mr-1" />
-                        Pular
-                      </Button>
+                    {renderItemContent(item, true)}
+                    {item.station_started_at && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Iniciado há {Math.floor((Date.now() - new Date(item.station_started_at).getTime()) / 60000)} min
+                      </p>
                     )}
-                    <Button 
-                      size="sm" 
-                      onClick={() => onCompleteItem(item.id)}
-                      disabled={isProcessing}
-                      className="flex-1"
-                      style={{ backgroundColor: stationColor }}
-                    >
-                      {isLastStation ? (
-                        <>
-                          <CheckCircle className="h-3 w-3 mr-1" />
-                          Concluir
-                        </>
-                      ) : (
-                        <>
-                          <ArrowRight className="h-3 w-3 mr-1" />
-                          Próxima
-                        </>
-                      )}
-                    </Button>
                   </div>
                 </div>
-              );
-            })}
+                
+                <div className="flex gap-2 mt-2">
+                  {onSkipItem && !isLastStation && (
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => onSkipItem(item.id)}
+                      disabled={isProcessing}
+                      className="flex-1"
+                    >
+                      <SkipForward className="h-3 w-3 mr-1" />
+                      Pular
+                    </Button>
+                  )}
+                  <Button 
+                    size="sm" 
+                    onClick={() => onCompleteItem(item.id)}
+                    disabled={isProcessing}
+                    className="flex-1"
+                    style={{ backgroundColor: stationColor }}
+                  >
+                    {isLastStation ? (
+                      <>
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Concluir
+                      </>
+                    ) : (
+                      <>
+                        <ArrowRight className="h-3 w-3 mr-1" />
+                        Próxima
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
         
         {/* Observações do pedido */}
-        {order.notes && (
+        {displayOrderNotes && (
           <div className="text-xs text-orange-600 bg-orange-500/10 rounded p-2">
-            <strong>Obs pedido:</strong> {order.notes}
+            <strong>Obs pedido:</strong> {displayOrderNotes}
           </div>
         )}
       </CardContent>
