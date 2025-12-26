@@ -30,8 +30,9 @@ import { KdsStationsSettings } from '@/components/settings/KdsStationsSettings';
 import { OrderSettingsSection } from '@/components/settings/OrderSettingsSection';
 import { UsersSettings } from '@/components/settings/UsersSettings';
 import { RolesSettings } from '@/components/settings/RolesSettings';
+import { InvitationsSettings } from '@/components/settings/InvitationsSettings';
 
-const VALID_SECTIONS: SettingsSection[] = ['tables', 'kds', 'kds-stations', 'orders', 'printers', 'notifications', 'announcements', 'push', 'users', 'roles'];
+const VALID_SECTIONS: SettingsSection[] = ['tables', 'kds', 'kds-stations', 'orders', 'printers', 'notifications', 'announcements', 'push', 'users', 'roles', 'invitations'];
 
 // Hook to check if system has any admins
 function useHasAdmins() {
@@ -172,6 +173,8 @@ export default function Settings() {
         return <UsersSettings />;
       case 'roles':
         return <RolesSettings />;
+      case 'invitations':
+        return <InvitationsSettings />;
       default:
         return <TablesSettings />;
     }
@@ -238,9 +241,10 @@ export default function Settings() {
                   <option value="announcements">Avisos Agendados</option>
                   <option value="push">Push</option>
                 </optgroup>
-                <optgroup label="Usuários">
+                <optgroup label="Equipe">
                   <option value="users">Usuários</option>
                   <option value="roles">Funções</option>
+                  <option value="invitations">Convites</option>
                 </optgroup>
               </select>
             </div>
