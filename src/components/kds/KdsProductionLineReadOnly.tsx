@@ -123,6 +123,21 @@ function ReadOnlyItemCard({
       });
   };
 
+  // Extrair informação da borda dos extras
+  const getBorderInfo = (extras?: Array<{ extra_name: string }>): string | null => {
+    if (!extras || extras.length === 0) return null;
+    
+    const borderExtra = extras.find(e => {
+      const lower = e.extra_name.toLowerCase();
+      return lower.includes('borda') || lower.includes('massa');
+    });
+    
+    if (!borderExtra) return null;
+    
+    const parts = borderExtra.extra_name.split(':');
+    return parts.length > 1 ? parts[1].trim() : borderExtra.extra_name;
+  };
+
   return (
     <Card className="shadow-sm">
       <CardHeader 
@@ -148,6 +163,7 @@ function ReadOnlyItemCard({
       <CardContent className="px-3 pb-3 space-y-2">
         {items.map((item) => {
           const flavors = getFlavors(item.extras);
+          const borderInfo = getBorderInfo(item.extras);
           return (
             <div key={item.id} className="p-2 bg-muted/50 rounded-lg border">
               <div className="flex items-center justify-between gap-1.5 flex-wrap">
@@ -165,13 +181,20 @@ function ReadOnlyItemCard({
                   yellowMinutes={settings.timerYellowMinutes}
                 />
               </div>
+              {/* BORDA - Sempre visível */}
+              {borderInfo && (
+                <p className="text-xs text-amber-600 mt-0.5 font-medium">
+                  🟡 Borda: {borderInfo}
+                </p>
+              )}
               {flavors.length > 0 && (
                 <p className="text-xs text-blue-600 mt-0.5">
                   🍕 {flavors.join(' + ')}
                 </p>
               )}
+              {/* OBSERVAÇÕES - Sempre visível */}
               {item.notes && (
-                <p className="text-xs text-orange-500 mt-0.5">📝 {item.notes}</p>
+                <p className="text-xs text-orange-500 mt-0.5 font-medium">📝 {item.notes}</p>
               )}
             </div>
           );
@@ -220,6 +243,21 @@ function ReadyOrderCard({
       });
   };
 
+  // Extrair informação da borda dos extras
+  const getBorderInfo = (extras?: Array<{ extra_name: string }>): string | null => {
+    if (!extras || extras.length === 0) return null;
+    
+    const borderExtra = extras.find(e => {
+      const lower = e.extra_name.toLowerCase();
+      return lower.includes('borda') || lower.includes('massa');
+    });
+    
+    if (!borderExtra) return null;
+    
+    const parts = borderExtra.extra_name.split(':');
+    return parts.length > 1 ? parts[1].trim() : borderExtra.extra_name;
+  };
+
   return (
     <Card className="shadow-sm">
       <CardHeader 
@@ -245,6 +283,7 @@ function ReadyOrderCard({
       <CardContent className="px-3 pb-3 space-y-2">
         {items.slice(0, 5).map((item) => {
           const flavors = getFlavors(item.extras);
+          const borderInfo = getBorderInfo(item.extras);
           return (
             <div key={item.id} className="p-2 bg-muted/50 rounded-lg border">
               <div className="flex items-center gap-1.5">
@@ -254,13 +293,20 @@ function ReadyOrderCard({
                   <span className="text-xs text-muted-foreground">({item.variation.name})</span>
                 )}
               </div>
+              {/* BORDA - Sempre visível */}
+              {borderInfo && (
+                <p className="text-xs text-amber-600 mt-0.5 font-medium">
+                  🟡 Borda: {borderInfo}
+                </p>
+              )}
               {flavors.length > 0 && (
                 <p className="text-xs text-blue-600 mt-0.5">
                   🍕 {flavors.join(' + ')}
                 </p>
               )}
+              {/* OBSERVAÇÕES - Sempre visível */}
               {item.notes && (
-                <p className="text-xs text-orange-500 mt-0.5">📝 {item.notes}</p>
+                <p className="text-xs text-orange-500 mt-0.5 font-medium">📝 {item.notes}</p>
               )}
             </div>
           );

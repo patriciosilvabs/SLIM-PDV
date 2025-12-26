@@ -311,7 +311,7 @@ export function KdsStationCard({
       );
     }
     
-    // Outros tipos de estação: Mostra tudo sem piscar
+    // Outros tipos de estação: Mostra tudo (incluindo borda e observações destacadas)
     return (
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-1.5 flex-wrap">
@@ -321,28 +321,35 @@ export function KdsStationCard({
             {item.variation?.name && (
               <span className="text-xs text-muted-foreground">({item.variation.name})</span>
             )}
-            <KdsBorderBadge text={itemText} />
           </div>
-            <StationTimer 
-              startedAt={item.station_started_at} 
-              createdAt={item.created_at} 
-              greenMinutes={settings.timerGreenMinutes}
-              yellowMinutes={settings.timerYellowMinutes}
-            />
+          <StationTimer 
+            startedAt={item.station_started_at} 
+            createdAt={item.created_at} 
+            greenMinutes={settings.timerGreenMinutes}
+            yellowMinutes={settings.timerYellowMinutes}
+          />
+        </div>
+        
+        {/* BORDA - Sempre visível */}
+        {borderInfo && (
+          <div className="mt-1 flex items-center gap-1 text-sm">
+            <span className="text-amber-600 font-medium">🟡 Borda:</span>
+            <span className="font-bold text-amber-700">{borderInfo}</span>
           </div>
-          {/* Sabores */}
-          {flavors.length > 0 && (
+        )}
+        
+        {/* Sabores */}
+        {flavors.length > 0 && (
           <p className="text-sm text-blue-600 mt-0.5">
             🍕 {flavors.join(' + ')}
           </p>
         )}
-        {item.extras && item.extras.length > 0 && flavors.length === 0 && (
-          <p className="text-xs text-blue-600 mt-0.5 truncate">
-            + {item.extras.map(e => e.extra_name.split(': ').pop()).join(', ')}
-          </p>
-        )}
+        
+        {/* OBSERVAÇÕES - Sempre visível */}
         {item.notes && (
-          <p className="text-xs text-orange-500 mt-0.5">📝 {item.notes}</p>
+          <p className="text-sm text-orange-600 mt-0.5 font-medium">
+            📝 {item.notes}
+          </p>
         )}
       </div>
     );
