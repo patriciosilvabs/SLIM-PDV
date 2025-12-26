@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { useSalesReport, useProductsReport, usePeakHoursAnalysis, useCashRegisterHistory, DateRange, getDateRange } from '@/hooks/useReports';
+import { useSalesReport, useProductsReport, usePeakHoursAnalysis, useCashRegisterHistory, useWaiterReport, DateRange, getDateRange } from '@/hooks/useReports';
 import { useCancellationHistory, useCancellationSummary } from '@/hooks/useCancellationHistory';
 import { useEmployees } from '@/hooks/useEmployees';
 import { useTableSwitches } from '@/hooks/useTableSwitches';
@@ -41,7 +41,8 @@ import {
   ArrowRightLeft,
   User,
   Ban,
-  XCircle
+  XCircle,
+  Award
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -76,6 +77,7 @@ export default function Reports() {
   const { data: productsReport, isLoading: productsLoading } = useProductsReport(dateRange, customStart, customEnd, employeeId);
   const { data: peakHours, isLoading: peakLoading } = usePeakHoursAnalysis(dateRange, customStart, customEnd);
   const { data: cashHistory } = useCashRegisterHistory();
+  const { data: waiterReport } = useWaiterReport(dateRange, customStart, customEnd);
   
   const { start, end } = getDateRange(dateRange, customStart, customEnd);
   const { data: tableSwitches } = useTableSwitches(start, end);
@@ -87,6 +89,10 @@ export default function Reports() {
     reason: reasonFilter || undefined,
   });
   const cancellationSummary = useCancellationSummary(cancellations);
+
+  // Waiter stats
+  const waiterTotalRevenue = waiterReport?.reduce((sum, w) => sum + w.totalRevenue, 0) || 0;
+  const waiterAverageRevenue = waiterReport && waiterReport.length > 0 ? waiterTotalRevenue / waiterReport.length : 0;
 
   // Permission check AFTER all hooks
   if (!permissionsLoading && !hasPermission('reports_view')) {
@@ -172,6 +178,7 @@ export default function Reports() {
           <TabsList className="flex-wrap">
             <TabsTrigger value="sales">Vendas</TabsTrigger>
             <TabsTrigger value="products">Produtos</TabsTrigger>
+            <TabsTrigger value="waiters">Garçons</TabsTrigger>
             <TabsTrigger value="peak">Horários de Pico</TabsTrigger>
             <TabsTrigger value="cash">Histórico de Caixa</TabsTrigger>
             <TabsTrigger value="switches">Trocas de Mesa</TabsTrigger>
@@ -375,6 +382,146 @@ export default function Reports() {
                             </td>
                           </tr>
                         ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Waiters Tab */}
+          <TabsContent value="waiters" className="mt-4 space-y-6">
+            {/* KPIs */}
+            <div className="grid sm:grid-cols-3 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary/10 rounded-lg">
+                      <DollarSign className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Faturamento Total</p>
+                      <p className="text-2xl font-bold">{formatCurrency(waiterTotalRevenue)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-accent/10 rounded-lg">
+                      <User className="h-5 w-5 text-accent" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Garçons Ativos</p>
+                      <p className="text-2xl font-bold">{waiterReport?.length || 0}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-info/10 rounded-lg">
+                      <TrendingUp className="h-5 w-5 text-info" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Média por Garçom</p>
+                      <p className="text-2xl font-bold">{formatCurrency(waiterAverageRevenue)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid lg:grid-cols-2 gap-6">
+              {/* Waiter Ranking Chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Award className="h-5 w-5 text-warning" />
+                    Ranking de Vendas por Garçom
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[400px]">
+                    {waiterReport && waiterReport.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart 
+                          data={waiterReport.slice(0, 10)}
+                          layout="vertical"
+                          margin={{ left: 80 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis type="number" tickFormatter={(v) => `R$${v}`} />
+                          <YAxis 
+                            dataKey="name" 
+                            type="category" 
+                            width={75}
+                            tick={{ fontSize: 12 }}
+                          />
+                          <Tooltip 
+                            formatter={(value: number) => formatCurrency(value)}
+                          />
+                          <Bar dataKey="totalRevenue" fill="hsl(var(--primary))" name="Faturamento" radius={[0, 4, 4, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-muted-foreground">
+                        Nenhum dado disponível
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Waiter Details Table */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Detalhamento por Garçom</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="max-h-[400px] overflow-y-auto">
+                    <table className="w-full">
+                      <thead className="sticky top-0 bg-background">
+                        <tr className="border-b">
+                          <th className="text-left py-2 font-medium">Garçom</th>
+                          <th className="text-right py-2 font-medium">Itens</th>
+                          <th className="text-right py-2 font-medium">Pedidos</th>
+                          <th className="text-right py-2 font-medium">Faturamento</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {waiterReport?.map((waiter, i) => (
+                          <tr key={waiter.id} className="border-b last:border-0">
+                            <td className="py-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                  i === 0 ? 'bg-warning/20 text-warning' :
+                                  i === 1 ? 'bg-muted text-muted-foreground' :
+                                  i === 2 ? 'bg-accent/20 text-accent' :
+                                  'bg-muted/50 text-muted-foreground'
+                                }`}>
+                                  {i + 1}
+                                </span>
+                                <span className="font-medium">{waiter.name}</span>
+                              </div>
+                            </td>
+                            <td className="text-right py-2">{waiter.totalItems}</td>
+                            <td className="text-right py-2">{waiter.orderCount}</td>
+                            <td className="text-right py-2 font-medium text-primary">
+                              {formatCurrency(waiter.totalRevenue)}
+                            </td>
+                          </tr>
+                        ))}
+                        {(!waiterReport || waiterReport.length === 0) && (
+                          <tr>
+                            <td colSpan={4} className="py-8 text-center text-muted-foreground">
+                              Nenhum dado disponível
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </div>

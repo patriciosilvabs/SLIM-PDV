@@ -278,3 +278,86 @@ export function useCashMovements(cashRegisterId?: string) {
     enabled: !!cashRegisterId,
   });
 }
+
+export interface WaiterReportData {
+  id: string;
+  name: string;
+  totalItems: number;
+  totalRevenue: number;
+  averagePerItem: number;
+  orderCount: number;
+}
+
+export function useWaiterReport(range: DateRange, customStart?: Date, customEnd?: Date) {
+  const { start, end } = getDateRange(range, customStart, customEnd);
+  
+  return useQuery({
+    queryKey: ['waiter-report', range, customStart?.toISOString(), customEnd?.toISOString()],
+    queryFn: async (): Promise<WaiterReportData[]> => {
+      // Get delivered orders in range
+      const { data: orders, error: ordersError } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('status', 'delivered')
+        .gte('created_at', start.toISOString())
+        .lte('created_at', end.toISOString());
+      
+      if (ordersError) throw ordersError;
+
+      const orderIds = orders?.map(o => o.id) || [];
+      if (orderIds.length === 0) return [];
+
+      // Get order items with added_by
+      const { data: items, error: itemsError } = await supabase
+        .from('order_items')
+        .select('added_by, quantity, total_price, order_id')
+        .in('order_id', orderIds)
+        .not('added_by', 'is', null);
+      
+      if (itemsError) throw itemsError;
+      if (!items || items.length === 0) return [];
+
+      // Get unique waiter ids
+      const waiterIds = [...new Set(items.map(i => i.added_by).filter(Boolean))] as string[];
+
+      // Get waiter profiles
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .in('id', waiterIds);
+
+      const profileMap = new Map(profiles?.map(p => [p.id, p.name]) || []);
+
+      // Aggregate by waiter
+      const waiterMap = new Map<string, { 
+        totalItems: number; 
+        totalRevenue: number; 
+        orders: Set<string>;
+      }>();
+
+      items.forEach(item => {
+        if (!item.added_by) return;
+        const existing = waiterMap.get(item.added_by) || { 
+          totalItems: 0, 
+          totalRevenue: 0, 
+          orders: new Set<string>() 
+        };
+        existing.totalItems += item.quantity;
+        existing.totalRevenue += Number(item.total_price);
+        existing.orders.add(item.order_id);
+        waiterMap.set(item.added_by, existing);
+      });
+
+      return Array.from(waiterMap.entries())
+        .map(([id, data]) => ({
+          id,
+          name: profileMap.get(id) || 'Desconhecido',
+          totalItems: data.totalItems,
+          totalRevenue: data.totalRevenue,
+          averagePerItem: data.totalItems > 0 ? data.totalRevenue / data.totalItems : 0,
+          orderCount: data.orders.size,
+        }))
+        .sort((a, b) => b.totalRevenue - a.totalRevenue);
+    },
+  });
+}

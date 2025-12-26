@@ -137,3 +137,74 @@ export function useSalesChart(days: number = 7) {
     },
   });
 }
+
+export interface TopWaiter {
+  id: string;
+  name: string;
+  itemCount: number;
+  totalRevenue: number;
+}
+
+export function useTopWaiters(days: number = 7) {
+  return useQuery({
+    queryKey: ['top-waiters', days],
+    queryFn: async () => {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+
+      // Get order_items with added_by from delivered orders
+      const { data: items } = await supabase
+        .from('order_items')
+        .select(`
+          added_by,
+          total_price,
+          quantity,
+          order:orders!inner(status, created_at)
+        `)
+        .gte('created_at', startDate.toISOString())
+        .not('added_by', 'is', null);
+
+      if (!items) return [];
+
+      // Filter delivered orders only
+      const deliveredItems = items.filter(
+        (item) => item.order?.status === 'delivered'
+      );
+
+      // Get unique waiter ids
+      const waiterIds = [...new Set(deliveredItems.map((i) => i.added_by).filter(Boolean))] as string[];
+
+      if (waiterIds.length === 0) return [];
+
+      // Get waiter profiles
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .in('id', waiterIds);
+
+      const profileMap = new Map(profiles?.map((p) => [p.id, p.name]) || []);
+
+      // Group by waiter
+      const waiterMap = new Map<string, { itemCount: number; revenue: number }>();
+
+      deliveredItems.forEach((item) => {
+        if (!item.added_by) return;
+        const existing = waiterMap.get(item.added_by) || { itemCount: 0, revenue: 0 };
+        waiterMap.set(item.added_by, {
+          itemCount: existing.itemCount + item.quantity,
+          revenue: existing.revenue + Number(item.total_price),
+        });
+      });
+
+      return Array.from(waiterMap.entries())
+        .map(([id, data]) => ({
+          id,
+          name: profileMap.get(id) || 'Desconhecido',
+          itemCount: data.itemCount,
+          totalRevenue: data.revenue,
+        }))
+        .sort((a, b) => b.totalRevenue - a.totalRevenue)
+        .slice(0, 5) as TopWaiter[];
+    },
+  });
+}
