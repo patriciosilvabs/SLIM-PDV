@@ -1499,6 +1499,120 @@ export type Database = {
           },
         ]
       }
+      subscription_plans: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          features: Json | null
+          id: string
+          is_active: boolean | null
+          max_kds_stations: number | null
+          max_orders_per_month: number | null
+          max_products: number | null
+          max_tables: number | null
+          max_users: number | null
+          name: string
+          price_monthly: number
+          price_yearly: number | null
+          sort_order: number | null
+          stripe_price_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_kds_stations?: number | null
+          max_orders_per_month?: number | null
+          max_products?: number | null
+          max_tables?: number | null
+          max_users?: number | null
+          name: string
+          price_monthly?: number
+          price_yearly?: number | null
+          sort_order?: number | null
+          stripe_price_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_kds_stations?: number | null
+          max_orders_per_month?: number | null
+          max_products?: number | null
+          max_tables?: number | null
+          max_users?: number | null
+          name?: string
+          price_monthly?: number
+          price_yearly?: number | null
+          sort_order?: number | null
+          stripe_price_id?: string | null
+        }
+        Relationships: []
+      }
+      subscriptions: {
+        Row: {
+          canceled_at: string | null
+          created_at: string | null
+          current_period_end: string | null
+          current_period_start: string | null
+          id: string
+          plan_id: string
+          status: string | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          tenant_id: string
+          trial_ends_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          canceled_at?: string | null
+          created_at?: string | null
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          plan_id: string
+          status?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          tenant_id: string
+          trial_ends_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          canceled_at?: string | null
+          created_at?: string | null
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          plan_id?: string
+          status?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          tenant_id?: string
+          trial_ends_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       table_switches: {
         Row: {
           from_table_id: string
@@ -1581,6 +1695,92 @@ export type Database = {
         }
         Relationships: []
       }
+      tenant_members: {
+        Row: {
+          id: string
+          invited_at: string | null
+          invited_by: string | null
+          is_owner: boolean | null
+          joined_at: string | null
+          role: Database["public"]["Enums"]["app_role"]
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          invited_at?: string | null
+          invited_by?: string | null
+          is_owner?: boolean | null
+          joined_at?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          invited_at?: string | null
+          invited_by?: string | null
+          is_owner?: boolean | null
+          joined_at?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_members_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenants: {
+        Row: {
+          address: string | null
+          cnpj: string | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          logo_url: string | null
+          name: string
+          owner_id: string | null
+          phone: string | null
+          settings: Json | null
+          slug: string
+          updated_at: string | null
+        }
+        Insert: {
+          address?: string | null
+          cnpj?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          logo_url?: string | null
+          name: string
+          owner_id?: string | null
+          phone?: string | null
+          settings?: Json | null
+          slug: string
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string | null
+          cnpj?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          logo_url?: string | null
+          name?: string
+          owner_id?: string | null
+          phone?: string | null
+          settings?: Json | null
+          slug?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       user_permissions: {
         Row: {
           created_at: string | null
@@ -1631,7 +1831,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      belongs_to_tenant: { Args: { _tenant_id: string }; Returns: boolean }
       can_bootstrap_admin: { Args: { _user_id: string }; Returns: boolean }
+      get_user_tenant_id: { Args: never; Returns: string }
+      has_active_subscription: {
+        Args: { _tenant_id: string }
+        Returns: boolean
+      }
       has_permission: {
         Args: {
           _permission: Database["public"]["Enums"]["permission_code"]
@@ -1647,6 +1853,7 @@ export type Database = {
         Returns: boolean
       }
       is_employee: { Args: { _user_id: string }; Returns: boolean }
+      is_tenant_owner: { Args: { _tenant_id: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "cashier" | "waiter" | "kitchen" | "kds"
