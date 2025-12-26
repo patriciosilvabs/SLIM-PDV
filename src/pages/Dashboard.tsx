@@ -1,11 +1,11 @@
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useDashboardStats, useTopProducts, useSalesChart } from '@/hooks/useDashboard';
+import { useDashboardStats, useTopProducts, useSalesChart, useTopWaiters } from '@/hooks/useDashboard';
 import { useMonthlyRevenue } from '@/hooks/useMonthlyRevenue';
 import { useOrders } from '@/hooks/useOrders';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { AccessDenied } from '@/components/auth/AccessDenied';
-import { DollarSign, ShoppingBag, Users, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
+import { DollarSign, ShoppingBag, Users, AlertTriangle, TrendingUp, TrendingDown, Award } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 function formatCurrency(value: number) {
@@ -20,6 +20,7 @@ export default function Dashboard() {
   const { data: salesChart } = useSalesChart(7);
   const { data: recentOrders } = useOrders(['pending', 'preparing']);
   const { data: monthlyRevenue } = useMonthlyRevenue(6);
+  const { data: topWaiters } = useTopWaiters(7);
 
   // Calculate current month totals and variation
   const currentMonthData = monthlyRevenue?.[monthlyRevenue.length - 1];
@@ -231,6 +232,40 @@ export default function Dashboard() {
                   </div>
                 ))}
                 {(!topProducts || topProducts.length === 0) && (
+                  <p className="text-muted-foreground text-center py-8">Nenhum dado disponível</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Top Waiters Ranking */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Award className="h-5 w-5 text-warning" />
+                Ranking de Garçons (7 dias)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {topWaiters?.map((waiter, index) => (
+                  <div key={waiter.id} className="flex items-center gap-4">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                      index === 0 ? 'bg-warning/20 text-warning' :
+                      index === 1 ? 'bg-muted text-muted-foreground' :
+                      index === 2 ? 'bg-accent/20 text-accent' :
+                      'bg-muted/50 text-muted-foreground'
+                    }`}>
+                      {index + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{waiter.name}</p>
+                      <p className="text-sm text-muted-foreground">{waiter.itemCount} itens vendidos</p>
+                    </div>
+                    <p className="font-semibold text-primary">{formatCurrency(waiter.totalRevenue)}</p>
+                  </div>
+                ))}
+                {(!topWaiters || topWaiters.length === 0) && (
                   <p className="text-muted-foreground text-center py-8">Nenhum dado disponível</p>
                 )}
               </div>
