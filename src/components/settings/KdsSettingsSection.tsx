@@ -9,9 +9,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { useKdsSettings, KdsOperationMode } from '@/hooks/useKdsSettings';
 import { useKdsStations } from '@/hooks/useKdsStations';
 import { useKdsDevice } from '@/hooks/useKdsDevice';
-import { ChefHat, Printer, Monitor, Factory, Clock, Circle, X, Plus, AlertTriangle, ChevronDown, Layers, User, Eye } from 'lucide-react';
+import { ChefHat, Printer, Monitor, Factory, Clock, Circle, X, Plus, AlertTriangle, ChevronDown, Layers, User, Eye, Palette } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { BADGE_COLOR_OPTIONS, getBadgeColorClasses } from '@/lib/badgeColors';
 
 export function KdsSettingsSection() {
   const { settings, updateSettings, updateDeviceSettings, updateBottleneckSettings, updateStationOverride, isLoading } = useKdsSettings();
@@ -577,6 +578,76 @@ export function KdsSettingsSection() {
                 checked={settings.showWaiterName ?? true}
                 onCheckedChange={(showWaiterName) => updateSettings({ showWaiterName })} 
               />
+            </div>
+          </div>
+
+          {/* Cores das Tarjas */}
+          <div className="border-t pt-4 space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Palette className="h-4 w-4" />
+              <Label className="font-medium">Cores das Tarjas</Label>
+            </div>
+            
+            {/* Cor da tarja de borda */}
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">Cor da tarja de borda</Label>
+              <div className="flex flex-wrap gap-2">
+                {BADGE_COLOR_OPTIONS.map(color => (
+                  <button
+                    key={color.value}
+                    type="button"
+                    onClick={() => updateSettings({ borderBadgeColor: color.value })}
+                    className={cn(
+                      "w-8 h-8 rounded-full border-2 transition-all",
+                      color.bgClass,
+                      settings.borderBadgeColor === color.value 
+                        ? "ring-2 ring-offset-2 ring-primary scale-110" 
+                        : "hover:scale-105"
+                    )}
+                    title={color.label}
+                  />
+                ))}
+              </div>
+              <div className="mt-2">
+                <span className={cn(
+                  "inline-flex px-2 py-1 rounded font-bold text-sm",
+                  getBadgeColorClasses(settings.borderBadgeColor).bg,
+                  getBadgeColorClasses(settings.borderBadgeColor).text
+                )}>
+                  🟡 Borda de Chocolate (preview)
+                </span>
+              </div>
+            </div>
+
+            {/* Cor da tarja de observações */}
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">Cor da tarja de observações</Label>
+              <div className="flex flex-wrap gap-2">
+                {BADGE_COLOR_OPTIONS.map(color => (
+                  <button
+                    key={color.value}
+                    type="button"
+                    onClick={() => updateSettings({ notesBadgeColor: color.value })}
+                    className={cn(
+                      "w-8 h-8 rounded-full border-2 transition-all",
+                      color.bgClass,
+                      settings.notesBadgeColor === color.value 
+                        ? "ring-2 ring-offset-2 ring-primary scale-110" 
+                        : "hover:scale-105"
+                    )}
+                    title={color.label}
+                  />
+                ))}
+              </div>
+              <div className="mt-2">
+                <span className={cn(
+                  "inline-flex px-2 py-1 rounded font-bold text-sm",
+                  getBadgeColorClasses(settings.notesBadgeColor).bg,
+                  getBadgeColorClasses(settings.notesBadgeColor).text
+                )}>
+                  📝 Sem cebola (preview)
+                </span>
+              </div>
             </div>
           </div>
         </CardContent>

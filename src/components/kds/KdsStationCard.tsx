@@ -5,6 +5,7 @@ import { KdsSlaIndicator } from './KdsSlaIndicator';
 import { KdsBorderBadge } from './KdsBorderHighlight';
 import { KdsItemCounter } from './KdsItemCounter';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
+import { getBadgeColorClasses } from '@/lib/badgeColors';
 import { cn } from '@/lib/utils';
 import { CheckCircle, Circle, Layers, Flame, ChefHat, ArrowRight, Clock } from 'lucide-react';
 import { useMemo, useState, useEffect } from 'react';
@@ -179,6 +180,10 @@ export function KdsStationCard({
     // Determinar se deve piscar: sempre na primeira estação, ou em todas se configurado
     const shouldBlink = isFirstStation || settings.notesBlinkAllStations;
     
+    // Obter cores das tarjas configuradas
+    const borderColors = getBadgeColorClasses(settings.borderBadgeColor);
+    const notesColors = getBadgeColorClasses(settings.notesBadgeColor);
+    
     // Em preparação (prep_start): Mostra tamanho + borda + observações PISCANDO
     if (stationType === 'prep_start') {
       return (
@@ -208,8 +213,8 @@ export function KdsStationCard({
           {borderInfo && (
             <div className="mt-1">
               <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden">
-                <span className="absolute inset-0 bg-amber-500 animate-pulse"></span>
-                <span className="relative z-10 text-amber-950">🟡 {borderInfo}</span>
+                <span className={cn("absolute inset-0 animate-pulse", borderColors.bg)}></span>
+                <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo}</span>
               </span>
             </div>
           )}
@@ -217,8 +222,8 @@ export function KdsStationCard({
           {item.notes && (
             <div className="mt-1">
               <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden">
-                <span className="absolute inset-0 bg-orange-500 animate-pulse"></span>
-                <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
+                <span className={cn("absolute inset-0 animate-pulse", notesColors.bg)}></span>
+                <span className={cn("relative z-10", notesColors.text)}>📝 {item.notes}</span>
               </span>
             </div>
           )}
@@ -258,8 +263,8 @@ export function KdsStationCard({
                 "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
                 shouldBlink && "animate-pulse"
               )}>
-                <span className="absolute inset-0 bg-amber-500"></span>
-                <span className="relative z-10 text-amber-950">🟡 {borderInfo}</span>
+                <span className={cn("absolute inset-0", borderColors.bg)}></span>
+                <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo}</span>
               </span>
             </div>
           )}
@@ -276,8 +281,8 @@ export function KdsStationCard({
                 "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
                 shouldBlink && "animate-pulse"
               )}>
-                <span className="absolute inset-0 bg-orange-500"></span>
-                <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
+                <span className={cn("absolute inset-0", notesColors.bg)}></span>
+                <span className={cn("relative z-10", notesColors.text)}>📝 {item.notes}</span>
               </span>
             </div>
           )}
@@ -318,8 +323,8 @@ export function KdsStationCard({
                 "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
                 shouldBlink && "animate-pulse"
               )}>
-                <span className="absolute inset-0 bg-amber-500"></span>
-                <span className="relative z-10 text-amber-950">🟡 {borderInfo}</span>
+                <span className={cn("absolute inset-0", borderColors.bg)}></span>
+                <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo}</span>
               </span>
             </div>
           )}
@@ -336,8 +341,8 @@ export function KdsStationCard({
                 "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
                 shouldBlink && "animate-pulse"
               )}>
-                <span className="absolute inset-0 bg-orange-500"></span>
-                <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
+                <span className={cn("absolute inset-0", notesColors.bg)}></span>
+                <span className={cn("relative z-10", notesColors.text)}>📝 {item.notes}</span>
               </span>
             </div>
           )}
@@ -378,8 +383,8 @@ export function KdsStationCard({
               "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
               shouldBlink && "animate-pulse"
             )}>
-              <span className="absolute inset-0 bg-amber-500"></span>
-              <span className="relative z-10 text-amber-950">🟡 {borderInfo}</span>
+              <span className={cn("absolute inset-0", borderColors.bg)}></span>
+              <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo}</span>
             </span>
           </div>
         )}
@@ -398,8 +403,8 @@ export function KdsStationCard({
               "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
               shouldBlink && "animate-pulse"
             )}>
-              <span className="absolute inset-0 bg-orange-500"></span>
-              <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
+              <span className={cn("absolute inset-0", notesColors.bg)}></span>
+              <span className={cn("relative z-10", notesColors.text)}>📝 {item.notes}</span>
             </span>
           </div>
         )}

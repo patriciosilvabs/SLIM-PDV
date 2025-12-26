@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { useKdsStations } from '@/hooks/useKdsStations';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
+import { getBadgeColorClasses } from '@/lib/badgeColors';
 import { KdsSlaIndicator } from './KdsSlaIndicator';
 import { cn } from '@/lib/utils';
 import { Factory, Circle, CheckCircle, Package, Clock, XCircle, CheckCheck } from 'lucide-react';
@@ -103,8 +104,10 @@ function ReadOnlyItemCard({
   order: Order;
   items: OrderItem[];
   stationColor: string;
-  settings: { timerGreenMinutes: number; timerYellowMinutes: number; showWaiterName: boolean };
+  settings: { timerGreenMinutes: number; timerYellowMinutes: number; showWaiterName: boolean; borderBadgeColor: string; notesBadgeColor: string };
 }) {
+  const borderColors = getBadgeColorClasses(settings.borderBadgeColor);
+  const notesColors = getBadgeColorClasses(settings.notesBadgeColor);
   const getOrderOriginLabel = () => {
     if (order.order_type === 'delivery') return 'DELIVERY';
     if (order.order_type === 'takeaway') return 'BALCÃO';
@@ -192,8 +195,8 @@ function ReadOnlyItemCard({
               {borderInfo && (
                 <div className="mt-1">
                   <span className="inline-flex px-2 py-0.5 rounded font-bold text-xs relative overflow-hidden">
-                    <span className="absolute inset-0 bg-amber-500"></span>
-                    <span className="relative z-10 text-amber-950">🟡 {borderInfo}</span>
+                    <span className={cn("absolute inset-0", borderColors.bg)}></span>
+                    <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo}</span>
                   </span>
                 </div>
               )}
@@ -206,8 +209,8 @@ function ReadOnlyItemCard({
               {item.notes && (
                 <div className="mt-1">
                   <span className="inline-flex px-2 py-0.5 rounded font-bold text-xs relative overflow-hidden">
-                    <span className="absolute inset-0 bg-orange-500"></span>
-                    <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
+                    <span className={cn("absolute inset-0", notesColors.bg)}></span>
+                    <span className={cn("relative z-10", notesColors.text)}>📝 {item.notes}</span>
                   </span>
                 </div>
               )}
@@ -232,11 +235,13 @@ function ReadyOrderCard({
   order: Order;
   items: OrderItem[];
   stationColor: string;
-  settings: { timerGreenMinutes: number; timerYellowMinutes: number; showWaiterName: boolean };
+  settings: { timerGreenMinutes: number; timerYellowMinutes: number; showWaiterName: boolean; borderBadgeColor: string; notesBadgeColor: string };
   onMarkDelivered?: (orderId: string) => void;
   onCancelOrder?: (order: Order) => void;
   isMarkingDelivered?: boolean;
 }) {
+  const borderColors = getBadgeColorClasses(settings.borderBadgeColor);
+  const notesColors = getBadgeColorClasses(settings.notesBadgeColor);
   const getOrderOriginLabel = () => {
     if (order.order_type === 'delivery') return 'DELIVERY';
     if (order.order_type === 'takeaway') return 'BALCÃO';
@@ -318,8 +323,8 @@ function ReadyOrderCard({
               {borderInfo && (
                 <div className="mt-1">
                   <span className="inline-flex px-2 py-0.5 rounded font-bold text-xs relative overflow-hidden">
-                    <span className="absolute inset-0 bg-amber-500"></span>
-                    <span className="relative z-10 text-amber-950">🟡 {borderInfo}</span>
+                    <span className={cn("absolute inset-0", borderColors.bg)}></span>
+                    <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo}</span>
                   </span>
                 </div>
               )}
@@ -332,8 +337,8 @@ function ReadyOrderCard({
               {item.notes && (
                 <div className="mt-1">
                   <span className="inline-flex px-2 py-0.5 rounded font-bold text-xs relative overflow-hidden">
-                    <span className="absolute inset-0 bg-orange-500"></span>
-                    <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
+                    <span className={cn("absolute inset-0", notesColors.bg)}></span>
+                    <span className={cn("relative z-10", notesColors.text)}>📝 {item.notes}</span>
                   </span>
                 </div>
               )}
@@ -518,6 +523,8 @@ export function KdsProductionLineReadOnly({
                           timerGreenMinutes: settings.timerGreenMinutes,
                           timerYellowMinutes: settings.timerYellowMinutes,
                           showWaiterName: settings.showWaiterName,
+                          borderBadgeColor: settings.borderBadgeColor,
+                          notesBadgeColor: settings.notesBadgeColor,
                         }}
                       />
                     ))}
@@ -564,6 +571,8 @@ export function KdsProductionLineReadOnly({
                         timerGreenMinutes: settings.timerGreenMinutes,
                         timerYellowMinutes: settings.timerYellowMinutes,
                         showWaiterName: settings.showWaiterName,
+                        borderBadgeColor: settings.borderBadgeColor,
+                        notesBadgeColor: settings.notesBadgeColor,
                       }}
                       onMarkDelivered={onMarkDelivered}
                       onCancelOrder={onCancelOrder}

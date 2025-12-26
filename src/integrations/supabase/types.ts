@@ -517,6 +517,7 @@ export type Database = {
       kds_global_settings: {
         Row: {
           auto_print_cancellations: boolean
+          border_badge_color: string
           border_keywords: string[]
           bottleneck_settings: Json
           cancellation_alert_interval: number
@@ -527,6 +528,7 @@ export type Database = {
           delay_alert_minutes: number
           highlight_special_borders: boolean
           id: string
+          notes_badge_color: string
           notes_blink_all_stations: boolean
           operation_mode: string
           show_party_size: boolean
@@ -540,6 +542,7 @@ export type Database = {
         }
         Insert: {
           auto_print_cancellations?: boolean
+          border_badge_color?: string
           border_keywords?: string[]
           bottleneck_settings?: Json
           cancellation_alert_interval?: number
@@ -550,6 +553,7 @@ export type Database = {
           delay_alert_minutes?: number
           highlight_special_borders?: boolean
           id?: string
+          notes_badge_color?: string
           notes_blink_all_stations?: boolean
           operation_mode?: string
           show_party_size?: boolean
@@ -563,6 +567,7 @@ export type Database = {
         }
         Update: {
           auto_print_cancellations?: boolean
+          border_badge_color?: string
           border_keywords?: string[]
           bottleneck_settings?: Json
           cancellation_alert_interval?: number
@@ -573,6 +578,7 @@ export type Database = {
           delay_alert_minutes?: number
           highlight_special_borders?: boolean
           id?: string
+          notes_badge_color?: string
           notes_blink_all_stations?: boolean
           operation_mode?: string
           show_party_size?: boolean
