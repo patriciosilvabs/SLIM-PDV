@@ -13,6 +13,7 @@ import {
   Search,
   X,
   Factory,
+  Mail,
   LucideIcon
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -27,7 +28,8 @@ export type SettingsSection =
   | 'announcements' 
   | 'push' 
   | 'users' 
-  | 'roles';
+  | 'roles'
+  | 'invitations';
 
 // Export section info for reuse (breadcrumb, etc.)
 export const SECTION_INFO: Record<SettingsSection, { label: string; icon: LucideIcon }> = {
@@ -41,6 +43,7 @@ export const SECTION_INFO: Record<SettingsSection, { label: string; icon: Lucide
   push: { label: 'Push', icon: Smartphone },
   users: { label: 'Usuários', icon: Users },
   roles: { label: 'Funções', icon: Shield },
+  invitations: { label: 'Convites', icon: Mail },
 };
 
 interface SettingsSidebarProps {
@@ -68,10 +71,11 @@ const sections = [
     ],
   },
   {
-    group: 'Usuários',
+    group: 'Equipe',
     items: [
       { id: 'users' as const, label: 'Usuários', icon: Users },
       { id: 'roles' as const, label: 'Funções', icon: Shield },
+      { id: 'invitations' as const, label: 'Convites', icon: Mail },
     ],
   },
 ];

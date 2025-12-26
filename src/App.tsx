@@ -31,6 +31,7 @@ import Performance from "./pages/Performance";
 import ReopenHistory from "./pages/ReopenHistory";
 import AuditDashboard from "./pages/AuditDashboard";
 import ShareReceiver from "./pages/ShareReceiver";
+import AcceptInvite from "./pages/AcceptInvite";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -50,6 +51,7 @@ const App = () => (
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/onboarding" element={<Onboarding />} />
+                <Route path="/invite/:token" element={<AcceptInvite />} />
                 
                 {/* Protected routes - require tenant */}
                 <Route path="/dashboard" element={<RequireTenant><Dashboard /></RequireTenant>} />
