@@ -23,7 +23,7 @@ function formatCurrency(value: number) {
 }
 
 // Convert props to ESC/POS CustomerReceiptData
-function propsToReceiptData(props: CustomerReceiptProps): CustomerReceiptData {
+export function propsToReceiptData(props: CustomerReceiptProps): CustomerReceiptData {
   const { order, payments, discount, serviceCharge, splitBill, tableNumber, restaurantName, restaurantAddress, restaurantPhone, receiptType } = props;
   const subtotal = order.subtotal || 0;
   const total = order.total || 0;
