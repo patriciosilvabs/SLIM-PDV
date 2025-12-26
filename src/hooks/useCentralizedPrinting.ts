@@ -1,6 +1,7 @@
 import { usePrinter, SectorPrintItem } from '@/contexts/PrinterContext';
 import { usePrintQueue } from '@/hooks/usePrintQueue';
 import { usePrintSectors } from '@/hooks/usePrintSectors';
+import { useGlobalSettings } from '@/hooks/useGlobalSettings';
 import { KitchenTicketData, CustomerReceiptData, CancellationTicketData } from '@/utils/escpos';
 import { useCallback } from 'react';
 
@@ -14,12 +15,12 @@ export function useCentralizedPrinting() {
   const printer = usePrinter();
   const { addPrintJob } = usePrintQueue();
   const { data: printSectors } = usePrintSectors();
+  const { usePrintQueue: usePrintQueueSetting } = useGlobalSettings();
 
   const isPrintServer = localStorage.getItem('is_print_server') === 'true';
-  const usePrintQueue_ = localStorage.getItem('use_print_queue') === 'true';
 
   // Should we queue instead of printing directly?
-  const shouldQueue = usePrintQueue_ && !isPrintServer;
+  const shouldQueue = usePrintQueueSetting && !isPrintServer;
 
   const printKitchenTicket = useCallback(async (ticketData: KitchenTicketData): Promise<boolean> => {
     if (shouldQueue) {
