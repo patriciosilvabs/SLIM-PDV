@@ -7,8 +7,10 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { OfflineSyncProvider } from "@/contexts/OfflineSyncContext";
 import { PrinterProvider } from "@/contexts/PrinterContext";
 import { PrintQueueListener } from "@/components/PrintQueueListener";
+import { RequireTenant } from "@/components/auth/RequireTenant";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
+import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
 import Tables from "./pages/Tables";
 import Orders from "./pages/Orders";
@@ -44,30 +46,33 @@ const App = () => (
             <Sonner />
             <BrowserRouter>
               <Routes>
-              <Route path="/" element={<Navigate to="/auth" replace />} />
+                <Route path="/" element={<Navigate to="/auth" replace />} />
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/tables" element={<Tables />} />
-                <Route path="/orders" element={<Orders />} />
-                <Route path="/menu" element={<Menu />} />
-                <Route path="/stock" element={<Stock />} />
-                <Route path="/cash-register" element={<CashRegister />} />
-                <Route path="/reports" element={<Reports />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/settings/:section" element={<Settings />} />
-                <Route path="/install" element={<Install />} />
-                <Route path="/counter" element={<Counter />} />
-                <Route path="/customers" element={<Customers />} />
-                <Route path="/order-management" element={<OrderManagement />} />
-                <Route path="/kds" element={<KDS />} />
-                <Route path="/closing-history" element={<ClosingHistory />} />
-                <Route path="/cancellation-history" element={<CancellationHistory />} />
-                <Route path="/performance" element={<Performance />} />
-                <Route path="/reopen-history" element={<ReopenHistory />} />
-                <Route path="/audit-dashboard" element={<AuditDashboard />} />
-                <Route path="/share-receiver" element={<ShareReceiver />} />
-                <Route path="/profile" element={<Profile />} />
+                <Route path="/onboarding" element={<Onboarding />} />
+                
+                {/* Protected routes - require tenant */}
+                <Route path="/dashboard" element={<RequireTenant><Dashboard /></RequireTenant>} />
+                <Route path="/tables" element={<RequireTenant><Tables /></RequireTenant>} />
+                <Route path="/orders" element={<RequireTenant><Orders /></RequireTenant>} />
+                <Route path="/menu" element={<RequireTenant><Menu /></RequireTenant>} />
+                <Route path="/stock" element={<RequireTenant><Stock /></RequireTenant>} />
+                <Route path="/cash-register" element={<RequireTenant><CashRegister /></RequireTenant>} />
+                <Route path="/reports" element={<RequireTenant><Reports /></RequireTenant>} />
+                <Route path="/settings" element={<RequireTenant><Settings /></RequireTenant>} />
+                <Route path="/settings/:section" element={<RequireTenant><Settings /></RequireTenant>} />
+                <Route path="/install" element={<RequireTenant><Install /></RequireTenant>} />
+                <Route path="/counter" element={<RequireTenant><Counter /></RequireTenant>} />
+                <Route path="/customers" element={<RequireTenant><Customers /></RequireTenant>} />
+                <Route path="/order-management" element={<RequireTenant><OrderManagement /></RequireTenant>} />
+                <Route path="/kds" element={<RequireTenant><KDS /></RequireTenant>} />
+                <Route path="/closing-history" element={<RequireTenant><ClosingHistory /></RequireTenant>} />
+                <Route path="/cancellation-history" element={<RequireTenant><CancellationHistory /></RequireTenant>} />
+                <Route path="/performance" element={<RequireTenant><Performance /></RequireTenant>} />
+                <Route path="/reopen-history" element={<RequireTenant><ReopenHistory /></RequireTenant>} />
+                <Route path="/audit-dashboard" element={<RequireTenant><AuditDashboard /></RequireTenant>} />
+                <Route path="/share-receiver" element={<RequireTenant><ShareReceiver /></RequireTenant>} />
+                <Route path="/profile" element={<RequireTenant><Profile /></RequireTenant>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
