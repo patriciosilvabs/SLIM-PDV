@@ -6,9 +6,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Building2, Users, Store } from 'lucide-react';
+import { Loader2, Building2, Users, Store, LogOut, Mail } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import logoSlim from '@/assets/logo-slim.png';
 import { z } from 'zod';
 
@@ -21,10 +22,27 @@ const tenantSchema = z.object({
 });
 
 export default function Onboarding() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const { hasTenant, isLoading: tenantLoading } = useTenant();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await signOut();
+      navigate('/auth');
+    } catch (error) {
+      toast({
+        title: 'Erro ao sair',
+        description: 'Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
   
   const [formData, setFormData] = useState({ name: '', slug: '' });
   const [errors, setErrors] = useState<{ name?: string; slug?: string }>({});
@@ -174,6 +192,22 @@ export default function Onboarding() {
           <CardDescription className="text-base">
             Vamos configurar seu restaurante para começar
           </CardDescription>
+          
+          {/* User info and logout */}
+          <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Mail className="h-4 w-4" />
+            <span>{user?.email}</span>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="ml-2"
+            >
+              {isLoggingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+              <span className="ml-1">Sair</span>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -244,6 +278,16 @@ export default function Onboarding() {
             </Button>
           </form>
         </CardContent>
+        <CardFooter className="flex flex-col gap-3 pt-0">
+          <div className="w-full border-t pt-4">
+            <Alert className="bg-muted/50">
+              <Mail className="h-4 w-4" />
+              <AlertDescription className="text-sm">
+                <strong>Recebeu um convite?</strong> Verifique seu email e clique no link do convite para entrar em um restaurante existente.
+              </AlertDescription>
+            </Alert>
+          </div>
+        </CardFooter>
       </Card>
     </div>
   );
