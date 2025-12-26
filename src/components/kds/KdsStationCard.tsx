@@ -226,7 +226,7 @@ export function KdsStationCard({
       );
     }
     
-    // Item em montagem (item_assembly): Mostra sabores + observações (pisca condicionalmente)
+    // Item em montagem (item_assembly): Mostra sabores + observações (sempre com tarja)
     if (stationType === 'item_assembly') {
       return (
         <div className="flex-1 min-w-0">
@@ -251,21 +251,17 @@ export function KdsStationCard({
               👤 {item.added_by_profile.name}
             </p>
           )}
-          {/* BORDA - Pisca condicionalmente */}
+          {/* BORDA - Sempre com tarja (pisca condicionalmente) */}
           {borderInfo && (
-            shouldBlink ? (
-              <div className="mt-1">
-                <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden">
-                  <span className="absolute inset-0 bg-amber-500 animate-pulse"></span>
-                  <span className="relative z-10 text-amber-950">🟡 {borderInfo}</span>
-                </span>
-              </div>
-            ) : (
-              <div className="mt-1 flex items-center gap-1 text-sm">
-                <span className="text-amber-600 font-medium">🟡 Borda:</span>
-                <span className="font-bold text-amber-700">{borderInfo}</span>
-              </div>
-            )
+            <div className="mt-1">
+              <span className={cn(
+                "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
+                shouldBlink && "animate-pulse"
+              )}>
+                <span className="absolute inset-0 bg-amber-500"></span>
+                <span className="relative z-10 text-amber-950">🟡 {borderInfo}</span>
+              </span>
+            </div>
           )}
           {/* Sabores */}
           {flavors.length > 0 && (
@@ -273,20 +269,17 @@ export function KdsStationCard({
               🍕 {flavors.join(' + ')}
             </p>
           )}
-          {/* Observações - Pisca condicionalmente */}
+          {/* OBSERVAÇÕES - Sempre com tarja (pisca condicionalmente) */}
           {item.notes && (
-            shouldBlink ? (
-              <div className="mt-1">
-                <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden">
-                  <span className="absolute inset-0 bg-orange-500 animate-pulse"></span>
-                  <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
-                </span>
-              </div>
-            ) : (
-              <p className="text-sm text-orange-600 mt-0.5 font-medium">
-                📝 {item.notes}
-              </p>
-            )
+            <div className="mt-1">
+              <span className={cn(
+                "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
+                shouldBlink && "animate-pulse"
+              )}>
+                <span className="absolute inset-0 bg-orange-500"></span>
+                <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
+              </span>
+            </div>
           )}
         </div>
       );
@@ -318,39 +311,36 @@ export function KdsStationCard({
             </p>
           )}
           
-          {/* RESUMO DE CONFIRMAÇÃO */}
-          <div className="mt-2 p-2 bg-muted/50 rounded border-l-4 border-amber-500">
-            <p className="text-xs font-semibold text-muted-foreground mb-1">📋 CONFIRME ANTES DE FINALIZAR:</p>
-            
-            {/* Borda */}
-            {borderInfo && (
-              <div className="flex items-center gap-1 text-sm">
-                <span className="text-amber-600 font-medium">🟡 Borda:</span>
-                <span className="font-bold">{borderInfo}</span>
-              </div>
-            )}
-            
-            {/* Sabores */}
-            {flavors.length > 0 && (
-              <div className="flex items-center gap-1 text-sm">
-                <span className="text-blue-600 font-medium">🍕 Sabores:</span>
-                <span className="font-bold">{flavors.join(' + ')}</span>
-              </div>
-            )}
-            
-            {/* Observações */}
-            {item.notes && (
-              <div className="flex items-center gap-1 text-sm">
-                <span className="text-orange-600 font-medium">📝 Obs:</span>
-                <span className="font-bold">{item.notes}</span>
-              </div>
-            )}
-            
-            {/* Se não tem nada especial */}
-            {!borderInfo && flavors.length === 0 && !item.notes && (
-              <p className="text-sm text-muted-foreground">Sem complementos ou observações</p>
-            )}
-          </div>
+          {/* BORDA - Sempre com tarja (pisca condicionalmente) */}
+          {borderInfo && (
+            <div className="mt-1">
+              <span className={cn(
+                "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
+                shouldBlink && "animate-pulse"
+              )}>
+                <span className="absolute inset-0 bg-amber-500"></span>
+                <span className="relative z-10 text-amber-950">🟡 {borderInfo}</span>
+              </span>
+            </div>
+          )}
+          {/* Sabores */}
+          {flavors.length > 0 && (
+            <p className="text-sm text-blue-600 mt-0.5">
+              🍕 {flavors.join(' + ')}
+            </p>
+          )}
+          {/* OBSERVAÇÕES - Sempre com tarja (pisca condicionalmente) */}
+          {item.notes && (
+            <div className="mt-1">
+              <span className={cn(
+                "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
+                shouldBlink && "animate-pulse"
+              )}>
+                <span className="absolute inset-0 bg-orange-500"></span>
+                <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
+              </span>
+            </div>
+          )}
         </div>
       );
     }
@@ -381,21 +371,17 @@ export function KdsStationCard({
           </p>
         )}
         
-        {/* BORDA - Pisca condicionalmente */}
+        {/* BORDA - Sempre com tarja (pisca condicionalmente) */}
         {borderInfo && (
-          shouldBlink ? (
-            <div className="mt-1">
-              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden">
-                <span className="absolute inset-0 bg-amber-500 animate-pulse"></span>
-                <span className="relative z-10 text-amber-950">🟡 {borderInfo}</span>
-              </span>
-            </div>
-          ) : (
-            <div className="mt-1 flex items-center gap-1 text-sm">
-              <span className="text-amber-600 font-medium">🟡 Borda:</span>
-              <span className="font-bold text-amber-700">{borderInfo}</span>
-            </div>
-          )
+          <div className="mt-1">
+            <span className={cn(
+              "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
+              shouldBlink && "animate-pulse"
+            )}>
+              <span className="absolute inset-0 bg-amber-500"></span>
+              <span className="relative z-10 text-amber-950">🟡 {borderInfo}</span>
+            </span>
+          </div>
         )}
         
         {/* Sabores */}
@@ -405,20 +391,17 @@ export function KdsStationCard({
           </p>
         )}
         
-        {/* OBSERVAÇÕES - Pisca condicionalmente */}
+        {/* OBSERVAÇÕES - Sempre com tarja (pisca condicionalmente) */}
         {item.notes && (
-          shouldBlink ? (
-            <div className="mt-1">
-              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden">
-                <span className="absolute inset-0 bg-orange-500 animate-pulse"></span>
-                <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
-              </span>
-            </div>
-          ) : (
-            <p className="text-sm text-orange-600 mt-0.5 font-medium">
-              📝 {item.notes}
-            </p>
-          )
+          <div className="mt-1">
+            <span className={cn(
+              "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
+              shouldBlink && "animate-pulse"
+            )}>
+              <span className="absolute inset-0 bg-orange-500"></span>
+              <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
+            </span>
+          </div>
         )}
       </div>
     );
