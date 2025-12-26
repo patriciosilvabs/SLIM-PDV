@@ -188,20 +188,28 @@ function ReadOnlyItemCard({
                   👤 {item.added_by_profile.name}
                 </p>
               )}
-              {/* BORDA - Sempre visível */}
+              {/* BORDA - Sempre com tarja destacada */}
               {borderInfo && (
-                <p className="text-xs text-amber-600 mt-0.5 font-medium">
-                  🟡 Borda: {borderInfo}
-                </p>
+                <div className="mt-1">
+                  <span className="inline-flex px-2 py-0.5 rounded font-bold text-xs relative overflow-hidden">
+                    <span className="absolute inset-0 bg-amber-500"></span>
+                    <span className="relative z-10 text-amber-950">🟡 {borderInfo}</span>
+                  </span>
+                </div>
               )}
               {flavors.length > 0 && (
                 <p className="text-xs text-blue-600 mt-0.5">
                   🍕 {flavors.join(' + ')}
                 </p>
               )}
-              {/* OBSERVAÇÕES - Sempre visível */}
+              {/* OBSERVAÇÕES - Sempre com tarja destacada */}
               {item.notes && (
-                <p className="text-xs text-orange-500 mt-0.5 font-medium">📝 {item.notes}</p>
+                <div className="mt-1">
+                  <span className="inline-flex px-2 py-0.5 rounded font-bold text-xs relative overflow-hidden">
+                    <span className="absolute inset-0 bg-orange-500"></span>
+                    <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
+                  </span>
+                </div>
               )}
             </div>
           );
@@ -306,20 +314,28 @@ function ReadyOrderCard({
                   👤 {item.added_by_profile.name}
                 </p>
               )}
-              {/* BORDA - Sempre visível */}
+              {/* BORDA - Sempre com tarja destacada */}
               {borderInfo && (
-                <p className="text-xs text-amber-600 mt-0.5 font-medium">
-                  🟡 Borda: {borderInfo}
-                </p>
+                <div className="mt-1">
+                  <span className="inline-flex px-2 py-0.5 rounded font-bold text-xs relative overflow-hidden">
+                    <span className="absolute inset-0 bg-amber-500"></span>
+                    <span className="relative z-10 text-amber-950">🟡 {borderInfo}</span>
+                  </span>
+                </div>
               )}
               {flavors.length > 0 && (
                 <p className="text-xs text-blue-600 mt-0.5">
                   🍕 {flavors.join(' + ')}
                 </p>
               )}
-              {/* OBSERVAÇÕES - Sempre visível */}
+              {/* OBSERVAÇÕES - Sempre com tarja destacada */}
               {item.notes && (
-                <p className="text-xs text-orange-500 mt-0.5 font-medium">📝 {item.notes}</p>
+                <div className="mt-1">
+                  <span className="inline-flex px-2 py-0.5 rounded font-bold text-xs relative overflow-hidden">
+                    <span className="absolute inset-0 bg-orange-500"></span>
+                    <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
+                  </span>
+                </div>
               )}
             </div>
           );
