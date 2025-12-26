@@ -4,9 +4,11 @@ import PDVLayout from '@/components/layout/PDVLayout';
 import { Button } from '@/components/ui/button';
 import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
+import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { AccessDenied } from '@/components/auth/AccessDenied';
 import { CancelOrderDialog } from '@/components/order/CancelOrderDialog';
 import { KdsProductionLineReadOnly } from '@/components/kds/KdsProductionLineReadOnly';
+import { KdsKanbanReadOnly } from '@/components/kds/KdsKanbanReadOnly';
 import { supabase } from '@/integrations/supabase/client';
 import { RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -14,10 +16,11 @@ import { toast } from 'sonner';
 
 export default function OrderManagement() {
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
+  const { settings: kdsSettings } = useKdsSettings();
   const { data: orders = [], isLoading, refetch } = useOrders();
   const { updateOrder } = useOrderMutations();
   const queryClient = useQueryClient();
-  const previousOrdersRef = useRef<Order[]>([]);
+  const previousOrdersRef = useRef<Order[]>();
 
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [selectedOrderToCancel, setSelectedOrderToCancel] = useState<Order | null>(null);
@@ -130,13 +133,24 @@ export default function OrderManagement() {
           </Button>
         </div>
 
-        <KdsProductionLineReadOnly
-          orders={filteredOrders}
-          isLoading={isLoading}
-          onMarkDelivered={handleMarkDelivered}
-          onCancelOrder={handleOpenCancelDialog}
-          isMarkingDelivered={isDelivering}
-        />
+        {/* Renderiza view baseada no operationMode do KDS */}
+        {kdsSettings.operationMode === 'production_line' ? (
+          <KdsProductionLineReadOnly
+            orders={filteredOrders}
+            isLoading={isLoading}
+            onMarkDelivered={handleMarkDelivered}
+            onCancelOrder={handleOpenCancelDialog}
+            isMarkingDelivered={isDelivering}
+          />
+        ) : (
+          <KdsKanbanReadOnly
+            orders={filteredOrders}
+            isLoading={isLoading}
+            onMarkDelivered={handleMarkDelivered}
+            onCancelOrder={handleOpenCancelDialog}
+            isMarkingDelivered={isDelivering}
+          />
+        )}
       </div>
 
       <CancelOrderDialog

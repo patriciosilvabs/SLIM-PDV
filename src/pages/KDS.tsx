@@ -23,6 +23,7 @@ import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'rec
 import { KdsSlaIndicator } from '@/components/kds/KdsSlaIndicator';
 import { KdsItemCounter } from '@/components/kds/KdsItemCounter';
 import { KdsBorderBadge } from '@/components/kds/KdsBorderHighlight';
+import { KdsItemBadges, getFlavorsFromExtras } from '@/components/kds/KdsItemBadges';
 import { KdsProductionLineView } from '@/components/kds/KdsProductionLineView';
 import { KdsMetricsDashboard } from '@/components/kds/KdsMetricsDashboard';
 import { KdsBottleneckIndicator } from '@/components/kds/KdsBottleneckIndicator';
@@ -949,6 +950,7 @@ export default function KDS() {
           <div className={cn("space-y-2 mb-3 border rounded-lg p-2 bg-background/50", isCompact && "space-y-1 mb-2 p-1.5")}>
             {displayItems.map((item, idx) => {
               const itemText = `${item.product?.name || ''} ${item.notes || ''} ${item.extras?.map(e => e.extra_name).join(' ') || ''}`;
+              const flavors = getFlavorsFromExtras(item.extras);
               
               return (
                 <div key={idx} className={cn("text-sm", isCompact && "text-xs")}>
@@ -960,24 +962,23 @@ export default function KDS() {
                         {!isCompact && item.variation?.name && (
                           <span className="text-muted-foreground">({item.variation.name})</span>
                         )}
-                        {!isCompact && <KdsBorderBadge text={itemText} />}
                       </div>
+                      
+                      {/* Tarjas de borda e observações - SEMPRE animadas */}
+                      <KdsItemBadges 
+                        notes={item.notes} 
+                        extras={item.extras} 
+                        compact={isCompact} 
+                      />
+                      
+                      {/* Sabores */}
+                      {!isCompact && flavors.length > 0 && (
+                        <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
+                          🍕 {flavors.join(' + ')}
+                        </p>
+                      )}
                     </div>
                   </div>
-                  {/* Extras/Complementos - hide in compact */}
-                  {!isCompact && item.extras && item.extras.length > 0 && (
-                    <div className="text-xs text-blue-600 dark:text-blue-400 ml-5 mt-0.5">
-                      + {item.extras.map(e => 
-                          e.extra_name.includes(': ') 
-                            ? e.extra_name.split(': ').slice(1).join(': ')
-                            : e.extra_name
-                        ).join(', ')}
-                    </div>
-                  )}
-                  {/* Observações do item - hide in compact */}
-                  {!isCompact && item.notes && (
-                    <div className="text-xs text-orange-500 ml-5 mt-0.5">📝 {item.notes}</div>
-                  )}
                 </div>
               );
             })}
