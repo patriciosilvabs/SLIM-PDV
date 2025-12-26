@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
-
-const STORAGE_KEY = 'pdv_table_wait_settings';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useTenant } from '@/hooks/useTenant';
+import { useCallback } from 'react';
 
 interface TableWaitSettings {
   enabled: boolean;
@@ -14,26 +15,81 @@ const defaultSettings: TableWaitSettings = {
   cooldownMinutes: 5,
 };
 
+const SETTINGS_KEY = 'table_wait_settings';
+
 export function useTableWaitSettings() {
-  const [settings, setSettings] = useState<TableWaitSettings>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        return { ...defaultSettings, ...JSON.parse(stored) };
+  const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['table-wait-settings', tenantId],
+    queryFn: async () => {
+      if (!tenantId) return { settings: defaultSettings };
+
+      const { data: record, error } = await supabase
+        .from('global_settings')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .eq('key', SETTINGS_KEY)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching table wait settings:', error);
+        return { settings: defaultSettings };
       }
-      return defaultSettings;
-    } catch {
-      return defaultSettings;
-    }
+
+      if (!record) {
+        return { settings: defaultSettings };
+      }
+
+      const storedValue = record.value as Record<string, unknown>;
+      return {
+        settings: {
+          enabled: typeof storedValue?.enabled === 'boolean' ? storedValue.enabled : defaultSettings.enabled,
+          thresholdMinutes: typeof storedValue?.thresholdMinutes === 'number' ? storedValue.thresholdMinutes : defaultSettings.thresholdMinutes,
+          cooldownMinutes: typeof storedValue?.cooldownMinutes === 'number' ? storedValue.cooldownMinutes : defaultSettings.cooldownMinutes,
+        },
+      };
+    },
+    enabled: !!tenantId,
+    staleTime: 1000 * 60 * 5,
   });
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-  }, [settings]);
+  const updateMutation = useMutation({
+    mutationFn: async (updates: Partial<TableWaitSettings>) => {
+      if (!tenantId) throw new Error('No tenant ID');
+
+      const currentSettings = data?.settings ?? defaultSettings;
+      const newSettings = { ...currentSettings, ...updates };
+
+      const { error } = await supabase
+        .from('global_settings')
+        .upsert(
+          {
+            tenant_id: tenantId,
+            key: SETTINGS_KEY,
+            value: newSettings,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'tenant_id,key' }
+        );
+
+      if (error) throw error;
+      return newSettings;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['table-wait-settings', tenantId] });
+    },
+  });
 
   const updateSettings = useCallback((updates: Partial<TableWaitSettings>) => {
-    setSettings(prev => ({ ...prev, ...updates }));
-  }, []);
+    updateMutation.mutate(updates);
+  }, [updateMutation]);
 
-  return { settings, updateSettings };
+  return { 
+    settings: data?.settings ?? defaultSettings, 
+    updateSettings,
+    isLoading,
+    isSaving: updateMutation.isPending,
+  };
 }
