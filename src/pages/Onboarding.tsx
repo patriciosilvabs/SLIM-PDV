@@ -194,6 +194,84 @@ export default function Onboarding() {
 
       console.log('Role added successfully');
 
+      // Create default KDS Global Settings
+      const { error: kdsSettingsError } = await supabase
+        .from('kds_global_settings')
+        .insert({
+          tenant_id: tenant.id,
+          operation_mode: 'traditional',
+          compact_mode: false,
+          show_pending_column: true,
+          show_waiter_name: true,
+          show_party_size: true,
+          timer_green_minutes: 5,
+          timer_yellow_minutes: 10,
+          sla_green_minutes: 8,
+          sla_yellow_minutes: 12,
+          highlight_special_borders: true,
+          border_keywords: ['borda', 'recheada', 'chocolate', 'catupiry', 'cheddar'],
+          border_badge_color: 'amber',
+          notes_badge_color: 'orange',
+          notes_blink_all_stations: false,
+          delay_alert_enabled: true,
+          delay_alert_minutes: 10,
+          cancellation_alerts_enabled: true,
+          cancellation_alert_interval: 3,
+          auto_print_cancellations: true,
+          bottleneck_settings: {
+            enabled: true,
+            defaultMaxQueueSize: 5,
+            defaultMaxTimeRatio: 1.5,
+            stationOverrides: {},
+          },
+        });
+
+      if (kdsSettingsError) {
+        console.error('KDS Settings Error:', kdsSettingsError);
+        // Non-critical, continue
+      } else {
+        console.log('KDS Settings created successfully');
+      }
+
+      // Create default KDS Stations
+      const defaultStations = [
+        { name: 'Em preparação', station_type: 'prep_start', color: '#F59E0B', icon: 'ChefHat', sort_order: 1, is_active: true },
+        { name: 'Item em montagem', station_type: 'item_assembly', color: '#8B5CF6', icon: 'Package', sort_order: 2, is_active: true },
+        { name: 'Em Produção', station_type: 'assembly', color: '#3B82F6', icon: 'Flame', sort_order: 3, is_active: true },
+        { name: 'Item em Finalização', station_type: 'oven_expedite', color: '#EF4444', icon: 'Timer', sort_order: 4, is_active: true },
+        { name: 'Status do Pedido', station_type: 'order_status', color: '#10B981', icon: 'ClipboardCheck', sort_order: 5, is_active: true },
+      ];
+
+      const { error: stationsError } = await supabase
+        .from('kds_stations')
+        .insert(defaultStations.map(s => ({ ...s, tenant_id: tenant.id })));
+
+      if (stationsError) {
+        console.error('KDS Stations Error:', stationsError);
+        // Non-critical, continue
+      } else {
+        console.log('KDS Stations created successfully');
+      }
+
+      // Create 10 initial tables
+      const initialTables = Array.from({ length: 10 }, (_, i) => ({
+        number: i + 1,
+        capacity: 4,
+        status: 'available' as const,
+        tenant_id: tenant.id,
+      }));
+
+      const { error: tablesError } = await supabase
+        .from('tables')
+        .insert(initialTables);
+
+      if (tablesError) {
+        console.error('Tables Error:', tablesError);
+        // Non-critical, continue
+      } else {
+        console.log('Initial tables created successfully');
+      }
+
       toast({
         title: 'Restaurante criado!',
         description: 'Você já pode começar a usar o sistema.',
