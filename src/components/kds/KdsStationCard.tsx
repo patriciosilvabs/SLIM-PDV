@@ -1,11 +1,9 @@
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { KdsSlaIndicator } from './KdsSlaIndicator';
-import { KdsBorderBadge } from './KdsBorderHighlight';
 import { KdsItemCounter } from './KdsItemCounter';
+import { KdsItemBadges, getFlavorsFromExtras } from './KdsItemBadges';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
-import { getBadgeColorClasses } from '@/lib/badgeColors';
 import { cn } from '@/lib/utils';
 import { CheckCircle, Circle, Layers, Flame, ChefHat, ArrowRight, Clock } from 'lucide-react';
 import { useMemo, useState, useEffect } from 'react';
@@ -103,36 +101,8 @@ const STATION_ICONS = {
   custom: ChefHat,
 };
 
-// Extrair informação da borda dos extras
-const getBorderInfo = (extras?: Array<{ extra_name: string }>): string | null => {
-  if (!extras || extras.length === 0) return null;
-  
-  const borderExtra = extras.find(e => {
-    const lower = e.extra_name.toLowerCase();
-    return lower.includes('borda') || lower.includes('massa');
-  });
-  
-  if (!borderExtra) return null;
-  
-  // "Massa & Borda: Borda de Chocolate" → "Borda de Chocolate"
-  const parts = borderExtra.extra_name.split(':');
-  return parts.length > 1 ? parts[1].trim() : borderExtra.extra_name;
-};
-
-// Extrair sabores dos extras
-const getFlavors = (extras?: Array<{ extra_name: string }>): string[] => {
-  if (!extras || extras.length === 0) return [];
-  
-  return extras
-    .filter(e => {
-      const lower = e.extra_name.toLowerCase();
-      return lower.includes('sabor') && !lower.includes('borda') && !lower.includes('massa');
-    })
-    .map(e => {
-      const parts = e.extra_name.split(':');
-      return parts.length > 1 ? parts[1].trim() : e.extra_name;
-    });
-};
+// Extrair sabores dos extras (usa função do KdsItemBadges)
+const getFlavors = getFlavorsFromExtras;
 
 export function KdsStationCard({
   order,
@@ -176,15 +146,9 @@ export function KdsStationCard({
 
   // Renderização contextual de item baseada no tipo da estação
   const renderItemContent = (item: OrderItem, isInProgress: boolean = false) => {
-    const borderInfo = getBorderInfo(item.extras);
     const flavors = getFlavors(item.extras);
-    const itemText = `${item.product?.name || ''} ${item.notes || ''} ${item.extras?.map(e => e.extra_name).join(' ') || ''}`;
     
-    // Obter cores das tarjas configuradas
-    const borderColors = getBadgeColorClasses(settings.borderBadgeColor);
-    const notesColors = getBadgeColorClasses(settings.notesBadgeColor);
-    
-    // Em preparação (prep_start): Mostra tamanho + borda + observações PISCANDO
+    // prep_start: Mostra nome, borda + observações
     if (stationType === 'prep_start') {
       return (
         <div className="flex-1 min-w-0">
@@ -195,29 +159,12 @@ export function KdsStationCard({
               <span className="text-xs text-muted-foreground">({item.variation.name})</span>
             )}
           </div>
-          {/* Borda - SEMPRE pisca */}
-          {borderInfo && (
-            <div className="mt-1">
-              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden animate-pulse">
-                <span className={cn("absolute inset-0", borderColors.bg)}></span>
-                <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo}</span>
-              </span>
-            </div>
-          )}
-          {/* Observações do item - SEMPRE pisca */}
-          {item.notes && (
-            <div className="mt-1">
-              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden animate-pulse">
-                <span className={cn("absolute inset-0", notesColors.bg)}></span>
-                <span className={cn("relative z-10", notesColors.text)}>📝 {item.notes}</span>
-              </span>
-            </div>
-          )}
+          <KdsItemBadges notes={item.notes} extras={item.extras} />
         </div>
       );
     }
     
-    // Item em montagem (item_assembly): Mostra sabores + observações
+    // item_assembly: Mostra sabores + borda + observações
     if (stationType === 'item_assembly') {
       return (
         <div className="flex-1 min-w-0">
@@ -228,35 +175,17 @@ export function KdsStationCard({
               <span className="text-xs text-muted-foreground">({item.variation.name})</span>
             )}
           </div>
-          {/* BORDA - SEMPRE pisca */}
-          {borderInfo && (
-            <div className="mt-1">
-              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden animate-pulse">
-                <span className={cn("absolute inset-0", borderColors.bg)}></span>
-                <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo}</span>
-              </span>
-            </div>
-          )}
-          {/* Sabores */}
+          <KdsItemBadges notes={item.notes} extras={item.extras} />
           {flavors.length > 0 && (
             <p className="text-sm text-blue-600 mt-0.5">
               🍕 {flavors.join(' + ')}
             </p>
           )}
-          {/* OBSERVAÇÕES - SEMPRE pisca */}
-          {item.notes && (
-            <div className="mt-1">
-              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden animate-pulse">
-                <span className={cn("absolute inset-0", notesColors.bg)}></span>
-                <span className={cn("relative z-10", notesColors.text)}>📝 {item.notes}</span>
-              </span>
-            </div>
-          )}
         </div>
       );
     }
     
-    // Finalização (oven_expedite): Mostra resumo de confirmação destacado
+    // oven_expedite: Mostra sabores + borda + observações
     if (stationType === 'oven_expedite') {
       return (
         <div className="flex-1 min-w-0">
@@ -267,30 +196,11 @@ export function KdsStationCard({
               <span className="text-xs text-muted-foreground">({item.variation.name})</span>
             )}
           </div>
-          
-          {/* BORDA - SEMPRE pisca */}
-          {borderInfo && (
-            <div className="mt-1">
-              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden animate-pulse">
-                <span className={cn("absolute inset-0", borderColors.bg)}></span>
-                <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo}</span>
-              </span>
-            </div>
-          )}
-          {/* Sabores */}
+          <KdsItemBadges notes={item.notes} extras={item.extras} />
           {flavors.length > 0 && (
             <p className="text-sm text-blue-600 mt-0.5">
               🍕 {flavors.join(' + ')}
             </p>
-          )}
-          {/* OBSERVAÇÕES - SEMPRE pisca */}
-          {item.notes && (
-            <div className="mt-1">
-              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden animate-pulse">
-                <span className={cn("absolute inset-0", notesColors.bg)}></span>
-                <span className={cn("relative z-10", notesColors.text)}>📝 {item.notes}</span>
-              </span>
-            </div>
           )}
         </div>
       );
@@ -306,32 +216,11 @@ export function KdsStationCard({
             <span className="text-xs text-muted-foreground">({item.variation.name})</span>
           )}
         </div>
-        
-        {/* BORDA - SEMPRE pisca */}
-        {borderInfo && (
-          <div className="mt-1">
-            <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden animate-pulse">
-              <span className={cn("absolute inset-0", borderColors.bg)}></span>
-              <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo}</span>
-            </span>
-          </div>
-        )}
-        
-        {/* Sabores */}
+        <KdsItemBadges notes={item.notes} extras={item.extras} />
         {flavors.length > 0 && (
           <p className="text-sm text-blue-600 mt-0.5">
             🍕 {flavors.join(' + ')}
           </p>
-        )}
-        
-        {/* OBSERVAÇÕES - SEMPRE pisca */}
-        {item.notes && (
-          <div className="mt-1">
-            <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden animate-pulse">
-              <span className={cn("absolute inset-0", notesColors.bg)}></span>
-              <span className={cn("relative z-10", notesColors.text)}>📝 {item.notes}</span>
-            </span>
-          </div>
         )}
       </div>
     );

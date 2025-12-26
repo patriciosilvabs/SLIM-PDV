@@ -20,7 +20,7 @@ export default function OrderManagement() {
   const { data: orders = [], isLoading, refetch } = useOrders();
   const { updateOrder } = useOrderMutations();
   const queryClient = useQueryClient();
-  const previousOrdersRef = useRef<Order[]>();
+  const previousOrdersRef = useRef<Order[]>([]);
 
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [selectedOrderToCancel, setSelectedOrderToCancel] = useState<Order | null>(null);
@@ -32,7 +32,10 @@ export default function OrderManagement() {
     order => order.order_type === 'takeaway' || order.order_type === 'delivery'
   );
 
-  // Detect status changes from KDS (kitchen)
+  // Determine view mode based on orderManagementViewMode setting
+  const viewMode = kdsSettings.orderManagementViewMode === 'follow_kds' 
+    ? kdsSettings.operationMode 
+    : kdsSettings.orderManagementViewMode;
   useEffect(() => {
     if (previousOrdersRef.current.length > 0) {
       orders.forEach(order => {
@@ -133,8 +136,8 @@ export default function OrderManagement() {
           </Button>
         </div>
 
-        {/* Renderiza view baseada no operationMode do KDS */}
-        {kdsSettings.operationMode === 'production_line' ? (
+        {/* Renderiza view baseada no orderManagementViewMode */}
+        {viewMode === 'production_line' ? (
           <KdsProductionLineReadOnly
             orders={filteredOrders}
             isLoading={isLoading}
