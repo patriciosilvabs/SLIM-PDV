@@ -27,7 +27,7 @@ import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsMo
 import { CancelOrderDialog } from '@/components/order/CancelOrderDialog';
 import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus, ArrowRightLeft, Edit, XCircle, Printer, RotateCcw, Ban, ArrowRight, Wallet } from 'lucide-react';
 import { printKitchenOrderTicket } from '@/components/kitchen/KitchenOrderTicket';
-import { printCustomerReceipt, printPartialPaymentReceipt } from '@/components/receipt/CustomerReceipt';
+import { printCustomerReceipt, printPartialPaymentReceipt, propsToReceiptData } from '@/components/receipt/CustomerReceipt';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
@@ -1087,9 +1087,9 @@ export default function Tables() {
     setSelectedTable({ ...selectedTable, status: 'bill_requested' });
     
     // Auto-print bill summary when clicking "Fechar Conta"
-    if (order && printer?.canPrintToCashier) {
+    if (order && centralPrinting.canPrintToCashier) {
       try {
-        await printCustomerReceipt({
+        const receiptData = propsToReceiptData({
           order,
           payments: [],
           discount: discountAmount > 0 ? { type: discountType, value: discountValue, amount: discountAmount } : undefined,
@@ -1097,8 +1097,11 @@ export default function Tables() {
           splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
           tableNumber: selectedTable.number,
           receiptType: 'summary',
-        }, printer);
-        toast.success('Resumo da conta impresso');
+        });
+        const success = await centralPrinting.printCustomerReceipt(receiptData);
+        if (success) {
+          toast.success('Resumo da conta enviado para impressão');
+        }
       } catch (err) {
         console.error('Auto print bill summary failed:', err);
       }
@@ -1246,9 +1249,9 @@ export default function Tables() {
       }
 
       // Auto-print customer receipt if enabled
-      if (autoPrintCustomerReceipt && printer?.canPrintToCashier) {
+      if (autoPrintCustomerReceipt && centralPrinting.canPrintToCashier) {
         try {
-          await printCustomerReceipt({
+          const receiptData = propsToReceiptData({
             order: selectedOrder,
             payments: registeredPayments.map(p => ({
               id: '',
@@ -1264,8 +1267,11 @@ export default function Tables() {
             splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
             tableNumber: selectedTable.number,
             receiptType: 'fiscal',
-          }, printer);
-          toast.success('Cupom fiscal impresso');
+          });
+          const success = await centralPrinting.printCustomerReceipt(receiptData);
+          if (success) {
+            toast.success('Cupom fiscal enviado para impressão');
+          }
         } catch (err) {
           console.error('Auto print receipt failed:', err);
         }
@@ -1721,12 +1727,12 @@ export default function Tables() {
                                 Adicionar Pedido
                               </Button>
                               {selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
-                                <Button 
+                              <Button 
                                   variant="outline" 
                                   className="w-full"
-                                  onClick={() => {
+                                  onClick={async () => {
                                     if (!selectedOrder || !selectedTable) return;
-                                    printCustomerReceipt({
+                                    const receiptData = propsToReceiptData({
                                       order: selectedOrder,
                                       payments: [],
                                       discount: discountAmount > 0 ? { type: discountType, value: discountValue, amount: discountAmount } : undefined,
@@ -1734,8 +1740,13 @@ export default function Tables() {
                                       splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
                                       tableNumber: selectedTable.number,
                                       receiptType: 'summary',
-                                    }, printer);
-                                    toast.success('Resumo da conta impresso');
+                                    });
+                                    const success = await centralPrinting.printCustomerReceipt(receiptData);
+                                    if (success) {
+                                      toast.success('Resumo da conta enviado para impressão');
+                                    } else {
+                                      toast.error('Falha ao enviar para impressão');
+                                    }
                                   }}
                                 >
                                   <Receipt className="h-4 w-4 mr-2" />
@@ -2058,9 +2069,9 @@ export default function Tables() {
                         <Button 
                           variant="outline" 
                           className="w-full"
-                          onClick={() => {
+                          onClick={async () => {
                             if (!selectedOrder || !selectedTable) return;
-                            printCustomerReceipt({
+                            const receiptData = propsToReceiptData({
                               order: selectedOrder,
                               payments: registeredPayments.map(p => ({
                                 id: '',
@@ -2075,7 +2086,13 @@ export default function Tables() {
                               serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
                               splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
                               tableNumber: selectedTable.number,
-                            }, printer);
+                            });
+                            const success = await centralPrinting.printCustomerReceipt(receiptData);
+                            if (success) {
+                              toast.success('Conta enviada para impressão');
+                            } else {
+                              toast.error('Falha ao enviar para impressão');
+                            }
                           }}
                         >
                           <Printer className="h-4 w-4 mr-2" />
