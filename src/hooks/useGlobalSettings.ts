@@ -11,39 +11,43 @@ interface GlobalSetting {
   updated_at: string;
 }
 
+interface SettingsData {
+  tenantId: string | null;
+  settings: GlobalSetting[];
+}
+
 export function useGlobalSettings() {
   const queryClient = useQueryClient();
 
-  // Primeiro obter o tenant_id do usuário
-  const { data: tenantId } = useQuery({
-    queryKey: ['user-tenant-id'],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_user_tenant_id');
-      if (error) throw error;
-      return data as string | null;
-    },
-    staleTime: 1000 * 60 * 5,
-  });
-
-  // Buscar configurações FILTRADAS por tenant_id
-  const { data: settings, isLoading } = useQuery({
-    queryKey: ['global-settings', tenantId],
-    queryFn: async () => {
-      if (!tenantId) return [];
+  // Buscar tenant_id e settings em uma única query para evitar problemas de HMR
+  const { data, isLoading } = useQuery({
+    queryKey: ['global-settings-with-tenant'],
+    queryFn: async (): Promise<SettingsData> => {
+      // Primeiro obter tenant_id
+      const { data: tenantId, error: tenantError } = await supabase.rpc('get_user_tenant_id');
+      if (tenantError) throw tenantError;
       
-      const { data, error } = await supabase
+      if (!tenantId) {
+        return { tenantId: null, settings: [] };
+      }
+
+      // Então buscar settings filtradas por tenant_id
+      const { data: settings, error: settingsError } = await supabase
         .from('global_settings')
         .select('*')
         .eq('tenant_id', tenantId);
 
-      if (error) throw error;
-      return (data || []) as GlobalSetting[];
+      if (settingsError) throw settingsError;
+      return { tenantId, settings: (settings || []) as GlobalSetting[] };
     },
-    enabled: !!tenantId,
+    staleTime: 1000 * 60 * 5,
   });
 
+  const tenantId = data?.tenantId ?? null;
+  const settings = data?.settings ?? [];
+
   const getSetting = (key: string): Json => {
-    const setting = settings?.find(s => s.key === key);
+    const setting = settings.find(s => s.key === key);
     return setting?.value ?? null;
   };
 
@@ -52,7 +56,7 @@ export function useGlobalSettings() {
     mutationFn: async ({ key, value }: { key: string; value: Json }) => {
       if (!tenantId) throw new Error('No tenant ID available');
       
-      const existingSetting = settings?.find(s => s.key === key);
+      const existingSetting = settings.find(s => s.key === key);
       
       if (existingSetting) {
         // UPDATE existente
@@ -70,7 +74,7 @@ export function useGlobalSettings() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['global-settings', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ['global-settings-with-tenant'] });
     },
   });
 
