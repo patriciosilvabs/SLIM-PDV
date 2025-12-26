@@ -13,6 +13,7 @@ import { usePrinter } from '@/contexts/PrinterContext';
 import { useOrderSettings, PrintFontSize, LogoPrintMode } from '@/hooks/useOrderSettings';
 import { usePrintSectors, usePrintSectorMutations, PrintSector } from '@/hooks/usePrintSectors';
 import { usePrintServerMode } from '@/components/PrintQueueListener';
+import { useGlobalSettings } from '@/hooks/useGlobalSettings';
 import { invalidateLogoCache, clearLogoCache } from '@/utils/imageToBase64';
 import { buildFontSizeTestPrint } from '@/utils/escpos';
 import {
@@ -138,14 +139,7 @@ export function PrinterSettings() {
   
   // Print server mode
   const { isPrintServer, setIsPrintServer } = usePrintServerMode();
-  const [usePrintQueue, setUsePrintQueue] = useState(() => {
-    return localStorage.getItem('use_print_queue') === 'true';
-  });
-
-  // Persist print queue setting
-  useEffect(() => {
-    localStorage.setItem('use_print_queue', usePrintQueue.toString());
-  }, [usePrintQueue]);
+  const { usePrintQueue, toggleUsePrintQueue, isLoading: loadingGlobalSettings } = useGlobalSettings();
   
   // Sector dialog state
   const [sectorDialogOpen, setSectorDialogOpen] = useState(false);
@@ -468,7 +462,8 @@ export function PrinterSettings() {
             </div>
             <Switch
               checked={usePrintQueue}
-              onCheckedChange={setUsePrintQueue}
+              onCheckedChange={() => toggleUsePrintQueue()}
+              disabled={loadingGlobalSettings}
             />
           </div>
           
