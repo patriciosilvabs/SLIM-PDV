@@ -165,6 +165,9 @@ export function KdsStationCard({
     return order.notes.replace(/\d+\s*pessoas?/gi, '').trim() || null;
   }, [order.notes, settings.showPartySize]);
 
+  // Obter o primeiro garçom dos itens para exibir no cabeçalho
+  const waiterName = items.find(i => i.added_by_profile?.name)?.added_by_profile?.name;
+
   const getOrderOriginLabel = () => {
     if (order.order_type === 'delivery') return 'DELIVERY';
     if (order.order_type === 'takeaway') return 'BALCÃO';
@@ -177,9 +180,6 @@ export function KdsStationCard({
     const flavors = getFlavors(item.extras);
     const itemText = `${item.product?.name || ''} ${item.notes || ''} ${item.extras?.map(e => e.extra_name).join(' ') || ''}`;
     
-    // Determinar se deve piscar: sempre na primeira estação, ou em todas se configurado
-    const shouldBlink = isFirstStation || settings.notesBlinkAllStations;
-    
     // Obter cores das tarjas configuradas
     const borderColors = getBadgeColorClasses(settings.borderBadgeColor);
     const notesColors = getBadgeColorClasses(settings.notesBadgeColor);
@@ -188,41 +188,27 @@ export function KdsStationCard({
     if (stationType === 'prep_start') {
       return (
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-1.5 flex-wrap">
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-primary">{item.quantity}x</span>
-              <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
-              {item.variation?.name && (
-                <span className="text-xs text-muted-foreground">({item.variation.name})</span>
-              )}
-            </div>
-            <StationTimer 
-              startedAt={item.station_started_at} 
-              createdAt={item.created_at} 
-              greenMinutes={settings.timerGreenMinutes}
-              yellowMinutes={settings.timerYellowMinutes}
-            />
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-primary">{item.quantity}x</span>
+            <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
+            {item.variation?.name && (
+              <span className="text-xs text-muted-foreground">({item.variation.name})</span>
+            )}
           </div>
-          {/* Nome do garçom */}
-          {settings.showWaiterName && item.added_by_profile?.name && (
-            <p className="text-xs text-blue-600 mt-0.5">
-              👤 {item.added_by_profile.name}
-            </p>
-          )}
-          {/* Borda - APENAS o fundo da tarja pisca */}
+          {/* Borda - SEMPRE pisca */}
           {borderInfo && (
             <div className="mt-1">
-              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden">
-                <span className={cn("absolute inset-0 animate-pulse", borderColors.bg)}></span>
+              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden animate-pulse">
+                <span className={cn("absolute inset-0", borderColors.bg)}></span>
                 <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo}</span>
               </span>
             </div>
           )}
-          {/* Observações do item */}
+          {/* Observações do item - SEMPRE pisca */}
           {item.notes && (
             <div className="mt-1">
-              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden">
-                <span className={cn("absolute inset-0 animate-pulse", notesColors.bg)}></span>
+              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden animate-pulse">
+                <span className={cn("absolute inset-0", notesColors.bg)}></span>
                 <span className={cn("relative z-10", notesColors.text)}>📝 {item.notes}</span>
               </span>
             </div>
@@ -231,38 +217,21 @@ export function KdsStationCard({
       );
     }
     
-    // Item em montagem (item_assembly): Mostra sabores + observações (sempre com tarja)
+    // Item em montagem (item_assembly): Mostra sabores + observações
     if (stationType === 'item_assembly') {
       return (
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-1.5 flex-wrap">
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-primary">{item.quantity}x</span>
-              <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
-              {item.variation?.name && (
-                <span className="text-xs text-muted-foreground">({item.variation.name})</span>
-              )}
-            </div>
-            <StationTimer 
-              startedAt={item.station_started_at} 
-              createdAt={item.created_at} 
-              greenMinutes={settings.timerGreenMinutes}
-              yellowMinutes={settings.timerYellowMinutes}
-            />
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-primary">{item.quantity}x</span>
+            <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
+            {item.variation?.name && (
+              <span className="text-xs text-muted-foreground">({item.variation.name})</span>
+            )}
           </div>
-          {/* Nome do garçom */}
-          {settings.showWaiterName && item.added_by_profile?.name && (
-            <p className="text-xs text-blue-600 mt-0.5">
-              👤 {item.added_by_profile.name}
-            </p>
-          )}
-          {/* BORDA - Sempre com tarja (pisca condicionalmente) */}
+          {/* BORDA - SEMPRE pisca */}
           {borderInfo && (
             <div className="mt-1">
-              <span className={cn(
-                "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
-                shouldBlink && "animate-pulse"
-              )}>
+              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden animate-pulse">
                 <span className={cn("absolute inset-0", borderColors.bg)}></span>
                 <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo}</span>
               </span>
@@ -274,13 +243,10 @@ export function KdsStationCard({
               🍕 {flavors.join(' + ')}
             </p>
           )}
-          {/* OBSERVAÇÕES - Sempre com tarja (pisca condicionalmente) */}
+          {/* OBSERVAÇÕES - SEMPRE pisca */}
           {item.notes && (
             <div className="mt-1">
-              <span className={cn(
-                "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
-                shouldBlink && "animate-pulse"
-              )}>
+              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden animate-pulse">
                 <span className={cn("absolute inset-0", notesColors.bg)}></span>
                 <span className={cn("relative z-10", notesColors.text)}>📝 {item.notes}</span>
               </span>
@@ -294,35 +260,18 @@ export function KdsStationCard({
     if (stationType === 'oven_expedite') {
       return (
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-1.5 flex-wrap">
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-primary">{item.quantity}x</span>
-              <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
-              {item.variation?.name && (
-                <span className="text-xs text-muted-foreground">({item.variation.name})</span>
-              )}
-            </div>
-            <StationTimer 
-              startedAt={item.station_started_at} 
-              createdAt={item.created_at} 
-              greenMinutes={settings.timerGreenMinutes}
-              yellowMinutes={settings.timerYellowMinutes}
-            />
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-primary">{item.quantity}x</span>
+            <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
+            {item.variation?.name && (
+              <span className="text-xs text-muted-foreground">({item.variation.name})</span>
+            )}
           </div>
-          {/* Nome do garçom */}
-          {settings.showWaiterName && item.added_by_profile?.name && (
-            <p className="text-xs text-blue-600 mt-0.5">
-              👤 {item.added_by_profile.name}
-            </p>
-          )}
           
-          {/* BORDA - Sempre com tarja (pisca condicionalmente) */}
+          {/* BORDA - SEMPRE pisca */}
           {borderInfo && (
             <div className="mt-1">
-              <span className={cn(
-                "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
-                shouldBlink && "animate-pulse"
-              )}>
+              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden animate-pulse">
                 <span className={cn("absolute inset-0", borderColors.bg)}></span>
                 <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo}</span>
               </span>
@@ -334,13 +283,10 @@ export function KdsStationCard({
               🍕 {flavors.join(' + ')}
             </p>
           )}
-          {/* OBSERVAÇÕES - Sempre com tarja (pisca condicionalmente) */}
+          {/* OBSERVAÇÕES - SEMPRE pisca */}
           {item.notes && (
             <div className="mt-1">
-              <span className={cn(
-                "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
-                shouldBlink && "animate-pulse"
-              )}>
+              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden animate-pulse">
                 <span className={cn("absolute inset-0", notesColors.bg)}></span>
                 <span className={cn("relative z-10", notesColors.text)}>📝 {item.notes}</span>
               </span>
@@ -350,39 +296,21 @@ export function KdsStationCard({
       );
     }
     
-    // Outros tipos de estação: Mostra tudo (incluindo borda e observações destacadas, pisca condicionalmente)
+    // Outros tipos de estação: Mostra tudo
     return (
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-1.5 flex-wrap">
-          <div className="flex items-center gap-1.5">
-            <span className="font-bold text-primary">{item.quantity}x</span>
-            <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
-            {item.variation?.name && (
-              <span className="text-xs text-muted-foreground">({item.variation.name})</span>
-            )}
-          </div>
-          <StationTimer 
-            startedAt={item.station_started_at} 
-            createdAt={item.created_at} 
-            greenMinutes={settings.timerGreenMinutes}
-            yellowMinutes={settings.timerYellowMinutes}
-          />
+        <div className="flex items-center gap-1.5">
+          <span className="font-bold text-primary">{item.quantity}x</span>
+          <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
+          {item.variation?.name && (
+            <span className="text-xs text-muted-foreground">({item.variation.name})</span>
+          )}
         </div>
         
-        {/* Nome do garçom */}
-        {settings.showWaiterName && item.added_by_profile?.name && (
-          <p className="text-xs text-blue-600 mt-0.5">
-            👤 {item.added_by_profile.name}
-          </p>
-        )}
-        
-        {/* BORDA - Sempre com tarja (pisca condicionalmente) */}
+        {/* BORDA - SEMPRE pisca */}
         {borderInfo && (
           <div className="mt-1">
-            <span className={cn(
-              "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
-              shouldBlink && "animate-pulse"
-            )}>
+            <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden animate-pulse">
               <span className={cn("absolute inset-0", borderColors.bg)}></span>
               <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo}</span>
             </span>
@@ -396,13 +324,10 @@ export function KdsStationCard({
           </p>
         )}
         
-        {/* OBSERVAÇÕES - Sempre com tarja (pisca condicionalmente) */}
+        {/* OBSERVAÇÕES - SEMPRE pisca */}
         {item.notes && (
           <div className="mt-1">
-            <span className={cn(
-              "inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden",
-              shouldBlink && "animate-pulse"
-            )}>
+            <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden animate-pulse">
               <span className={cn("absolute inset-0", notesColors.bg)}></span>
               <span className={cn("relative z-10", notesColors.text)}>📝 {item.notes}</span>
             </span>
@@ -431,7 +356,12 @@ export function KdsStationCard({
               <StationIcon className={cn("h-4 w-4", compact && "h-3 w-3")} style={{ color: stationColor }} />
             </div>
             <div>
-              <span className={cn("font-semibold text-sm", compact && "text-xs")}>{getOrderOriginLabel()}</span>
+              <div className="flex items-center gap-2">
+                <span className={cn("font-semibold text-sm", compact && "text-xs")}>{getOrderOriginLabel()}</span>
+                {settings.showWaiterName && waiterName && !compact && (
+                  <span className="text-xs text-blue-600">👤 {waiterName}</span>
+                )}
+              </div>
               <div className={cn("flex items-center gap-1.5 text-xs text-muted-foreground", compact && "hidden")}>
                 <span className="font-mono">#{order.id.slice(-4).toUpperCase()}</span>
               </div>
