@@ -94,11 +94,14 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
   }, [cooldowns]);
 
   const { data: announcements = [], isLoading } = useQuery({
-    queryKey: ['scheduled-announcements'],
+    queryKey: ['scheduled-announcements', tenantId],
     queryFn: async () => {
+      if (!tenantId) return [];
+
       const { data, error } = await supabase
         .from('scheduled_announcements')
         .select('*')
+        .eq('tenant_id', tenantId)
         .eq('is_active', true)
         .order('scheduled_time');
       
@@ -112,6 +115,7 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
       }
       return data as ScheduledAnnouncement[];
     },
+    enabled: !!tenantId,
     retry: (failureCount, error: any) => {
       // Don't retry permission errors
       if (error?.code === 'PGRST301' || error?.message?.includes('permission') || error?.code === '42501') {

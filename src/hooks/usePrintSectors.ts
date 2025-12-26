@@ -19,9 +19,13 @@ export function usePrintSectors() {
   return useQuery({
     queryKey: ['print-sectors'],
     queryFn: async () => {
+      const { data: tenantId } = await supabase.rpc('get_user_tenant_id');
+      if (!tenantId) return [];
+
       const { data, error } = await supabase
         .from('print_sectors')
         .select('*')
+        .eq('tenant_id', tenantId)
         .order('sort_order', { ascending: true });
       
       if (error) throw error;
