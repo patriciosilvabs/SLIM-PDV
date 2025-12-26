@@ -66,6 +66,7 @@ interface OrderItem {
   product?: { name: string } | null;
   variation?: { name: string } | null;
   extras?: Array<{ extra_name: string; price: number }>;
+  added_by_profile?: { name: string } | null;
 }
 
 interface Order {
@@ -175,6 +176,9 @@ export function KdsStationCard({
     const flavors = getFlavors(item.extras);
     const itemText = `${item.product?.name || ''} ${item.notes || ''} ${item.extras?.map(e => e.extra_name).join(' ') || ''}`;
     
+    // Determinar se deve piscar: sempre na primeira estação, ou em todas se configurado
+    const shouldBlink = isFirstStation || settings.notesBlinkAllStations;
+    
     // Em preparação (prep_start): Mostra tamanho + borda + observações PISCANDO
     if (stationType === 'prep_start') {
       return (
@@ -194,6 +198,12 @@ export function KdsStationCard({
               yellowMinutes={settings.timerYellowMinutes}
             />
           </div>
+          {/* Nome do garçom */}
+          {settings.showWaiterName && item.added_by_profile?.name && (
+            <p className="text-xs text-blue-600 mt-0.5">
+              👤 {item.added_by_profile.name}
+            </p>
+          )}
           {/* Borda - APENAS o fundo da tarja pisca */}
           {borderInfo && (
             <div className="mt-1">
@@ -216,7 +226,7 @@ export function KdsStationCard({
       );
     }
     
-    // Item em montagem (item_assembly): Mostra sabores + observações PISCANDO
+    // Item em montagem (item_assembly): Mostra sabores + observações (pisca condicionalmente)
     if (stationType === 'item_assembly') {
       return (
         <div className="flex-1 min-w-0">
@@ -235,20 +245,48 @@ export function KdsStationCard({
               yellowMinutes={settings.timerYellowMinutes}
             />
           </div>
+          {/* Nome do garçom */}
+          {settings.showWaiterName && item.added_by_profile?.name && (
+            <p className="text-xs text-blue-600 mt-0.5">
+              👤 {item.added_by_profile.name}
+            </p>
+          )}
+          {/* BORDA - Pisca condicionalmente */}
+          {borderInfo && (
+            shouldBlink ? (
+              <div className="mt-1">
+                <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden">
+                  <span className="absolute inset-0 bg-amber-500 animate-pulse"></span>
+                  <span className="relative z-10 text-amber-950">🟡 {borderInfo}</span>
+                </span>
+              </div>
+            ) : (
+              <div className="mt-1 flex items-center gap-1 text-sm">
+                <span className="text-amber-600 font-medium">🟡 Borda:</span>
+                <span className="font-bold text-amber-700">{borderInfo}</span>
+              </div>
+            )
+          )}
           {/* Sabores */}
           {flavors.length > 0 && (
             <p className="text-sm text-blue-600 mt-0.5">
               🍕 {flavors.join(' + ')}
             </p>
           )}
-          {/* Observações - APENAS o fundo da tarja pisca */}
+          {/* Observações - Pisca condicionalmente */}
           {item.notes && (
-            <div className="mt-1">
-              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden">
-                <span className="absolute inset-0 bg-orange-500 animate-pulse"></span>
-                <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
-              </span>
-            </div>
+            shouldBlink ? (
+              <div className="mt-1">
+                <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden">
+                  <span className="absolute inset-0 bg-orange-500 animate-pulse"></span>
+                  <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
+                </span>
+              </div>
+            ) : (
+              <p className="text-sm text-orange-600 mt-0.5 font-medium">
+                📝 {item.notes}
+              </p>
+            )
           )}
         </div>
       );
@@ -273,6 +311,12 @@ export function KdsStationCard({
               yellowMinutes={settings.timerYellowMinutes}
             />
           </div>
+          {/* Nome do garçom */}
+          {settings.showWaiterName && item.added_by_profile?.name && (
+            <p className="text-xs text-blue-600 mt-0.5">
+              👤 {item.added_by_profile.name}
+            </p>
+          )}
           
           {/* RESUMO DE CONFIRMAÇÃO */}
           <div className="mt-2 p-2 bg-muted/50 rounded border-l-4 border-amber-500">
@@ -311,7 +355,7 @@ export function KdsStationCard({
       );
     }
     
-    // Outros tipos de estação: Mostra tudo (incluindo borda e observações destacadas)
+    // Outros tipos de estação: Mostra tudo (incluindo borda e observações destacadas, pisca condicionalmente)
     return (
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-1.5 flex-wrap">
@@ -330,12 +374,28 @@ export function KdsStationCard({
           />
         </div>
         
-        {/* BORDA - Sempre visível */}
+        {/* Nome do garçom */}
+        {settings.showWaiterName && item.added_by_profile?.name && (
+          <p className="text-xs text-blue-600 mt-0.5">
+            👤 {item.added_by_profile.name}
+          </p>
+        )}
+        
+        {/* BORDA - Pisca condicionalmente */}
         {borderInfo && (
-          <div className="mt-1 flex items-center gap-1 text-sm">
-            <span className="text-amber-600 font-medium">🟡 Borda:</span>
-            <span className="font-bold text-amber-700">{borderInfo}</span>
-          </div>
+          shouldBlink ? (
+            <div className="mt-1">
+              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden">
+                <span className="absolute inset-0 bg-amber-500 animate-pulse"></span>
+                <span className="relative z-10 text-amber-950">🟡 {borderInfo}</span>
+              </span>
+            </div>
+          ) : (
+            <div className="mt-1 flex items-center gap-1 text-sm">
+              <span className="text-amber-600 font-medium">🟡 Borda:</span>
+              <span className="font-bold text-amber-700">{borderInfo}</span>
+            </div>
+          )
         )}
         
         {/* Sabores */}
@@ -345,11 +405,20 @@ export function KdsStationCard({
           </p>
         )}
         
-        {/* OBSERVAÇÕES - Sempre visível */}
+        {/* OBSERVAÇÕES - Pisca condicionalmente */}
         {item.notes && (
-          <p className="text-sm text-orange-600 mt-0.5 font-medium">
-            📝 {item.notes}
-          </p>
+          shouldBlink ? (
+            <div className="mt-1">
+              <span className="inline-flex px-2 py-1 rounded font-bold text-sm relative overflow-hidden">
+                <span className="absolute inset-0 bg-orange-500 animate-pulse"></span>
+                <span className="relative z-10 text-orange-950">📝 {item.notes}</span>
+              </span>
+            </div>
+          ) : (
+            <p className="text-sm text-orange-600 mt-0.5 font-medium">
+              📝 {item.notes}
+            </p>
+          )
         )}
       </div>
     );

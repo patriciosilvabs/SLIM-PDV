@@ -37,6 +37,9 @@ export interface KdsGlobalSettings {
   // Delay alert settings
   delayAlertEnabled: boolean;
   delayAlertMinutes: number;
+  // Display settings
+  notesBlinkAllStations: boolean;
+  showWaiterName: boolean;
 }
 
 // Device-specific settings (stored in localStorage)
@@ -85,6 +88,8 @@ const defaultGlobalSettings: KdsGlobalSettings = {
   timerYellowMinutes: 10,
   delayAlertEnabled: true,
   delayAlertMinutes: 10,
+  notesBlinkAllStations: false,
+  showWaiterName: true,
 };
 
 const getDeviceSettings = (): KdsDeviceSettings => {
@@ -180,6 +185,8 @@ export function useKdsSettings() {
       timerYellowMinutes: (dbSettings as any).timer_yellow_minutes ?? defaultGlobalSettings.timerYellowMinutes,
       delayAlertEnabled: (dbSettings as any).delay_alert_enabled ?? defaultGlobalSettings.delayAlertEnabled,
       delayAlertMinutes: (dbSettings as any).delay_alert_minutes ?? defaultGlobalSettings.delayAlertMinutes,
+      notesBlinkAllStations: (dbSettings as any).notes_blink_all_stations ?? defaultGlobalSettings.notesBlinkAllStations,
+      showWaiterName: (dbSettings as any).show_waiter_name ?? defaultGlobalSettings.showWaiterName,
     };
   }, [dbSettings]);
 
@@ -210,6 +217,8 @@ export function useKdsSettings() {
       if (updates.timerYellowMinutes !== undefined) dbUpdates.timer_yellow_minutes = updates.timerYellowMinutes;
       if (updates.delayAlertEnabled !== undefined) dbUpdates.delay_alert_enabled = updates.delayAlertEnabled;
       if (updates.delayAlertMinutes !== undefined) dbUpdates.delay_alert_minutes = updates.delayAlertMinutes;
+      if (updates.notesBlinkAllStations !== undefined) dbUpdates.notes_blink_all_stations = updates.notesBlinkAllStations;
+      if (updates.showWaiterName !== undefined) dbUpdates.show_waiter_name = updates.showWaiterName;
 
       const { error } = await supabase
         .from('kds_global_settings')
@@ -248,6 +257,8 @@ export function useKdsSettings() {
     if (updates.timerYellowMinutes !== undefined) globalUpdates.timerYellowMinutes = updates.timerYellowMinutes;
     if (updates.delayAlertEnabled !== undefined) globalUpdates.delayAlertEnabled = updates.delayAlertEnabled;
     if (updates.delayAlertMinutes !== undefined) globalUpdates.delayAlertMinutes = updates.delayAlertMinutes;
+    if (updates.notesBlinkAllStations !== undefined) globalUpdates.notesBlinkAllStations = updates.notesBlinkAllStations;
+    if (updates.showWaiterName !== undefined) globalUpdates.showWaiterName = updates.showWaiterName;
 
     // Update device settings locally
     if (Object.keys(deviceUpdates).length > 0) {

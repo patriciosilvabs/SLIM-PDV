@@ -527,9 +527,11 @@ export type Database = {
           delay_alert_minutes: number
           highlight_special_borders: boolean
           id: string
+          notes_blink_all_stations: boolean
           operation_mode: string
           show_party_size: boolean
           show_pending_column: boolean
+          show_waiter_name: boolean
           sla_green_minutes: number
           sla_yellow_minutes: number
           timer_green_minutes: number
@@ -548,9 +550,11 @@ export type Database = {
           delay_alert_minutes?: number
           highlight_special_borders?: boolean
           id?: string
+          notes_blink_all_stations?: boolean
           operation_mode?: string
           show_party_size?: boolean
           show_pending_column?: boolean
+          show_waiter_name?: boolean
           sla_green_minutes?: number
           sla_yellow_minutes?: number
           timer_green_minutes?: number
@@ -569,9 +573,11 @@ export type Database = {
           delay_alert_minutes?: number
           highlight_special_borders?: boolean
           id?: string
+          notes_blink_all_stations?: boolean
           operation_mode?: string
           show_party_size?: boolean
           show_pending_column?: boolean
+          show_waiter_name?: boolean
           sla_green_minutes?: number
           sla_yellow_minutes?: number
           timer_green_minutes?: number
