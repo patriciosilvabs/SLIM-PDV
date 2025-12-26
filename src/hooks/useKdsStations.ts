@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from './useTenant';
 
 export interface KdsStation {
   id: string;
@@ -29,6 +30,7 @@ export const STATION_TYPE_LABELS: Record<StationType, string> = {
 export function useKdsStations() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
 
   const { data: stations = [], isLoading, error } = useQuery({
     queryKey: ['kds-stations'],
@@ -53,9 +55,11 @@ export function useKdsStations() {
 
   const createStation = useMutation({
     mutationFn: async (station: Omit<KdsStation, 'id' | 'created_at' | 'updated_at'>) => {
+      if (!tenantId) throw new Error('Tenant não encontrado');
+      
       const { data, error } = await supabase
         .from('kds_stations')
-        .insert(station)
+        .insert({ ...station, tenant_id: tenantId })
         .select()
         .single();
 

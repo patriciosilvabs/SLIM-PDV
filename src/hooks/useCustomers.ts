@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useTenant } from './useTenant';
 
 export interface Customer {
   id: string;
@@ -51,12 +52,15 @@ export function useSearchCustomers(searchTerm: string) {
 
 export function useCustomerMutations() {
   const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
 
   const createCustomer = useMutation({
     mutationFn: async (customer: Omit<Customer, 'id' | 'created_at' | 'updated_at' | 'total_orders' | 'total_spent' | 'last_order_at'>) => {
+      if (!tenantId) throw new Error('Tenant não encontrado');
+      
       const { data, error } = await supabase
         .from('customers')
-        .insert(customer)
+        .insert({ ...customer, tenant_id: tenantId })
         .select()
         .single();
       
@@ -119,6 +123,7 @@ export function useCustomerMutations() {
   const findOrCreateCustomer = useMutation({
     mutationFn: async ({ name, phone, address }: { name?: string; phone?: string; address?: string }) => {
       if (!phone && !name) return null;
+      if (!tenantId) throw new Error('Tenant não encontrado');
 
       // Try to find by phone first
       if (phone) {
@@ -126,7 +131,7 @@ export function useCustomerMutations() {
           .from('customers')
           .select('*')
           .eq('phone', phone)
-          .single();
+          .maybeSingle();
         
         if (existing) return existing as Customer;
       }
@@ -138,6 +143,7 @@ export function useCustomerMutations() {
           name: name || 'Cliente',
           phone: phone || null,
           address: address || null,
+          tenant_id: tenantId,
         })
         .select()
         .single();

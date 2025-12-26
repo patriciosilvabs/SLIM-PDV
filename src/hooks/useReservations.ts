@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useEffect } from 'react';
+import { useTenant } from './useTenant';
 
 export type ReservationStatus = 'confirmed' | 'cancelled' | 'completed' | 'no_show';
 
@@ -63,12 +64,15 @@ export function useReservations(date?: string) {
 export function useReservationMutations() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { tenantId } = useTenant();
 
   const createReservation = useMutation({
     mutationFn: async (reservation: Omit<Reservation, 'id' | 'created_at' | 'table'>) => {
+      if (!tenantId) throw new Error('Tenant não encontrado');
+      
       const { data, error } = await supabase
         .from('reservations')
-        .insert(reservation)
+        .insert({ ...reservation, tenant_id: tenantId })
         .select()
         .single();
       

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { useTenant } from './useTenant';
 
 export interface ComplementGroup {
   id: string;
@@ -37,12 +38,15 @@ export function useComplementGroups() {
 
 export function useComplementGroupsMutations() {
   const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
 
   const createGroup = useMutation({
     mutationFn: async (group: Omit<ComplementGroup, 'id' | 'created_at' | 'updated_at'>) => {
+      if (!tenantId) throw new Error('Tenant não encontrado');
+      
       const { data, error } = await supabase
         .from('complement_groups')
-        .insert(group)
+        .insert({ ...group, tenant_id: tenantId })
         .select()
         .single();
       

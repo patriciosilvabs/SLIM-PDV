@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useEffect } from 'react';
+import { useTenant } from './useTenant';
 
 export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
 export type OrderType = 'dine_in' | 'takeaway' | 'delivery';
@@ -105,16 +106,57 @@ export function useOrders(status?: OrderStatus[]) {
       }
       
       // Merge profiles into orders and order items
-      const ordersWithProfiles = ordersData?.map(order => ({
-        ...order,
-        created_by_profile: order.created_by ? profilesMap[order.created_by] || null : null,
-        order_items: order.order_items?.map((item: { added_by?: string | null }) => ({
-          ...item,
-          added_by_profile: item.added_by ? profilesMap[item.added_by] || null : null
-        }))
-      }));
+      const ordersWithProfiles = ordersData?.map(order => {
+        const orderItems = (order.order_items || []).map((item: Record<string, unknown>) => ({
+          id: item.id as string,
+          order_id: item.order_id as string,
+          product_id: item.product_id as string | null,
+          variation_id: item.variation_id as string | null,
+          quantity: item.quantity as number,
+          unit_price: item.unit_price as number,
+          total_price: item.total_price as number,
+          notes: item.notes as string | null,
+          status: item.status as OrderStatus,
+          created_at: item.created_at as string,
+          added_by: item.added_by as string | null,
+          current_station_id: item.current_station_id as string | null,
+          station_status: item.station_status as 'waiting' | 'in_progress' | 'completed' | null,
+          product: item.product as { name: string; image_url: string | null } | undefined,
+          variation: item.variation as { name: string } | null,
+          extras: item.extras as { extra_name: string; price: number }[] | null,
+          current_station: item.current_station as OrderItemStation | null,
+          added_by_profile: (item.added_by as string) ? profilesMap[item.added_by as string] || null : null
+        })) as OrderItem[];
+
+        return {
+          id: order.id,
+          table_id: order.table_id,
+          order_type: order.order_type as OrderType,
+          status: order.status as OrderStatus,
+          customer_name: order.customer_name,
+          customer_phone: order.customer_phone,
+          customer_address: order.customer_address,
+          subtotal: order.subtotal ?? 0,
+          discount: order.discount ?? 0,
+          total: order.total ?? 0,
+          notes: order.notes,
+          created_by: order.created_by,
+          created_at: order.created_at ?? '',
+          updated_at: order.updated_at ?? '',
+          ready_at: order.ready_at,
+          delivered_at: order.delivered_at,
+          cancelled_at: order.cancelled_at,
+          cancelled_by: order.cancelled_by,
+          cancellation_reason: order.cancellation_reason,
+          status_before_cancellation: order.status_before_cancellation as OrderStatus | null,
+          is_draft: order.is_draft,
+          table: order.table as { number: number } | null,
+          order_items: orderItems,
+          created_by_profile: order.created_by ? profilesMap[order.created_by] || null : null
+        } as Order;
+      }) || [];
       
-      return ordersWithProfiles as Order[];
+      return ordersWithProfiles;
     },
   });
 
@@ -140,13 +182,16 @@ export function useOrders(status?: OrderStatus[]) {
 export function useOrderMutations() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { tenantId } = useTenant();
 
   const createOrder = useMutation({
     mutationFn: async (order: Partial<Order>) => {
+      if (!tenantId) throw new Error('Tenant não encontrado');
+      
       const { data: userData } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from('orders')
-        .insert({ ...order, created_by: userData.user?.id })
+        .insert({ ...order, created_by: userData.user?.id, tenant_id: tenantId })
         .select()
         .single();
       
@@ -186,6 +231,8 @@ export function useOrderMutations() {
 
   const addOrderItem = useMutation({
     mutationFn: async (item: Omit<OrderItem, 'id' | 'created_at' | 'product' | 'added_by' | 'added_by_profile'>) => {
+      if (!tenantId) throw new Error('Tenant não encontrado');
+      
       // Obter usuário atual para registrar quem adicionou o item
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData.user?.id || null;
@@ -196,7 +243,8 @@ export function useOrderMutations() {
         .from('order_items')
         .insert({ 
           ...item, 
-          added_by: userId  // Garantir que seja sempre definido após o spread
+          added_by: userId,
+          tenant_id: tenantId
         })
         .select()
         .single();
@@ -287,10 +335,13 @@ export function useOrderMutations() {
   const addOrderItemExtras = useMutation({
     mutationFn: async (extras: { order_item_id: string; extra_name: string; price: number; extra_id?: string | null }[]) => {
       if (extras.length === 0) return [];
+      if (!tenantId) throw new Error('Tenant não encontrado');
+      
+      const extrasWithTenant = extras.map(e => ({ ...e, tenant_id: tenantId }));
       
       const { data, error } = await supabase
         .from('order_item_extras')
-        .insert(extras)
+        .insert(extrasWithTenant)
         .select();
       
       if (error) throw error;
