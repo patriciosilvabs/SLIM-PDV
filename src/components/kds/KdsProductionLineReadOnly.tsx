@@ -24,6 +24,7 @@ interface OrderItem {
   product?: { name: string } | null;
   variation?: { name: string } | null;
   extras?: Array<{ extra_name: string; price: number }>;
+  added_by_profile?: { name: string } | null;
 }
 
 interface Order {
@@ -102,7 +103,7 @@ function ReadOnlyItemCard({
   order: Order;
   items: OrderItem[];
   stationColor: string;
-  settings: { timerGreenMinutes: number; timerYellowMinutes: number };
+  settings: { timerGreenMinutes: number; timerYellowMinutes: number; showWaiterName: boolean };
 }) {
   const getOrderOriginLabel = () => {
     if (order.order_type === 'delivery') return 'DELIVERY';
@@ -181,6 +182,12 @@ function ReadOnlyItemCard({
                   yellowMinutes={settings.timerYellowMinutes}
                 />
               </div>
+              {/* Nome do garçom */}
+              {settings.showWaiterName && item.added_by_profile?.name && (
+                <p className="text-xs text-blue-600 mt-0.5">
+                  👤 {item.added_by_profile.name}
+                </p>
+              )}
               {/* BORDA - Sempre visível */}
               {borderInfo && (
                 <p className="text-xs text-amber-600 mt-0.5 font-medium">
@@ -217,7 +224,7 @@ function ReadyOrderCard({
   order: Order;
   items: OrderItem[];
   stationColor: string;
-  settings: { timerGreenMinutes: number; timerYellowMinutes: number };
+  settings: { timerGreenMinutes: number; timerYellowMinutes: number; showWaiterName: boolean };
   onMarkDelivered?: (orderId: string) => void;
   onCancelOrder?: (order: Order) => void;
   isMarkingDelivered?: boolean;
@@ -293,6 +300,12 @@ function ReadyOrderCard({
                   <span className="text-xs text-muted-foreground">({item.variation.name})</span>
                 )}
               </div>
+              {/* Nome do garçom */}
+              {settings.showWaiterName && item.added_by_profile?.name && (
+                <p className="text-xs text-blue-600 mt-0.5">
+                  👤 {item.added_by_profile.name}
+                </p>
+              )}
               {/* BORDA - Sempre visível */}
               {borderInfo && (
                 <p className="text-xs text-amber-600 mt-0.5 font-medium">
@@ -488,6 +501,7 @@ export function KdsProductionLineReadOnly({
                         settings={{
                           timerGreenMinutes: settings.timerGreenMinutes,
                           timerYellowMinutes: settings.timerYellowMinutes,
+                          showWaiterName: settings.showWaiterName,
                         }}
                       />
                     ))}
@@ -533,6 +547,7 @@ export function KdsProductionLineReadOnly({
                       settings={{
                         timerGreenMinutes: settings.timerGreenMinutes,
                         timerYellowMinutes: settings.timerYellowMinutes,
+                        showWaiterName: settings.showWaiterName,
                       }}
                       onMarkDelivered={onMarkDelivered}
                       onCancelOrder={onCancelOrder}

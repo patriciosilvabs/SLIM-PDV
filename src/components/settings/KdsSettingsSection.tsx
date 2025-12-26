@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { useKdsSettings, KdsOperationMode } from '@/hooks/useKdsSettings';
 import { useKdsStations } from '@/hooks/useKdsStations';
 import { useKdsDevice } from '@/hooks/useKdsDevice';
-import { ChefHat, Printer, Monitor, Factory, Clock, Circle, X, Plus, AlertTriangle, ChevronDown, Layers } from 'lucide-react';
+import { ChefHat, Printer, Monitor, Factory, Clock, Circle, X, Plus, AlertTriangle, ChevronDown, Layers, User, Eye } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -534,6 +534,51 @@ export function KdsSettingsSection() {
           <p className="text-sm text-muted-foreground">
             Acima de {settings.slaYellowMinutes} minutos, o pedido ficará <span className="text-red-500 font-medium">vermelho</span> (prioridade máxima).
           </p>
+        </CardContent>
+      </Card>
+
+      {/* Exibição no KDS */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Eye className="h-5 w-5" />
+            Exibição no KDS
+          </CardTitle>
+          <CardDescription>
+            Configure a exibição de informações adicionais no KDS
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label className="font-medium">Piscar observações em todas as estações</Label>
+              <p className="text-sm text-muted-foreground">
+                Se desativado, observações piscam apenas na primeira estação
+              </p>
+            </div>
+            <Switch 
+              checked={settings.notesBlinkAllStations ?? false}
+              onCheckedChange={(notesBlinkAllStations) => updateSettings({ notesBlinkAllStations })} 
+            />
+          </div>
+
+          <div className="border-t pt-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="font-medium flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  Exibir nome do garçom
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Mostra quem lançou cada item no pedido
+                </p>
+              </div>
+              <Switch 
+                checked={settings.showWaiterName ?? true}
+                onCheckedChange={(showWaiterName) => updateSettings({ showWaiterName })} 
+              />
+            </div>
+          </div>
         </CardContent>
       </Card>
 
