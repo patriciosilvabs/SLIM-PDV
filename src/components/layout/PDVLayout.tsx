@@ -3,6 +3,7 @@ import { Link, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserRole, AppRole } from '@/hooks/useUserRole';
 import { useUserPermissions, PermissionCode } from '@/hooks/useUserPermissions';
+import { usePlatformAdmin } from '@/hooks/usePlatformAdmin';
 import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -10,7 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { PrinterStatusIndicator } from '@/components/PrinterStatusIndicator';
-import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Store, Users, Kanban, ChefHat, History, Target, UserCircle, Pizza, RotateCcw, Shield, Ban } from 'lucide-react';
+import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Store, Users, Kanban, ChefHat, History, Target, UserCircle, Pizza, RotateCcw, Shield, Ban, Crown } from 'lucide-react';
 import logoSlim from '@/assets/logo-slim.png';
 
 interface NavItem {
@@ -61,6 +62,7 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, signOut } = useAuth();
   const { roles, isLoading: rolesLoading } = useUserRole();
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
+  const { isPlatformAdmin } = usePlatformAdmin();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -192,6 +194,17 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
             </div>
+            {isPlatformAdmin && (
+              <Link to="/platform" onClick={() => setSidebarOpen(false)}>
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start text-amber-500 hover:text-amber-400 hover:bg-sidebar-accent mb-1"
+                >
+                  <Crown className="h-4 w-4 mr-2" />
+                  Gestão da Plataforma
+                </Button>
+              </Link>
+            )}
             <Link to="/profile" onClick={() => setSidebarOpen(false)}>
               <Button
                 variant="ghost"

@@ -1213,6 +1213,30 @@ export type Database = {
           },
         ]
       }
+      platform_admins: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          email: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          email: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          email?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       print_queue: {
         Row: {
           created_at: string
@@ -2283,6 +2307,7 @@ export type Database = {
         Returns: boolean
       }
       is_employee: { Args: { _user_id: string }; Returns: boolean }
+      is_platform_admin: { Args: { _user_id: string }; Returns: boolean }
       is_tenant_member: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
@@ -2290,7 +2315,13 @@ export type Database = {
       is_tenant_owner: { Args: { _tenant_id: string }; Returns: boolean }
     }
     Enums: {
-      app_role: "admin" | "cashier" | "waiter" | "kitchen" | "kds"
+      app_role:
+        | "admin"
+        | "cashier"
+        | "waiter"
+        | "kitchen"
+        | "kds"
+        | "platform_admin"
       cash_register_status: "open" | "closed"
       order_status:
         | "pending"
@@ -2493,7 +2524,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "cashier", "waiter", "kitchen", "kds"],
+      app_role: [
+        "admin",
+        "cashier",
+        "waiter",
+        "kitchen",
+        "kds",
+        "platform_admin",
+      ],
       cash_register_status: ["open", "closed"],
       order_status: ["pending", "preparing", "ready", "delivered", "cancelled"],
       order_type: ["dine_in", "takeaway", "delivery"],

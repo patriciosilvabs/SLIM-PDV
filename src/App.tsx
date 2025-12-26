@@ -34,6 +34,12 @@ import ShareReceiver from "./pages/ShareReceiver";
 import AcceptInvite from "./pages/AcceptInvite";
 import NotFound from "./pages/NotFound";
 
+// Platform Admin Pages
+import PlatformDashboard from "./pages/platform/PlatformDashboard";
+import PlatformTenants from "./pages/platform/PlatformTenants";
+import PlatformSubscriptions from "./pages/platform/PlatformSubscriptions";
+import PlatformAdmins from "./pages/platform/PlatformAdmins";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -52,6 +58,12 @@ const App = () => (
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/onboarding" element={<Onboarding />} />
                 <Route path="/invite/:token" element={<AcceptInvite />} />
+                
+                {/* Platform Admin routes */}
+                <Route path="/platform" element={<PlatformDashboard />} />
+                <Route path="/platform/tenants" element={<PlatformTenants />} />
+                <Route path="/platform/subscriptions" element={<PlatformSubscriptions />} />
+                <Route path="/platform/admins" element={<PlatformAdmins />} />
                 
                 {/* Protected routes - require tenant */}
                 <Route path="/dashboard" element={<RequireTenant><Dashboard /></RequireTenant>} />
