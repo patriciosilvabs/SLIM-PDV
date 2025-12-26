@@ -47,8 +47,8 @@ const App = () => (
     <AuthProvider>
       <OfflineSyncProvider>
         <PrinterProvider>
-          <PrintQueueListener />
           <TooltipProvider>
+            <PrintQueueListener />
             <Toaster />
             <Sonner />
             <BrowserRouter>
