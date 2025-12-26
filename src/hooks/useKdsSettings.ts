@@ -40,6 +40,9 @@ export interface KdsGlobalSettings {
   // Display settings
   notesBlinkAllStations: boolean;
   showWaiterName: boolean;
+  // Badge color settings
+  borderBadgeColor: string;
+  notesBadgeColor: string;
 }
 
 // Device-specific settings (stored in localStorage)
@@ -90,6 +93,8 @@ const defaultGlobalSettings: KdsGlobalSettings = {
   delayAlertMinutes: 10,
   notesBlinkAllStations: false,
   showWaiterName: true,
+  borderBadgeColor: 'amber',
+  notesBadgeColor: 'orange',
 };
 
 const getDeviceSettings = (): KdsDeviceSettings => {
@@ -187,6 +192,8 @@ export function useKdsSettings() {
       delayAlertMinutes: (dbSettings as any).delay_alert_minutes ?? defaultGlobalSettings.delayAlertMinutes,
       notesBlinkAllStations: (dbSettings as any).notes_blink_all_stations ?? defaultGlobalSettings.notesBlinkAllStations,
       showWaiterName: (dbSettings as any).show_waiter_name ?? defaultGlobalSettings.showWaiterName,
+      borderBadgeColor: (dbSettings as any).border_badge_color ?? defaultGlobalSettings.borderBadgeColor,
+      notesBadgeColor: (dbSettings as any).notes_badge_color ?? defaultGlobalSettings.notesBadgeColor,
     };
   }, [dbSettings]);
 
@@ -219,6 +226,8 @@ export function useKdsSettings() {
       if (updates.delayAlertMinutes !== undefined) dbUpdates.delay_alert_minutes = updates.delayAlertMinutes;
       if (updates.notesBlinkAllStations !== undefined) dbUpdates.notes_blink_all_stations = updates.notesBlinkAllStations;
       if (updates.showWaiterName !== undefined) dbUpdates.show_waiter_name = updates.showWaiterName;
+      if (updates.borderBadgeColor !== undefined) dbUpdates.border_badge_color = updates.borderBadgeColor;
+      if (updates.notesBadgeColor !== undefined) dbUpdates.notes_badge_color = updates.notesBadgeColor;
 
       const { error } = await supabase
         .from('kds_global_settings')
@@ -259,6 +268,8 @@ export function useKdsSettings() {
     if (updates.delayAlertMinutes !== undefined) globalUpdates.delayAlertMinutes = updates.delayAlertMinutes;
     if (updates.notesBlinkAllStations !== undefined) globalUpdates.notesBlinkAllStations = updates.notesBlinkAllStations;
     if (updates.showWaiterName !== undefined) globalUpdates.showWaiterName = updates.showWaiterName;
+    if (updates.borderBadgeColor !== undefined) globalUpdates.borderBadgeColor = updates.borderBadgeColor;
+    if (updates.notesBadgeColor !== undefined) globalUpdates.notesBadgeColor = updates.notesBadgeColor;
 
     // Update device settings locally
     if (Object.keys(deviceUpdates).length > 0) {
