@@ -138,13 +138,14 @@ export default function Onboarding() {
         console.error('Auth getUser error:', authError);
       }
 
-      // Create tenant
+      // Create tenant with owner_id to allow SELECT immediately after INSERT
       console.log('Attempting to insert tenant...');
       const { data: tenant, error: tenantError } = await supabase
         .from('tenants')
         .insert({
           name: formData.name,
           slug: formData.slug,
+          owner_id: user?.id,
         })
         .select()
         .single();
