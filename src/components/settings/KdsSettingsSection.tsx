@@ -6,10 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { useKdsSettings, KdsOperationMode } from '@/hooks/useKdsSettings';
+import { useKdsSettings, KdsOperationMode, OrderManagementViewMode } from '@/hooks/useKdsSettings';
 import { useKdsStations } from '@/hooks/useKdsStations';
 import { useKdsDevice } from '@/hooks/useKdsDevice';
-import { ChefHat, Printer, Monitor, Factory, Clock, Circle, X, Plus, AlertTriangle, ChevronDown, Layers, User, Eye, Palette } from 'lucide-react';
+import { ChefHat, Printer, Monitor, Factory, Clock, Circle, X, Plus, AlertTriangle, ChevronDown, Layers, User, Eye, Palette, ClipboardList } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { BADGE_COLOR_OPTIONS, getBadgeColorClasses } from '@/lib/badgeColors';
@@ -159,6 +159,76 @@ export function KdsSettingsSection() {
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Visualização Gestão de Pedidos */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <ClipboardList className="h-5 w-5" />
+            Visualização da Gestão de Pedidos
+          </CardTitle>
+          <CardDescription>
+            Escolha como a tela de Gestão de Pedidos (Balcão/Delivery) irá exibir os pedidos
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <button
+              type="button"
+              onClick={() => updateSettings({ orderManagementViewMode: 'follow_kds' })}
+              className={`p-4 rounded-lg border-2 text-left transition-all ${
+                settings.orderManagementViewMode === 'follow_kds'
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-primary/50'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Eye className="h-5 w-5" />
+                <span className="font-medium">Seguir KDS</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Usa o mesmo modo de visualização configurado no KDS.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => updateSettings({ orderManagementViewMode: 'kanban' })}
+              className={`p-4 rounded-lg border-2 text-left transition-all ${
+                settings.orderManagementViewMode === 'kanban'
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-primary/50'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Monitor className="h-5 w-5" />
+                <span className="font-medium">Kanban</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Exibe pedidos em colunas por status (Pendentes, Preparando, Prontos).
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => updateSettings({ orderManagementViewMode: 'production_line' })}
+              className={`p-4 rounded-lg border-2 text-left transition-all ${
+                settings.orderManagementViewMode === 'production_line'
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-primary/50'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Factory className="h-5 w-5" />
+                <span className="font-medium">Linha de Produção</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Exibe pedidos organizados por praça/estação de trabalho.
+              </p>
+            </button>
+          </div>
         </CardContent>
       </Card>
 

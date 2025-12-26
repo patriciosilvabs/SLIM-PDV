@@ -670,6 +670,7 @@ export type Database = {
           notes_badge_color: string
           notes_blink_all_stations: boolean
           operation_mode: string
+          order_management_view_mode: string
           show_party_size: boolean
           show_pending_column: boolean
           show_waiter_name: boolean
@@ -696,6 +697,7 @@ export type Database = {
           notes_badge_color?: string
           notes_blink_all_stations?: boolean
           operation_mode?: string
+          order_management_view_mode?: string
           show_party_size?: boolean
           show_pending_column?: boolean
           show_waiter_name?: boolean
@@ -722,6 +724,7 @@ export type Database = {
           notes_badge_color?: string
           notes_blink_all_stations?: boolean
           operation_mode?: string
+          order_management_view_mode?: string
           show_party_size?: boolean
           show_pending_column?: boolean
           show_waiter_name?: boolean
