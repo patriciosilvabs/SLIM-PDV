@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from './useTenant';
 
 export interface Product {
   id: string;
@@ -47,12 +48,15 @@ export function useProducts() {
 export function useProductMutations() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { tenantId } = useTenant();
 
   const createProduct = useMutation({
     mutationFn: async (product: Omit<Product, 'id' | 'created_at' | 'updated_at' | 'category'>) => {
+      if (!tenantId) throw new Error('Tenant não encontrado');
+      
       const { data, error } = await supabase
         .from('products')
-        .insert(product)
+        .insert({ ...product, tenant_id: tenantId })
         .select()
         .single();
       

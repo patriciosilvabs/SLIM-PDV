@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from './useTenant';
 
 export type CashRegisterStatus = 'open' | 'closed';
 export type PaymentMethod = 'cash' | 'credit_card' | 'debit_card' | 'pix';
@@ -48,16 +49,20 @@ export function useOpenCashRegister() {
 export function useCashRegisterMutations() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { tenantId } = useTenant();
 
   const openCashRegister = useMutation({
     mutationFn: async (openingAmount: number) => {
+      if (!tenantId) throw new Error('Tenant não encontrado');
+      
       const { data: userData } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from('cash_registers')
         .insert({
           opened_by: userData.user?.id,
           opening_amount: openingAmount,
-          status: 'open'
+          status: 'open',
+          tenant_id: tenantId
         })
         .select()
         .single();
@@ -124,6 +129,8 @@ export function useCashRegisterMutations() {
 
   const createPayment = useMutation({
     mutationFn: async (payment: Omit<Payment, 'id' | 'created_at' | 'received_by'>) => {
+      if (!tenantId) throw new Error('Tenant não encontrado');
+      
       const { data: userData } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from('payments')
@@ -133,7 +140,8 @@ export function useCashRegisterMutations() {
           payment_method: payment.payment_method,
           amount: payment.amount,
           is_partial: payment.is_partial || false,
-          received_by: userData.user?.id
+          received_by: userData.user?.id,
+          tenant_id: tenantId
         })
         .select()
         .single();

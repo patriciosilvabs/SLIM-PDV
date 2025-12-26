@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useEffect } from 'react';
+import { useTenant } from './useTenant';
 
 export type TableStatus = 'available' | 'occupied' | 'reserved' | 'bill_requested';
 
@@ -50,12 +51,15 @@ export function useTables() {
 export function useTableMutations() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { tenantId } = useTenant();
 
   const createTable = useMutation({
     mutationFn: async (table: Omit<Table, 'id' | 'created_at'>) => {
+      if (!tenantId) throw new Error('Tenant não encontrado');
+      
       const { data, error } = await supabase
         .from('tables')
-        .insert(table)
+        .insert({ ...table, tenant_id: tenantId })
         .select()
         .single();
       

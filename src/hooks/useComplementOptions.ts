@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { useTenant } from './useTenant';
 
 export interface ComplementOption {
   id: string;
@@ -37,12 +38,15 @@ export function useComplementOptions() {
 
 export function useComplementOptionsMutations() {
   const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
 
   const createOption = useMutation({
     mutationFn: async (option: Omit<ComplementOption, 'id' | 'created_at' | 'updated_at'>) => {
+      if (!tenantId) throw new Error('Tenant não encontrado');
+      
       const { data, error } = await supabase
         .from('complement_options')
-        .insert(option)
+        .insert({ ...option, tenant_id: tenantId })
         .select()
         .single();
       

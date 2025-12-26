@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from './useTenant';
 
 export interface Category {
   id: string;
@@ -30,12 +31,15 @@ export function useCategories() {
 export function useCategoryMutations() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { tenantId } = useTenant();
 
   const createCategory = useMutation({
     mutationFn: async (category: Omit<Category, 'id' | 'created_at'>) => {
+      if (!tenantId) throw new Error('Tenant não encontrado');
+      
       const { data, error } = await supabase
         .from('categories')
-        .insert(category)
+        .insert({ ...category, tenant_id: tenantId })
         .select()
         .single();
       

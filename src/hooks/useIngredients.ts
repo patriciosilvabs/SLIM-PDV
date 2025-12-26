@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from './useTenant';
 
 export interface Ingredient {
   id: string;
@@ -46,12 +47,15 @@ export function useLowStockIngredients() {
 export function useIngredientMutations() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { tenantId } = useTenant();
 
   const createIngredient = useMutation({
     mutationFn: async (ingredient: Omit<Ingredient, 'id' | 'created_at' | 'updated_at'>) => {
+      if (!tenantId) throw new Error('Tenant não encontrado');
+      
       const { data, error } = await supabase
         .from('ingredients')
-        .insert(ingredient)
+        .insert({ ...ingredient, tenant_id: tenantId })
         .select()
         .single();
       
@@ -132,7 +136,8 @@ export function useIngredientMutations() {
           previous_stock: previousStock,
           new_stock: newStock,
           notes,
-          created_by: userData.user?.id
+          created_by: userData.user?.id,
+          tenant_id: tenantId
         });
       
       if (movementError) throw movementError;
