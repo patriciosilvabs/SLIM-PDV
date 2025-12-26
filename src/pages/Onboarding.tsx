@@ -114,7 +114,32 @@ export default function Onboarding() {
     setErrors({});
 
     try {
+      // Debug: Log current user info
+      console.log('=== Onboarding Debug ===');
+      console.log('User from context:', user?.id);
+      
+      // Force session refresh to ensure token is valid
+      console.log('Refreshing session...');
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      
+      if (refreshError) {
+        console.error('Session refresh error:', refreshError);
+        throw new Error('Erro ao validar sessão. Faça login novamente.');
+      }
+      
+      console.log('Session refreshed successfully');
+      console.log('Session user ID:', refreshData.session?.user?.id);
+      console.log('Access token exists:', !!refreshData.session?.access_token);
+      
+      // Double check auth.uid() by getting current user
+      const { data: authUser, error: authError } = await supabase.auth.getUser();
+      console.log('Auth getUser result:', authUser?.user?.id);
+      if (authError) {
+        console.error('Auth getUser error:', authError);
+      }
+
       // Create tenant
+      console.log('Attempting to insert tenant...');
       const { data: tenant, error: tenantError } = await supabase
         .from('tenants')
         .insert({
@@ -124,7 +149,17 @@ export default function Onboarding() {
         .select()
         .single();
 
-      if (tenantError) throw tenantError;
+      if (tenantError) {
+        console.error('Tenant Error Details:', {
+          code: tenantError.code,
+          message: tenantError.message,
+          details: tenantError.details,
+          hint: tenantError.hint,
+        });
+        throw tenantError;
+      }
+
+      console.log('Tenant created successfully:', tenant.id);
 
       // Add user as owner
       const { error: memberError } = await supabase
@@ -135,7 +170,12 @@ export default function Onboarding() {
           is_owner: true,
         });
 
-      if (memberError) throw memberError;
+      if (memberError) {
+        console.error('Member Error:', memberError);
+        throw memberError;
+      }
+
+      console.log('Member added successfully');
 
       // Add admin role
       const { error: roleError } = await supabase
@@ -146,7 +186,12 @@ export default function Onboarding() {
           tenant_id: tenant.id,
         });
 
-      if (roleError) throw roleError;
+      if (roleError) {
+        console.error('Role Error:', roleError);
+        throw roleError;
+      }
+
+      console.log('Role added successfully');
 
       toast({
         title: 'Restaurante criado!',
@@ -156,6 +201,7 @@ export default function Onboarding() {
       // Force page reload to refresh tenant context
       window.location.href = '/dashboard';
     } catch (error: unknown) {
+      console.error('=== Onboarding Error ===', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
       toast({
         title: 'Erro ao criar restaurante',
