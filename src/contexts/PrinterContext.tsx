@@ -16,7 +16,7 @@ import {
   ALIGN_CENTER,
   LF
 } from '@/utils/escpos';
-import { useOrderSettings } from '@/hooks/useOrderSettings';
+
 import { PrintSector } from '@/hooks/usePrintSectors';
 import { imageUrlToBase64Cached, extractBase64Data, resizeImage, convertToGrayscale, convertToDithered } from '@/utils/imageToBase64';
 
@@ -77,8 +77,6 @@ const PrinterContext = createContext<PrinterContextValue | null>(null);
 
 export function PrinterProvider({ children }: { children: ReactNode }) {
   const qz = useQzTray();
-  // We still use this for UI display, but read from localStorage at print time
-  useOrderSettings();
 
   const printKitchenTicket = async (data: KitchenTicketData): Promise<boolean> => {
     if (!qz.config.kitchenPrinter) {
