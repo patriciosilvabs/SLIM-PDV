@@ -149,14 +149,27 @@ export function useKdsSettings() {
   const queryClient = useQueryClient();
   const [deviceSettings, setDeviceSettings] = useState<KdsDeviceSettings>(getDeviceSettings);
 
-  // Fetch global settings from database
-  const { data: dbSettings, isLoading } = useQuery({
-    queryKey: ['kds-global-settings'],
+  // Get tenant_id for current user
+  const { data: tenantId } = useQuery({
+    queryKey: ['user-tenant-id'],
     queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_user_tenant_id');
+      if (error) throw error;
+      return data as string | null;
+    },
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+
+  // Fetch global settings from database filtered by tenant
+  const { data: dbSettings, isLoading } = useQuery({
+    queryKey: ['kds-global-settings', tenantId],
+    queryFn: async () => {
+      if (!tenantId) return null;
+      
       const { data, error } = await supabase
         .from('kds_global_settings')
         .select('*')
-        .limit(1)
+        .eq('tenant_id', tenantId)
         .maybeSingle();
 
       if (error) {
@@ -166,6 +179,7 @@ export function useKdsSettings() {
 
       return data;
     },
+    enabled: !!tenantId,
     staleTime: 1000 * 60, // 1 minute
   });
 
@@ -206,7 +220,11 @@ export function useKdsSettings() {
   // Mutation to update global settings in database
   const updateGlobalMutation = useMutation({
     mutationFn: async (updates: Partial<KdsGlobalSettings>) => {
-      const dbUpdates: Record<string, unknown> = {};
+      if (!tenantId) throw new Error('No tenant ID available');
+
+      const dbUpdates: Record<string, unknown> = {
+        tenant_id: tenantId,
+      };
       
       if (updates.operationMode !== undefined) dbUpdates.operation_mode = updates.operationMode;
       if (updates.slaGreenMinutes !== undefined) dbUpdates.sla_green_minutes = updates.slaGreenMinutes;
@@ -229,15 +247,51 @@ export function useKdsSettings() {
       if (updates.borderBadgeColor !== undefined) dbUpdates.border_badge_color = updates.borderBadgeColor;
       if (updates.notesBadgeColor !== undefined) dbUpdates.notes_badge_color = updates.notesBadgeColor;
 
-      const { error } = await supabase
-        .from('kds_global_settings')
-        .update(dbUpdates)
-        .not('id', 'is', null); // Update all rows (should only be one)
+      // Check if record exists for this tenant
+      if (dbSettings?.id) {
+        // Update existing record
+        const { error } = await supabase
+          .from('kds_global_settings')
+          .update(dbUpdates)
+          .eq('id', dbSettings.id);
 
-      if (error) throw error;
+        if (error) throw error;
+      } else {
+        // Insert new record for this tenant with all default values
+        const bottleneckData = updates.bottleneckSettings ?? defaultGlobalSettings.bottleneckSettings;
+        const insertData = {
+          tenant_id: tenantId,
+          operation_mode: updates.operationMode ?? defaultGlobalSettings.operationMode,
+          sla_green_minutes: updates.slaGreenMinutes ?? defaultGlobalSettings.slaGreenMinutes,
+          sla_yellow_minutes: updates.slaYellowMinutes ?? defaultGlobalSettings.slaYellowMinutes,
+          show_pending_column: updates.showPendingColumn ?? defaultGlobalSettings.showPendingColumn,
+          cancellation_alert_interval: updates.cancellationAlertInterval ?? defaultGlobalSettings.cancellationAlertInterval,
+          cancellation_alerts_enabled: updates.cancellationAlertsEnabled ?? defaultGlobalSettings.cancellationAlertsEnabled,
+          auto_print_cancellations: updates.autoPrintCancellations ?? defaultGlobalSettings.autoPrintCancellations,
+          highlight_special_borders: updates.highlightSpecialBorders ?? defaultGlobalSettings.highlightSpecialBorders,
+          border_keywords: updates.borderKeywords ?? defaultGlobalSettings.borderKeywords,
+          bottleneck_settings: JSON.parse(JSON.stringify(bottleneckData)),
+          show_party_size: updates.showPartySize ?? defaultGlobalSettings.showPartySize,
+          compact_mode: updates.compactMode ?? defaultGlobalSettings.compactMode,
+          timer_green_minutes: updates.timerGreenMinutes ?? defaultGlobalSettings.timerGreenMinutes,
+          timer_yellow_minutes: updates.timerYellowMinutes ?? defaultGlobalSettings.timerYellowMinutes,
+          delay_alert_enabled: updates.delayAlertEnabled ?? defaultGlobalSettings.delayAlertEnabled,
+          delay_alert_minutes: updates.delayAlertMinutes ?? defaultGlobalSettings.delayAlertMinutes,
+          notes_blink_all_stations: updates.notesBlinkAllStations ?? defaultGlobalSettings.notesBlinkAllStations,
+          show_waiter_name: updates.showWaiterName ?? defaultGlobalSettings.showWaiterName,
+          border_badge_color: updates.borderBadgeColor ?? defaultGlobalSettings.borderBadgeColor,
+          notes_badge_color: updates.notesBadgeColor ?? defaultGlobalSettings.notesBadgeColor,
+        };
+
+        const { error } = await supabase
+          .from('kds_global_settings')
+          .insert([insertData]);
+
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kds-global-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['kds-global-settings', tenantId] });
     },
   });
 
@@ -315,17 +369,20 @@ export function useKdsSettings() {
 
   // Set up realtime subscription for global settings changes
   useEffect(() => {
+    if (!tenantId) return;
+    
     const channel = supabase
       .channel('kds-global-settings-changes')
       .on(
         'postgres_changes',
         {
-          event: 'UPDATE',
+          event: '*',
           schema: 'public',
           table: 'kds_global_settings',
+          filter: `tenant_id=eq.${tenantId}`,
         },
         () => {
-          queryClient.invalidateQueries({ queryKey: ['kds-global-settings'] });
+          queryClient.invalidateQueries({ queryKey: ['kds-global-settings', tenantId] });
         }
       )
       .subscribe();
@@ -333,7 +390,7 @@ export function useKdsSettings() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient]);
+  }, [queryClient, tenantId]);
 
   // Helper to get initial order status based on settings
   const getInitialOrderStatus = useCallback((): 'pending' | 'preparing' => {
