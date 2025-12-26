@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { useTenant } from '@/hooks/useTenant';
 
 export interface ComplementGroupOption {
   id: string;
@@ -46,12 +47,13 @@ export function useComplementGroupOptions(groupId?: string) {
 
 export function useComplementGroupOptionsMutations() {
   const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
 
   const addOptionToGroup = useMutation({
     mutationFn: async (link: { group_id: string; option_id: string; price_override?: number; sort_order?: number }) => {
       const { data, error } = await supabase
         .from('complement_group_options')
-        .insert(link)
+        .insert({ ...link, tenant_id: tenantId })
         .select()
         .single();
       
@@ -116,7 +118,8 @@ export function useComplementGroupOptionsMutations() {
         const links = optionIds.map((option_id, index) => ({
           group_id: groupId,
           option_id,
-          sort_order: index
+          sort_order: index,
+          tenant_id: tenantId
         }));
         
         const { error: insertError } = await supabase

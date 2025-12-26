@@ -22,7 +22,7 @@ serve(async (req) => {
     });
 
     // Get request data
-    const { email, password, name, role } = await req.json();
+    const { email, password, name, role, tenant_id } = await req.json();
 
     // Validate required fields
     if (!email || !password || !name || !role) {
@@ -73,19 +73,29 @@ serve(async (req) => {
       // Don't fail the request, profile might be created by trigger
     }
 
-    // Assign role
+    // Assign role with tenant_id
     const { error: roleError } = await supabaseAdmin
       .from('user_roles')
-      .insert({ user_id: userId, role });
+      .insert({ user_id: userId, role, tenant_id: tenant_id || null });
 
     if (roleError) {
       console.error('Error assigning role:', roleError);
-      // Try to clean up the user if role assignment fails
       await supabaseAdmin.auth.admin.deleteUser(userId);
       return new Response(
         JSON.stringify({ error: `User created but failed to assign role: ${roleError.message}` }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // Add user to tenant_members if tenant_id provided
+    if (tenant_id) {
+      const { error: memberError } = await supabaseAdmin
+        .from('tenant_members')
+        .insert({ user_id: userId, tenant_id, is_owner: false, joined_at: new Date().toISOString() });
+
+      if (memberError) {
+        console.error('Error adding to tenant:', memberError);
+      }
     }
 
     console.log(`Role ${role} assigned to user ${userId}`);
@@ -96,11 +106,10 @@ serve(async (req) => {
       for (const permission of kdsPermissions) {
         const { error: permError } = await supabaseAdmin
           .from('user_permissions')
-          .insert({ user_id: userId, permission, granted: true });
+          .insert({ user_id: userId, permission, granted: true, tenant_id: tenant_id || null });
         
         if (permError) {
           console.error(`Error assigning permission ${permission}:`, permError);
-          // Don't fail the request for permission errors
         } else {
           console.log(`Permission ${permission} assigned to user ${userId}`);
         }

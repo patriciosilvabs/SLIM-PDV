@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { useTenant } from '@/hooks/useTenant';
 
 export interface ProductVariation {
   id: string;
@@ -33,12 +34,13 @@ export function useProductVariations(productId?: string) {
 
 export function useProductVariationsMutations() {
   const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
 
   const createVariation = useMutation({
     mutationFn: async (variation: { product_id: string; name: string; description?: string; price_modifier?: number; is_active?: boolean }) => {
       const { data, error } = await supabase
         .from('product_variations')
-        .insert(variation)
+        .insert({ ...variation, tenant_id: tenantId })
         .select()
         .single();
       

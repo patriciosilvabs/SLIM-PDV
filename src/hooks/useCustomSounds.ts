@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useTenant } from '@/hooks/useTenant';
 
 export type SoundType = 'newOrder' | 'newReservation' | 'orderReady' | 'kdsNewOrder' | 'maxWaitAlert' | 'tableWaitAlert' | 'idleTableAlert' | 'orderCancelled' | 'bottleneckAlert' | 'stationChange' | 'itemDelayAlert';
 
@@ -44,6 +45,7 @@ export const PREDEFINED_SOUNDS = {
 
 export function useCustomSounds() {
   const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
 
   const { data: customSounds = [], isLoading } = useQuery({
     queryKey: ['custom-sounds'],
@@ -93,7 +95,8 @@ export function useCustomSounds() {
           user_id: user.id,
           name,
           sound_type: soundType,
-          file_path: urlData.publicUrl
+          file_path: urlData.publicUrl,
+          tenant_id: tenantId
         })
         .select()
         .single();

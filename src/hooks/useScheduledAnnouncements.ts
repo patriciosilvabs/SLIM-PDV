@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { sanitizeFileName } from '@/lib/sanitizeFileName';
 import { detectAudioFormat } from '@/utils/audioConverter';
+import { useTenant } from '@/hooks/useTenant';
 
 export interface ScheduledAnnouncement {
   id: string;
@@ -44,6 +45,7 @@ const COOLDOWN_STORAGE_KEY = 'pdv-announcements-cooldowns';
 export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: OrderCounts) {
   const queryClient = useQueryClient();
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const { tenantId } = useTenant();
   
   // Track announcements with audio errors
   const [audioErrors, setAudioErrors] = useState<Set<string>>(new Set());
@@ -127,7 +129,8 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
       const cleanData = {
         ...data,
         scheduled_date: data.scheduled_date && data.scheduled_date.trim() !== '' ? data.scheduled_date : null,
-        created_by: user?.id
+        created_by: user?.id,
+        tenant_id: tenantId
       };
       
       const { data: result, error } = await supabase
