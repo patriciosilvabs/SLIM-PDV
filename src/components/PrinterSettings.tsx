@@ -530,10 +530,13 @@ export function PrinterSettings() {
           </Alert>
         )}
 
-        {/* Printer Configuration */}
-        {printerCtx.isConnected && (
-          <div className="space-y-4">
-            {/* Restaurant Name */}
+        {/* Restaurant Info - Always available */}
+        <div className="space-y-4">
+          <Label className="text-base font-medium flex items-center gap-2">
+            <Store className="w-4 h-4" />
+            Dados do Restaurante
+          </Label>
+          {/* Restaurant Name */}
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
                 <Store className="w-4 h-4" />
@@ -793,7 +796,11 @@ export function PrinterSettings() {
                 </div>
               )}
             </div>
+        </div>
 
+          {/* Printer-dependent configuration - Only show when QZ Tray is connected */}
+          {printerCtx.isConnected && (
+            <div className="space-y-4">
             {/* Paper Width */}
             <div className="space-y-2">
               <Label>Largura do Papel</Label>
@@ -1219,6 +1226,8 @@ export function PrinterSettings() {
                 Caixa
               </Badge>
             </div>
+            </div>
+          )}
 
             {/* Auto Print Settings */}
             <div className="space-y-4 pt-4 border-t">
@@ -1490,8 +1499,6 @@ export function PrinterSettings() {
                 )}
               </div>
             </div>
-          </div>
-        )}
 
         {/* Print Sectors */}
         {printerCtx.isConnected && (
