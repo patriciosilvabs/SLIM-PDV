@@ -48,16 +48,20 @@ export function useCustomSounds() {
   const { tenantId } = useTenant();
 
   const { data: customSounds = [], isLoading } = useQuery({
-    queryKey: ['custom-sounds'],
+    queryKey: ['custom-sounds', tenantId],
     queryFn: async () => {
+      if (!tenantId) return [];
+
       const { data, error } = await supabase
         .from('custom_sounds')
         .select('*')
+        .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false });
       
       if (error) throw error;
       return data as CustomSound[];
-    }
+    },
+    enabled: !!tenantId
   });
 
   const uploadSound = useMutation({

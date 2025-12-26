@@ -143,16 +143,20 @@ export function useKdsDevice() {
 
   // Buscar todos os dispositivos (para admin)
   const { data: allDevices = [] } = useQuery({
-    queryKey: ['kds-devices-all'],
+    queryKey: ['kds-devices-all', tenantId],
     queryFn: async () => {
+      if (!tenantId) return [];
+
       const { data, error } = await supabase
         .from('kds_devices')
         .select('*')
+        .eq('tenant_id', tenantId)
         .order('last_seen_at', { ascending: false });
 
       if (error) throw error;
       return data as KdsDevice[];
     },
+    enabled: !!tenantId,
     staleTime: 1000 * 30, // 30 segundos
   });
 
