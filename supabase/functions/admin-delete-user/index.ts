@@ -75,7 +75,36 @@ serve(async (req) => {
       );
     }
 
-    // Delete user roles first
+    // Check if user is a tenant owner - owners cannot be deleted
+    const { data: ownerCheck, error: ownerCheckError } = await supabaseAdmin
+      .from('tenant_members')
+      .select('is_owner, tenant_id')
+      .eq('user_id', userId)
+      .eq('is_owner', true)
+      .maybeSingle();
+
+    if (ownerCheckError) {
+      console.error('Error checking owner status:', ownerCheckError);
+    }
+
+    if (ownerCheck?.is_owner) {
+      return new Response(
+        JSON.stringify({ error: 'Não é possível excluir o proprietário do restaurante. Transfira a propriedade primeiro.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Delete tenant membership first (non-owners only)
+    const { error: deleteMemberError } = await supabaseAdmin
+      .from('tenant_members')
+      .delete()
+      .eq('user_id', userId);
+
+    if (deleteMemberError) {
+      console.error('Error deleting tenant membership:', deleteMemberError);
+    }
+
+    // Delete user roles
     const { error: deleteRolesError } = await supabaseAdmin
       .from('user_roles')
       .delete()
