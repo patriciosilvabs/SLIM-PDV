@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { useTenant } from '@/hooks/useTenant';
 
 export interface Combo {
   id: string;
@@ -32,6 +33,7 @@ export function useCombos() {
 
 export function useComboMutations() {
   const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
 
   const createCombo = useMutation({
     mutationFn: async (combo: { 
@@ -44,7 +46,7 @@ export function useComboMutations() {
     }) => {
       const { data, error } = await supabase
         .from('combos')
-        .insert(combo)
+        .insert({ ...combo, tenant_id: tenantId })
         .select()
         .single();
       

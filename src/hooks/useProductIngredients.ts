@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/hooks/useTenant';
 
 export interface ProductIngredient {
   id: string;
@@ -93,6 +94,7 @@ export function useAllProductsWithIngredients() {
 export function useProductIngredientMutations() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { tenantId } = useTenant();
 
   const addIngredient = useMutation({
     mutationFn: async ({ product_id, ingredient_id, quantity }: { 
@@ -102,7 +104,7 @@ export function useProductIngredientMutations() {
     }) => {
       const { data, error } = await supabase
         .from('product_ingredients')
-        .insert({ product_id, ingredient_id, quantity })
+        .insert({ product_id, ingredient_id, quantity, tenant_id: tenantId })
         .select()
         .single();
       

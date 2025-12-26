@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { useTenant } from '@/hooks/useTenant';
 
 export interface ComboItem {
   id: string;
@@ -32,6 +33,7 @@ export function useComboItems(comboId?: string) {
 
 export function useComboItemsMutations() {
   const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
 
   const addComboItem = useMutation({
     mutationFn: async (item: { 
@@ -42,7 +44,7 @@ export function useComboItemsMutations() {
     }) => {
       const { data, error } = await supabase
         .from('combo_items')
-        .insert(item)
+        .insert({ ...item, tenant_id: tenantId })
         .select()
         .single();
       
@@ -111,7 +113,7 @@ export function useComboItemsMutations() {
       if (items.length > 0) {
         const { error: insertError } = await supabase
           .from('combo_items')
-          .insert(items.map(item => ({ ...item, combo_id: comboId })));
+          .insert(items.map(item => ({ ...item, combo_id: comboId, tenant_id: tenantId })));
         
         if (insertError) throw insertError;
       }

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/hooks/useTenant';
 
 export interface PrintSector {
   id: string;
@@ -32,12 +33,13 @@ export function usePrintSectors() {
 export function usePrintSectorMutations() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { tenantId } = useTenant();
 
   const createSector = useMutation({
     mutationFn: async (sector: Omit<PrintSector, 'id' | 'created_at'>) => {
       const { data, error } = await supabase
         .from('print_sectors')
-        .insert(sector)
+        .insert({ ...sector, tenant_id: tenantId })
         .select()
         .single();
       

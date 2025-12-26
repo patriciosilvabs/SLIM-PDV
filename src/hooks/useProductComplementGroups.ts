@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { useTenant } from '@/hooks/useTenant';
 
 export interface ProductComplementGroup {
   id: string;
@@ -56,12 +57,13 @@ export function useGroupsForProduct(productId?: string) {
 
 export function useProductComplementGroupsMutations() {
   const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
 
   const linkGroupToProduct = useMutation({
     mutationFn: async (link: { product_id: string; group_id: string; sort_order?: number }) => {
       const { data, error } = await supabase
         .from('product_complement_groups')
-        .insert(link)
+        .insert({ ...link, tenant_id: tenantId })
         .select()
         .single();
       
@@ -111,7 +113,8 @@ export function useProductComplementGroupsMutations() {
         const links = productIds.map((product_id, index) => ({
           group_id: groupId,
           product_id,
-          sort_order: index
+          sort_order: index,
+          tenant_id: tenantId
         }));
         
         const { error: insertError } = await supabase
@@ -145,7 +148,8 @@ export function useProductComplementGroupsMutations() {
         const links = groupIds.map((group_id, index) => ({
           product_id: productId,
           group_id,
-          sort_order: index
+          sort_order: index,
+          tenant_id: tenantId
         }));
         
         const { error: insertError } = await supabase

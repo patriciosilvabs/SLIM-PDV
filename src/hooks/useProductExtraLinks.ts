@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { useTenant } from '@/hooks/useTenant';
 
 export interface ProductExtraLink {
   id: string;
@@ -48,12 +49,13 @@ export function useExtrasForProduct(productId?: string) {
 
 export function useProductExtraLinksMutations() {
   const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
 
   const linkExtra = useMutation({
     mutationFn: async ({ productId, extraId }: { productId: string; extraId: string }) => {
       const { data, error } = await supabase
         .from('product_extra_links')
-        .insert({ product_id: productId, extra_id: extraId })
+        .insert({ product_id: productId, extra_id: extraId, tenant_id: tenantId })
         .select()
         .single();
       
@@ -102,7 +104,8 @@ export function useProductExtraLinksMutations() {
       if (productIds.length > 0) {
         const links = productIds.map(productId => ({
           product_id: productId,
-          extra_id: extraId
+          extra_id: extraId,
+          tenant_id: tenantId
         }));
 
         const { error: insertError } = await supabase

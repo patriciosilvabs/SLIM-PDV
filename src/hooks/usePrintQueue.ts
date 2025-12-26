@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTenant } from '@/hooks/useTenant';
 
 export type PrintJobType = 'kitchen_ticket' | 'customer_receipt' | 'cancellation_ticket' | 'kitchen_ticket_sector';
 export type PrintJobStatus = 'pending' | 'printed' | 'failed';
@@ -19,6 +20,7 @@ export interface PrintJob {
 export function usePrintQueue() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { tenantId } = useTenant();
 
   // Get pending print jobs
   const { data: pendingJobs } = useQuery({
@@ -48,6 +50,7 @@ export function usePrintQueue() {
           print_type: job.print_type,
           data: job.data,
           created_by: user?.id,
+          tenant_id: tenantId
         })
         .select()
         .single();

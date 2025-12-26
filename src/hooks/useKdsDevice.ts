@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useKdsSettings } from './useKdsSettings';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/hooks/useTenant';
 
 export interface KdsDevice {
   id: string;
@@ -19,6 +20,7 @@ export function useKdsDevice() {
   const { settings, updateDeviceSettings } = useKdsSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
 
   // Buscar ou criar registro do dispositivo no banco
   const { data: device, isLoading } = useQuery({
@@ -53,6 +55,7 @@ export function useKdsDevice() {
           name: settings.deviceName,
           operation_mode: settings.operationMode,
           station_id: settings.assignedStationId,
+          tenant_id: tenantId
         })
         .select()
         .single();
