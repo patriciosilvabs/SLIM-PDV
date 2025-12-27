@@ -46,6 +46,10 @@ export function AddOrderItemsModal({ open, onOpenChange, onSubmit, tableNumber }
   const { duplicateItems } = useOrderSettings();
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  
+  // Selecionar primeira categoria automaticamente quando carregar
+  const firstCategoryId = categories?.find(c => c.is_active !== false)?.id || null;
+  const effectiveCategory = selectedCategory ?? firstCategoryId;
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
@@ -53,9 +57,9 @@ export function AddOrderItemsModal({ open, onOpenChange, onSubmit, tableNumber }
   const activeCategories = categories?.filter(c => c.is_active !== false) || [];
   const activeProducts = products?.filter(p => p.is_available !== false) || [];
 
-  const filteredProducts = selectedCategory
-    ? activeProducts.filter(p => p.category_id === selectedCategory)
-    : activeProducts;
+  const filteredProducts = effectiveCategory
+    ? activeProducts.filter(p => p.category_id === effectiveCategory)
+    : [];
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.total_price, 0);
 
@@ -180,17 +184,10 @@ export function AddOrderItemsModal({ open, onOpenChange, onSubmit, tableNumber }
             <div className="w-48 border-r bg-muted/30 flex-shrink-0">
               <ScrollArea className="h-full">
                 <div className="p-2 space-y-1">
-                  <Button
-                    variant={selectedCategory === null ? 'secondary' : 'ghost'}
-                    className="w-full justify-start"
-                    onClick={() => setSelectedCategory(null)}
-                  >
-                    Todos
-                  </Button>
                   {activeCategories.map(cat => (
                     <Button
                       key={cat.id}
-                      variant={selectedCategory === cat.id ? 'secondary' : 'ghost'}
+                      variant={effectiveCategory === cat.id ? 'secondary' : 'ghost'}
                       className="w-full justify-start"
                       onClick={() => setSelectedCategory(cat.id)}
                     >
