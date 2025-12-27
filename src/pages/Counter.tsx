@@ -585,30 +585,37 @@ export default function Counter() {
       // Add order items
       console.log('[Counter] Adding order items:', orderItems.length);
       for (const item of orderItems) {
-        const orderItem = await addOrderItem.mutateAsync({
-          order_id: order.id,
-          product_id: item.product_id,
-          variation_id: item.variation_id || null,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          total_price: item.total_price,
-          notes: item.notes || null,
-          status: 'pending',
-        });
-        console.log('[Counter] Order item created:', {
-          orderItemId: orderItem.id,
-          status: orderItem.status,
-          productId: item.product_id
-        });
+        // Quando duplicateItems está ativo, "explodir" itens com quantity > 1
+        // salvando cada unidade como um registro separado no banco
+        const quantityToSave = duplicateItems && item.quantity > 1 ? 1 : item.quantity;
+        const iterationCount = duplicateItems && item.quantity > 1 ? item.quantity : 1;
+        
+        for (let i = 0; i < iterationCount; i++) {
+          const orderItem = await addOrderItem.mutateAsync({
+            order_id: order.id,
+            product_id: item.product_id,
+            variation_id: item.variation_id || null,
+            quantity: quantityToSave,
+            unit_price: item.unit_price,
+            total_price: item.unit_price * quantityToSave,
+            notes: item.notes || null,
+            status: 'pending',
+          });
+          console.log('[Counter] Order item created:', {
+            orderItemId: orderItem.id,
+            status: orderItem.status,
+            productId: item.product_id
+          });
 
-        if (item.complements && item.complements.length > 0) {
-          const extras = item.complements.map(c => ({
-            order_item_id: orderItem.id,
-            extra_name: `${c.group_name}: ${c.option_name}`,
-            price: c.price * c.quantity,
-            extra_id: null,
-          }));
-          await addOrderItemExtras.mutateAsync(extras);
+          if (item.complements && item.complements.length > 0) {
+            const extras = item.complements.map(c => ({
+              order_item_id: orderItem.id,
+              extra_name: `${c.group_name}: ${c.option_name}`,
+              price: c.price * c.quantity,
+              extra_id: null,
+            }));
+            await addOrderItemExtras.mutateAsync(extras);
+          }
         }
       }
 
