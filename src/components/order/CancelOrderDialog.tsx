@@ -41,6 +41,7 @@ export function CancelOrderDialog({
 }: CancelOrderDialogProps) {
   const [reason, setReason] = useState('');
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleSuggestionClick = (suggestion: string) => {
     if (suggestion === 'Outro motivo') {
@@ -56,12 +57,21 @@ export function CancelOrderDialog({
   };
 
   const handleConfirm = () => {
-    onConfirm(reason.trim());
-    setReason('');
+    setIsProcessing(true);
+    // Fecha AMBOS dialogs IMEDIATAMENTE para evitar flicker
     setShowConfirmation(false);
+    onOpenChange(false);
+    // Executa a ação de cancelamento
+    onConfirm(reason.trim());
+    // Reset estados após pequeno delay
+    setTimeout(() => {
+      setReason('');
+      setIsProcessing(false);
+    }, 100);
   };
 
   const handleClose = () => {
+    if (isProcessing) return;
     setReason('');
     setShowConfirmation(false);
     onOpenChange(false);
@@ -72,8 +82,8 @@ export function CancelOrderDialog({
   return (
     <>
       {/* Main Dialog */}
-      <AlertDialog open={open && !showConfirmation} onOpenChange={handleClose}>
-        <AlertDialogContent className="max-w-md">
+      <AlertDialog open={open && !showConfirmation && !isProcessing} onOpenChange={handleClose}>
+        <AlertDialogContent className="max-w-md bg-background">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-destructive">
               <XCircle className="h-5 w-5" />
@@ -122,11 +132,11 @@ export function CancelOrderDialog({
           </div>
 
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoading}>Voltar</AlertDialogCancel>
+          <AlertDialogCancel disabled={isLoading || isProcessing}>Voltar</AlertDialogCancel>
             <Button
               variant="destructive"
               onClick={handleProceed}
-              disabled={!isValid || isLoading}
+              disabled={!isValid || isLoading || isProcessing}
             >
               Continuar
             </Button>
@@ -135,8 +145,8 @@ export function CancelOrderDialog({
       </AlertDialog>
 
       {/* Confirmation Dialog */}
-      <AlertDialog open={showConfirmation} onOpenChange={setShowConfirmation}>
-        <AlertDialogContent>
+      <AlertDialog open={showConfirmation && !isProcessing} onOpenChange={(val) => !isProcessing && setShowConfirmation(val)}>
+        <AlertDialogContent className="bg-background">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-5 w-5" />
@@ -157,16 +167,16 @@ export function CancelOrderDialog({
           <AlertDialogFooter>
             <AlertDialogCancel
               onClick={() => setShowConfirmation(false)}
-              disabled={isLoading}
+              disabled={isLoading || isProcessing}
             >
               Voltar
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirm}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={isLoading}
+              disabled={isLoading || isProcessing}
             >
-              {isLoading ? 'Cancelando...' : 'Confirmar Cancelamento'}
+              {isLoading || isProcessing ? 'Cancelando...' : 'Confirmar Cancelamento'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
