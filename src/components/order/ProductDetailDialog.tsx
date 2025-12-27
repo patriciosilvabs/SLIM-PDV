@@ -352,7 +352,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
         </div>
 
         {/* Content */}
-        <ScrollArea className="flex-1 px-4">
+        <ScrollArea className="flex-1 max-h-[50vh] px-4">
           <div className="space-y-4 py-4">
             {product.description && (
               <p className="text-sm text-muted-foreground">{product.description}</p>
