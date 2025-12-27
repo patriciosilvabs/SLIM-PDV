@@ -835,10 +835,7 @@ export default function Tables() {
       if (!selectedOrder?.id) return [];
       const { data, error } = await supabase
         .from('payments')
-        .select(`
-          *,
-          received_by_profile:profiles!payments_received_by_fkey(id, name)
-        `)
+        .select('*')
         .eq('order_id', selectedOrder.id);
       if (error) throw error;
       return data || [];
