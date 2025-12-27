@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Plus, Trash2, GripVertical, Lock, ChevronDown, Settings2 } from 'lucide-react';
+import { Plus, Trash2, GripVertical, Lock, ChevronDown, Settings2, Edit } from 'lucide-react';
 import { ComplementGroup } from '@/hooks/useComplementGroups';
 import { ComplementOption } from '@/hooks/useComplementOptions';
 import {
@@ -37,6 +37,7 @@ interface ComplementGroupDialogProps {
   linkedOptionIds: string[];
   onSave: (group: Partial<ComplementGroup>, optionIds: string[]) => void;
   onCreateOption?: (option: { name: string; price: number }) => Promise<ComplementOption | undefined>;
+  onEditOption?: (option: ComplementOption) => void;
   isEditing: boolean;
 }
 
@@ -67,9 +68,11 @@ const PRICE_CALCULATION_TYPES = [
 interface SortableOptionProps {
   option: ComplementOption;
   onRemove: () => void;
+  onEdit?: () => void;
+  onToggleActive?: (active: boolean) => void;
 }
 
-function SortableOption({ option, onRemove }: SortableOptionProps) {
+function SortableOption({ option, onRemove, onEdit, onToggleActive }: SortableOptionProps) {
   const {
     attributes,
     listeners,
@@ -99,7 +102,20 @@ function SortableOption({ option, onRemove }: SortableOptionProps) {
       <span className="text-sm text-muted-foreground">
         R$ {option.price.toFixed(2)}
       </span>
-      <Switch checked={option.is_active ?? true} disabled />
+      <Switch 
+        checked={option.is_active ?? true} 
+        onCheckedChange={onToggleActive}
+      />
+      {onEdit && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={onEdit}
+        >
+          <Edit className="h-4 w-4" />
+        </Button>
+      )}
       <Button
         variant="ghost"
         size="icon"
@@ -120,6 +136,7 @@ export function ComplementGroupDialog({
   linkedOptionIds,
   onSave,
   onCreateOption,
+  onEditOption,
   isEditing
 }: ComplementGroupDialogProps) {
   const [form, setForm] = React.useState<Partial<ComplementGroup>>({
@@ -396,6 +413,13 @@ export function ComplementGroupDialog({
                       key={option.id}
                       option={option}
                       onRemove={() => toggleOption(option.id)}
+                      onEdit={onEditOption ? () => onEditOption(option) : undefined}
+                      onToggleActive={(active) => {
+                        // Update the option's is_active state in local options
+                        setLocalOptions(prev => 
+                          prev.map(o => o.id === option.id ? { ...o, is_active: active } : o)
+                        );
+                      }}
                     />
                   ))}
                   {selectedOptions.length === 0 && (
