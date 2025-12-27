@@ -139,7 +139,11 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
           console.log(`[ProductDetailDialog] Group ${group.name} - filtered options:`, filteredOptions);
           
           const options = filteredOptions
-            ?.filter(go => (go.option as { is_active?: boolean }).is_active !== false)
+            ?.filter(go => {
+              const opt = go.option as Record<string, unknown>;
+              // Treat null, undefined, or true as active
+              return opt.is_active === true || opt.is_active === null || opt.is_active === undefined;
+            })
             .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
             .map(go => ({
               ...(go.option as Record<string, unknown>),
