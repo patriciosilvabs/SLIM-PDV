@@ -153,6 +153,8 @@ export function ComplementGroupDialog({
     channels: ['delivery', 'counter', 'table'],
     is_active: true,
     price_calculation_type: 'sum',
+    applies_per_unit: false,
+    unit_count: 1,
   });
   const [selectedOptionIds, setSelectedOptionIds] = React.useState<string[]>([]);
   const [localOptions, setLocalOptions] = React.useState<ComplementOption[]>([]);
@@ -192,8 +194,13 @@ export function ComplementGroupDialog({
           channels: group.channels || ['delivery', 'counter', 'table'],
           is_active: group.is_active ?? true,
           price_calculation_type: group.price_calculation_type || 'sum',
+          applies_per_unit: group.applies_per_unit ?? false,
+          unit_count: group.unit_count ?? 1,
         });
-        setIsAdvancedOpen(group.price_calculation_type !== 'sum' && group.price_calculation_type !== null);
+        setIsAdvancedOpen(
+          (group.price_calculation_type !== 'sum' && group.price_calculation_type !== null) ||
+          group.applies_per_unit === true
+        );
       }
       setSelectedOptionIds(linkedOptionIds);
       setLocalOptions([]);
@@ -498,21 +505,56 @@ export function ComplementGroupDialog({
                 <ChevronDown className={`h-4 w-4 transition-transform ${isAdvancedOpen ? 'rotate-180' : ''}`} />
               </Button>
             </CollapsibleTrigger>
-            <CollapsibleContent className="mt-3 space-y-3">
-              <Label className="text-sm text-muted-foreground">O preço do complemento será:</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {PRICE_CALCULATION_TYPES.map(type => (
-                  <Button
-                    key={type.value}
-                    type="button"
-                    variant={form.price_calculation_type === type.value ? 'default' : 'outline'}
-                    className="h-auto py-3 flex flex-col items-start text-left"
-                    onClick={() => setForm({ ...form, price_calculation_type: type.value as ComplementGroup['price_calculation_type'] })}
-                  >
-                    <span className="font-medium text-sm">{type.label}</span>
-                    <span className="text-xs opacity-70 font-normal">{type.description}</span>
-                  </Button>
-                ))}
+            <CollapsibleContent className="mt-3 space-y-4">
+              {/* Aplicar por unidade */}
+              <div className="flex items-center gap-3 p-4 border rounded-lg bg-muted/30">
+                <Switch
+                  checked={form.applies_per_unit ?? false}
+                  onCheckedChange={(checked) => setForm({ ...form, applies_per_unit: checked })}
+                />
+                <div className="flex-1">
+                  <p className="font-medium">Aplicar por unidade</p>
+                  <p className="text-sm text-muted-foreground">
+                    Permite configurar cada unidade individualmente (ex: cada pizza de um combo)
+                  </p>
+                </div>
+              </div>
+
+              {/* Quantidade de unidades - só aparece se applies_per_unit estiver ativado */}
+              {form.applies_per_unit && (
+                <div className="space-y-2 pl-4 border-l-2 border-primary/20">
+                  <Label>Quantidade de unidades</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={form.unit_count ?? 1}
+                    onChange={(e) => setForm({ ...form, unit_count: Math.max(1, parseInt(e.target.value) || 1) })}
+                    className="w-32"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Quantas unidades o cliente poderá configurar individualmente
+                  </p>
+                </div>
+              )}
+
+              {/* Tipo de cálculo de preço */}
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">O preço do complemento será:</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {PRICE_CALCULATION_TYPES.map(type => (
+                    <Button
+                      key={type.value}
+                      type="button"
+                      variant={form.price_calculation_type === type.value ? 'default' : 'outline'}
+                      className="h-auto py-3 flex flex-col items-start text-left"
+                      onClick={() => setForm({ ...form, price_calculation_type: type.value as ComplementGroup['price_calculation_type'] })}
+                    >
+                      <span className="font-medium text-sm">{type.label}</span>
+                      <span className="text-xs opacity-70 font-normal">{type.description}</span>
+                    </Button>
+                  ))}
+                </div>
               </div>
             </CollapsibleContent>
           </Collapsible>

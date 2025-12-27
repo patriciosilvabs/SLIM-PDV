@@ -355,5 +355,91 @@ export function useOrderMutations() {
     },
   });
 
-  return { createOrder, updateOrder, addOrderItem, addOrderItemExtras, updateOrderItem, deleteOrderItem };
+  // Mutation para adicionar sub-items (pizzas individuais de um combo)
+  const addOrderItemSubItems = useMutation({
+    mutationFn: async (params: {
+      order_item_id: string;
+      sub_items: {
+        sub_item_index: number;
+        notes?: string | null;
+        extras: {
+          group_id?: string | null;
+          group_name: string;
+          option_id?: string | null;
+          option_name: string;
+          price: number;
+          quantity: number;
+        }[];
+      }[];
+    }) => {
+      if (!tenantId) throw new Error('Tenant não encontrado');
+      if (params.sub_items.length === 0) return [];
+
+      // 1. Inserir os sub-items
+      const subItemsToInsert = params.sub_items.map(si => ({
+        order_item_id: params.order_item_id,
+        sub_item_index: si.sub_item_index,
+        notes: si.notes || null,
+        tenant_id: tenantId,
+      }));
+
+      const { data: insertedSubItems, error: subItemsError } = await supabase
+        .from('order_item_sub_items')
+        .insert(subItemsToInsert)
+        .select();
+
+      if (subItemsError) throw subItemsError;
+      if (!insertedSubItems) throw new Error('Falha ao inserir sub-items');
+
+      // 2. Inserir os extras de cada sub-item
+      const extrasToInsert: {
+        sub_item_id: string;
+        group_id: string | null;
+        group_name: string;
+        option_id: string | null;
+        option_name: string;
+        price: number;
+        quantity: number;
+        tenant_id: string;
+      }[] = [];
+
+      for (const insertedSubItem of insertedSubItems) {
+        const originalSubItem = params.sub_items.find(
+          si => si.sub_item_index === insertedSubItem.sub_item_index
+        );
+        if (originalSubItem && originalSubItem.extras.length > 0) {
+          for (const extra of originalSubItem.extras) {
+            extrasToInsert.push({
+              sub_item_id: insertedSubItem.id,
+              group_id: extra.group_id || null,
+              group_name: extra.group_name,
+              option_id: extra.option_id || null,
+              option_name: extra.option_name,
+              price: extra.price,
+              quantity: extra.quantity,
+              tenant_id: tenantId,
+            });
+          }
+        }
+      }
+
+      if (extrasToInsert.length > 0) {
+        const { error: extrasError } = await supabase
+          .from('order_item_sub_item_extras')
+          .insert(extrasToInsert);
+
+        if (extrasError) throw extrasError;
+      }
+
+      return insertedSubItems;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Erro ao adicionar sub-items', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  return { createOrder, updateOrder, addOrderItem, addOrderItemExtras, addOrderItemSubItems, updateOrderItem, deleteOrderItem };
 }
