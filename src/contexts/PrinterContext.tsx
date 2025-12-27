@@ -94,7 +94,29 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const currentTopMargin = parseInt(localStorage.getItem('pdv_top_margin') || '0');
       const currentBottomMarginKitchen = parseInt(localStorage.getItem('pdv_bottom_margin_kitchen') || '3');
       
-      const ticketData = buildKitchenTicket(data, qz.config.paperWidth, currentKitchenFontSize, currentLineSpacing, currentLeftMargin, currentAsciiMode, currentCharSpacing, currentTopMargin, currentBottomMarginKitchen);
+      // Kitchen ticket options
+      const showItemNumber = localStorage.getItem('pdv_show_item_number') !== 'false';
+      const showComplementPrice = localStorage.getItem('pdv_show_complement_price') === 'true';
+      const showComplementName = localStorage.getItem('pdv_show_complement_name') !== 'false';
+      const largeFontProduction = localStorage.getItem('pdv_large_font_production') === 'true';
+      
+      const ticketData = buildKitchenTicket(
+        data, 
+        qz.config.paperWidth, 
+        currentKitchenFontSize, 
+        currentLineSpacing, 
+        currentLeftMargin, 
+        currentAsciiMode, 
+        currentCharSpacing, 
+        currentTopMargin, 
+        currentBottomMarginKitchen,
+        {
+          showItemNumber,
+          showComplementPrice,
+          showComplementName,
+          largeFontProduction
+        }
+      );
       await qz.printToKitchen(ticketData);
       return true;
     } catch (err) {
@@ -118,6 +140,12 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const currentCharSpacing = parseInt(localStorage.getItem('pdv_char_spacing') || '1');
       const currentTopMargin = parseInt(localStorage.getItem('pdv_top_margin') || '0');
       const currentBottomMarginKitchen = parseInt(localStorage.getItem('pdv_bottom_margin_kitchen') || '3');
+      
+      // Kitchen ticket options
+      const showItemNumber = localStorage.getItem('pdv_show_item_number') !== 'false';
+      const showComplementPrice = localStorage.getItem('pdv_show_complement_price') === 'true';
+      const showComplementName = localStorage.getItem('pdv_show_complement_name') !== 'false';
+      const largeFontProduction = localStorage.getItem('pdv_large_font_production') === 'true';
 
       // Group items by sector
       const itemsBySector: Record<string, SectorPrintItem[]> = {};
@@ -178,7 +206,13 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
           currentAsciiMode,
           currentCharSpacing,
           currentTopMargin,
-          currentBottomMarginKitchen
+          currentBottomMarginKitchen,
+          {
+            showItemNumber,
+            showComplementPrice,
+            showComplementName,
+            largeFontProduction
+          }
         );
 
         // Print to the sector's printer
