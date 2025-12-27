@@ -50,6 +50,9 @@ import {
   DiscountInput,
   ServiceChargeInput,
   CustomSplitInput,
+  OrderDrawer,
+  CartBar,
+  CartReviewSheet,
 } from '@/components/tables';
 
 function formatCurrency(value: number) {
@@ -272,6 +275,24 @@ export default function Tables() {
   const pendingCartTotal = useMemo(() => {
     return pendingCartItems.reduce((sum, item) => sum + item.total_price, 0);
   }, [pendingCartItems]);
+
+  // Mobile order flow states
+  const [isOrderDrawerOpen, setIsOrderDrawerOpen] = useState(false);
+  const [isCartReviewOpen, setIsCartReviewOpen] = useState(false);
+
+  // Handler to send pending cart items to kitchen (mobile flow)
+  const handleSendPendingCartToKitchen = async () => {
+    if (pendingCartItems.length === 0) return;
+    
+    // Use the existing handleAddOrderItems function
+    await handleAddOrderItems(pendingCartItems);
+    
+    // Clear pending cart and close drawers
+    setPendingCartItems([]);
+    setIsOrderDrawerOpen(false);
+    setIsCartReviewOpen(false);
+    setIsAddingMode(false);
+  };
 
   // Realtime subscription for orders
   useEffect(() => {
@@ -2554,7 +2575,14 @@ export default function Tables() {
 
               {selectedTable?.status === 'occupied' && (
                 <>
-                  <Button className="w-full" onClick={() => setIsAddOrderModalOpen(true)} disabled={isAddingItems}>
+                  <Button 
+                    className="w-full" 
+                    onClick={() => {
+                      setIsAddingMode(true);
+                      setIsOrderDrawerOpen(true);
+                    }} 
+                    disabled={isAddingItems}
+                  >
                     <Plus className="h-4 w-4 mr-2" />
                     {isAddingItems ? 'Adicionando...' : 'Adicionar Pedido'}
                   </Button>
@@ -3053,6 +3081,43 @@ export default function Tables() {
         orderInfo={selectedTable && selectedOrder ? `Mesa ${selectedTable.number} - Pedido #${selectedOrder.id.slice(0, 8)}` : undefined}
         isLoading={isCancellingOrder}
       />
+
+      {/* Mobile Order Flow Components */}
+      {isMobile && (
+        <>
+          <OrderDrawer
+            open={isOrderDrawerOpen}
+            onOpenChange={(open) => {
+              setIsOrderDrawerOpen(open);
+              if (!open && pendingCartItems.length === 0) {
+                setIsAddingMode(false);
+              }
+            }}
+            tableNumber={selectedTable?.number}
+            onAddItem={addToPendingCart}
+            pendingItemsCount={pendingCartItems.length}
+          />
+
+          <CartBar
+            items={pendingCartItems}
+            onClick={() => setIsCartReviewOpen(true)}
+          />
+
+          <CartReviewSheet
+            open={isCartReviewOpen}
+            onOpenChange={setIsCartReviewOpen}
+            items={pendingCartItems}
+            tableNumber={selectedTable?.number}
+            onRemoveItem={removeFromPendingCart}
+            onUpdateQuantity={updatePendingCartQuantity}
+            onDuplicateItem={duplicatePendingCartItem}
+            onConfirm={handleSendPendingCartToKitchen}
+            onClearAll={clearPendingCart}
+            isSubmitting={isAddingItems}
+            duplicateItems={duplicateItems}
+          />
+        </>
+      )}
     </PDVLayout>
   );
 }
