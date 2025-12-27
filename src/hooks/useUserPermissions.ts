@@ -74,8 +74,6 @@ export type PermissionCode =
   // Dashboard
   | 'dashboard_view'
   | 'performance_view'
-  // Combos
-  | 'combos_manage'
   // Printing
   | 'print_kitchen_ticket'
   | 'print_customer_receipt'
@@ -179,7 +177,6 @@ export const PERMISSION_GROUPS = {
     permissions: [
       { code: 'menu_view' as PermissionCode, label: 'Visualizar cardápio' },
       { code: 'menu_manage' as PermissionCode, label: 'Gerenciar cardápio' },
-      { code: 'combos_manage' as PermissionCode, label: 'Gerenciar combos' },
     ],
   },
   kds: {

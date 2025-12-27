@@ -1120,9 +1120,9 @@ export function PrinterSettings() {
 
                 <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
                   <div className="space-y-0.5">
-                    <p className="font-medium text-sm">Ocultar quantidade em combos</p>
+                    <p className="font-medium text-sm">Ocultar quantidade quando nome inicia com número</p>
                     <p className="text-xs text-muted-foreground">
-                      Não exibe "1x", "2x" quando o nome do produto contém "combo"
+                      Não exibe "1x", "2x" quando o nome do produto já começa com um número
                     </p>
                   </div>
                   <Switch 

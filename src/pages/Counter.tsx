@@ -14,8 +14,6 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { useProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
-import { useCombos } from '@/hooks/useCombos';
-import { useComboItems } from '@/hooks/useComboItems';
 import { useProductVariations } from '@/hooks/useProductVariations';
 import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { useToast } from '@/hooks/use-toast';
@@ -114,8 +112,6 @@ export default function Counter() {
   const queryClient = useQueryClient();
   const { data: products } = useProducts();
   const { data: categories } = useCategories();
-  const { data: combos } = useCombos();
-  const { data: comboItems } = useComboItems();
   const { data: variations } = useProductVariations();
   const { data: allOrders = [] } = useOrders();
   const { createOrder, updateOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
@@ -227,7 +223,6 @@ export default function Counter() {
 
   const activeCategories = categories?.filter(c => c.is_active !== false) || [];
   const activeProducts = products?.filter(p => p.is_available !== false) || [];
-  const activeCombos = combos?.filter(c => c.is_active !== false) || [];
 
   // Filter products by category and search
   const filteredProducts = useMemo(() => {
@@ -248,13 +243,6 @@ export default function Counter() {
     
     return filtered;
   }, [activeProducts, selectedCategory, searchQuery]);
-
-  // Filter combos by search
-  const filteredCombos = useMemo(() => {
-    if (!searchQuery.trim()) return activeCombos;
-    const query = searchQuery.toLowerCase().trim();
-    return activeCombos.filter(c => c.name.toLowerCase().includes(query));
-  }, [activeCombos, searchQuery]);
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.total_price, 0);
 
@@ -381,41 +369,6 @@ export default function Counter() {
       unit_price: unitPrice,
       total_price: unitPrice,
     }]);
-  };
-
-  const addCombo = (combo: any) => {
-    const items = comboItems?.filter(item => item.combo_id === combo.id) || [];
-    if (items.length === 0) return;
-
-    const originalPrice = combo.original_price;
-    const comboPrice = combo.combo_price;
-    const discountRatio = originalPrice > 0 ? comboPrice / originalPrice : 1;
-
-    items.forEach(item => {
-      const product = products?.find(p => p.id === item.product_id);
-      if (!product) return;
-
-      const variation = variations?.find(v => v.id === item.variation_id);
-      const basePrice = product.price + (variation?.price_modifier ?? 0);
-      const discountedPrice = basePrice * discountRatio;
-
-      for (let i = 0; i < (item.quantity || 1); i++) {
-        setOrderItems(prev => [...prev, {
-          id: `${product.id}-${variation?.id || 'base'}-combo-${Date.now()}-${i}`,
-          product_id: product.id,
-          product_name: product.name,
-          variation_id: variation?.id || null,
-          variation_name: variation?.name,
-          quantity: 1,
-          unit_price: discountedPrice,
-          total_price: discountedPrice,
-          combo_name: combo.name,
-          print_sector_id: product.print_sector_id,
-        }]);
-      }
-    });
-
-    toast({ title: `Combo "${combo.name}" adicionado!` });
   };
 
   const updateQuantity = (itemId: string, delta: number) => {
@@ -941,56 +894,6 @@ export default function Counter() {
           {/* Products List */}
           <ScrollArea className="flex-1">
             <div className="p-4">
-              {/* Combos Section (if searching or no category selected) */}
-              {filteredCombos.length > 0 && (searchQuery || !selectedCategory) && (
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-                    <Gift className="h-4 w-4" />
-                    Combos
-                  </h3>
-                  <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                    {filteredCombos.map(combo => {
-                      const discountPercent = combo.original_price > 0
-                        ? Math.round((1 - combo.combo_price / combo.original_price) * 100)
-                        : 0;
-                      return (
-                        <div
-                          key={combo.id}
-                          onClick={() => addCombo(combo)}
-                          className="flex items-center gap-3 p-3 rounded-xl border bg-card hover:border-primary hover:shadow-sm transition-all cursor-pointer group relative"
-                        >
-                          {discountPercent > 0 && (
-                            <Badge className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground text-xs">
-                              -{discountPercent}%
-                            </Badge>
-                          )}
-                          <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
-                            {combo.image_url ? (
-                              <img src={combo.image_url} alt={combo.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <Gift className="h-6 w-6 text-muted-foreground" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-sm truncate">{combo.name}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              {combo.original_price > combo.combo_price && (
-                                <span className="text-xs text-muted-foreground line-through">
-                                  {formatCurrency(combo.original_price)}
-                                </span>
-                              )}
-                              <span className="text-primary font-bold text-sm">
-                                {formatCurrency(combo.combo_price)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
               {/* Products Section */}
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
