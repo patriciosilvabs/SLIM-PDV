@@ -1156,6 +1156,21 @@ export default function Tables() {
   const handleFinalizeBill = async () => {
     if (!selectedOrder || !selectedTable) return;
     
+    // Calculate total paid (session payments + existing partial payments)
+    const sessionPaymentsTotal = registeredPayments.reduce((sum, p) => sum + p.amount, 0);
+    const totalPaidAmount = sessionPaymentsTotal + existingPaymentsTotal;
+    
+    // Validate: must have at least one payment method and cover the total
+    if (registeredPayments.length === 0 && existingPaymentsTotal === 0) {
+      toast.error('Selecione pelo menos uma forma de pagamento');
+      return;
+    }
+    
+    if (totalPaidAmount < finalTotal - 0.01) { // Allow 1 cent tolerance for rounding
+      toast.error(`Valor pago (${formatCurrency(totalPaidAmount)}) é menor que o total (${formatCurrency(finalTotal)})`);
+      return;
+    }
+    
     try {
       // Register any pending session payments in database (non-partial)
       for (const payment of registeredPayments) {
