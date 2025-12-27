@@ -116,24 +116,27 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
           return;
         }
 
-        // Get options for all groups
+        // Get options for all groups - filter active options only
         const { data: groupOptions } = await supabase
           .from('complement_group_options')
           .select(`
             group_id,
             price_override,
             sort_order,
-            option:complement_options(*)
+            option_id,
+            option:complement_options!inner(*)
           `)
           .in('group_id', groupIds)
+          .eq('option.is_active', true)
           .order('sort_order');
 
         // Build groups with options
         const groupsWithOptions: GroupWithOptions[] = groupsData.map(group => {
           const options = groupOptions
             ?.filter(go => go.group_id === group.id && go.option)
+            .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
             .map(go => ({
-              ...go.option,
+              ...(go.option as Record<string, unknown>),
               price_override: go.price_override,
             })) as ComplementOption[] || [];
 
