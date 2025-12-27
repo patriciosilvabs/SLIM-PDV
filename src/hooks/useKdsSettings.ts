@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 export type KdsOperationMode = 'traditional' | 'production_line';
 export type OrderManagementViewMode = 'follow_kds' | 'kanban' | 'production_line';
+export type KanbanColumn = 'pending' | 'preparing' | 'ready' | 'delivered_today';
 
 export interface BottleneckStationOverride {
   maxQueueSize?: number;
@@ -22,6 +23,7 @@ export interface BottleneckSettings {
 export interface KdsGlobalSettings {
   operationMode: KdsOperationMode;
   orderManagementViewMode: OrderManagementViewMode;
+  kanbanVisibleColumns: KanbanColumn[];
   slaGreenMinutes: number;
   slaYellowMinutes: number;
   showPendingColumn: boolean;
@@ -79,6 +81,7 @@ const defaultBottleneckSettings: BottleneckSettings = {
 const defaultGlobalSettings: KdsGlobalSettings = {
   operationMode: 'traditional',
   orderManagementViewMode: 'follow_kds',
+  kanbanVisibleColumns: ['pending', 'preparing', 'ready', 'delivered_today'],
   slaGreenMinutes: 8,
   slaYellowMinutes: 12,
   showPendingColumn: true,
@@ -193,6 +196,7 @@ export function useKdsSettings() {
     return {
       operationMode: (dbSettings.operation_mode as KdsOperationMode) || defaultGlobalSettings.operationMode,
       orderManagementViewMode: ((dbSettings as any).order_management_view_mode as OrderManagementViewMode) || defaultGlobalSettings.orderManagementViewMode,
+      kanbanVisibleColumns: ((dbSettings as any).kanban_visible_columns as KanbanColumn[]) ?? defaultGlobalSettings.kanbanVisibleColumns,
       slaGreenMinutes: dbSettings.sla_green_minutes ?? defaultGlobalSettings.slaGreenMinutes,
       slaYellowMinutes: dbSettings.sla_yellow_minutes ?? defaultGlobalSettings.slaYellowMinutes,
       showPendingColumn: dbSettings.show_pending_column ?? defaultGlobalSettings.showPendingColumn,
@@ -232,6 +236,7 @@ export function useKdsSettings() {
       
       if (updates.operationMode !== undefined) dbUpdates.operation_mode = updates.operationMode;
       if (updates.orderManagementViewMode !== undefined) dbUpdates.order_management_view_mode = updates.orderManagementViewMode;
+      if (updates.kanbanVisibleColumns !== undefined) dbUpdates.kanban_visible_columns = updates.kanbanVisibleColumns;
       if (updates.slaGreenMinutes !== undefined) dbUpdates.sla_green_minutes = updates.slaGreenMinutes;
       if (updates.slaYellowMinutes !== undefined) dbUpdates.sla_yellow_minutes = updates.slaYellowMinutes;
       if (updates.showPendingColumn !== undefined) dbUpdates.show_pending_column = updates.showPendingColumn;
@@ -268,6 +273,7 @@ export function useKdsSettings() {
           tenant_id: tenantId,
           operation_mode: updates.operationMode ?? defaultGlobalSettings.operationMode,
           order_management_view_mode: updates.orderManagementViewMode ?? defaultGlobalSettings.orderManagementViewMode,
+          kanban_visible_columns: updates.kanbanVisibleColumns ?? defaultGlobalSettings.kanbanVisibleColumns,
           sla_green_minutes: updates.slaGreenMinutes ?? defaultGlobalSettings.slaGreenMinutes,
           sla_yellow_minutes: updates.slaYellowMinutes ?? defaultGlobalSettings.slaYellowMinutes,
           show_pending_column: updates.showPendingColumn ?? defaultGlobalSettings.showPendingColumn,
@@ -312,6 +318,7 @@ export function useKdsSettings() {
 
     if (updates.operationMode !== undefined) globalUpdates.operationMode = updates.operationMode;
     if (updates.orderManagementViewMode !== undefined) globalUpdates.orderManagementViewMode = updates.orderManagementViewMode;
+    if (updates.kanbanVisibleColumns !== undefined) globalUpdates.kanbanVisibleColumns = updates.kanbanVisibleColumns;
     if (updates.slaGreenMinutes !== undefined) globalUpdates.slaGreenMinutes = updates.slaGreenMinutes;
     if (updates.slaYellowMinutes !== undefined) globalUpdates.slaYellowMinutes = updates.slaYellowMinutes;
     if (updates.showPendingColumn !== undefined) globalUpdates.showPendingColumn = updates.showPendingColumn;

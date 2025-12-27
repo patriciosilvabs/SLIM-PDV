@@ -208,7 +208,7 @@ export function KdsKanbanReadOnly({
 
   // Group by status
   const pendingOrders = filteredOrders.filter(o => o.status === 'pending');
-  const preparingOrders = settings.showPendingColumn 
+  const preparingOrders = settings.kanbanVisibleColumns.includes('pending')
     ? filteredOrders.filter(o => o.status === 'preparing')
     : filteredOrders.filter(o => o.status === 'pending' || o.status === 'preparing');
   const readyOrders = filteredOrders.filter(o => o.status === 'ready');
@@ -291,11 +291,23 @@ export function KdsKanbanReadOnly({
     );
   };
 
-  // Determine grid columns based on whether to show pending
-  const showPending = settings.showPendingColumn;
-  const gridCols = showPending 
-    ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-4" 
-    : "grid-cols-1 md:grid-cols-3";
+  // Determine which columns to show based on kanbanVisibleColumns
+  const visibleColumns = settings.kanbanVisibleColumns;
+  const showPending = visibleColumns.includes('pending');
+  const showPreparing = visibleColumns.includes('preparing');
+  const showReady = visibleColumns.includes('ready');
+  const showDeliveredToday = visibleColumns.includes('delivered_today');
+  
+  // Count visible columns for grid
+  const visibleCount = [showPending, showPreparing, showReady, showDeliveredToday].filter(Boolean).length;
+  
+  const gridCols = visibleCount === 4 
+    ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
+    : visibleCount === 3
+    ? "grid-cols-1 md:grid-cols-3"
+    : visibleCount === 2
+    ? "grid-cols-1 md:grid-cols-2"
+    : "grid-cols-1";
 
   return (
     <div className={cn("grid gap-4 h-[calc(100vh-200px)]", gridCols)}>
@@ -307,25 +319,31 @@ export function KdsKanbanReadOnly({
           headerColor="bg-yellow-500 text-yellow-950"
         />
       )}
-      <KanbanColumn
-        title={showPending ? "Em Preparo" : "Em Preparo"}
-        orders={preparingOrders}
-        icon={ChefHat}
-        headerColor="bg-blue-500 text-white"
-      />
-      <KanbanColumn
-        title="Pronto"
-        orders={readyOrders}
-        icon={CheckCircle}
-        headerColor="bg-green-500 text-white"
-        showDeliveredButton
-      />
-      <KanbanColumn
-        title="Entregues Hoje"
-        orders={deliveredOrdersToday}
-        icon={Package}
-        headerColor="bg-gray-500 text-white"
-      />
+      {showPreparing && (
+        <KanbanColumn
+          title={showPending ? "Em Preparo" : "Em Preparo"}
+          orders={preparingOrders}
+          icon={ChefHat}
+          headerColor="bg-blue-500 text-white"
+        />
+      )}
+      {showReady && (
+        <KanbanColumn
+          title="Pronto"
+          orders={readyOrders}
+          icon={CheckCircle}
+          headerColor="bg-green-500 text-white"
+          showDeliveredButton
+        />
+      )}
+      {showDeliveredToday && (
+        <KanbanColumn
+          title="Entregues Hoje"
+          orders={deliveredOrdersToday}
+          icon={Package}
+          headerColor="bg-gray-500 text-white"
+        />
+      )}
     </div>
   );
 }

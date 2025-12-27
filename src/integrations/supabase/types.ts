@@ -667,6 +667,7 @@ export type Database = {
           delay_alert_minutes: number
           highlight_special_borders: boolean
           id: string
+          kanban_visible_columns: string[]
           notes_badge_color: string
           notes_blink_all_stations: boolean
           operation_mode: string
@@ -694,6 +695,7 @@ export type Database = {
           delay_alert_minutes?: number
           highlight_special_borders?: boolean
           id?: string
+          kanban_visible_columns?: string[]
           notes_badge_color?: string
           notes_blink_all_stations?: boolean
           operation_mode?: string
@@ -721,6 +723,7 @@ export type Database = {
           delay_alert_minutes?: number
           highlight_special_borders?: boolean
           id?: string
+          kanban_visible_columns?: string[]
           notes_badge_color?: string
           notes_blink_all_stations?: boolean
           operation_mode?: string
