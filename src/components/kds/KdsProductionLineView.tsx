@@ -56,16 +56,22 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
   // Cast orders to local type for internal use
   const typedOrders = orders as unknown as Order[];
 
-  // Filtrar pedidos - agora só mostra pedidos em preparação e prontos (pending é auto-inicializado pelo trigger)
+  // Filtrar pedidos - mostra pedidos que têm itens com praça atribuída (pending, preparing, ready)
   const filteredOrders = useMemo(() => {
     // Excluir pedidos em rascunho primeiro
     const nonDraftOrders = typedOrders.filter(o => (o as any).is_draft !== true);
 
     if (!settings.assignedStationId) {
-      // Se não tiver praça atribuída, mostra pedidos em preparação e prontos
-      return nonDraftOrders.filter(o => 
-        o.status === 'preparing' || o.status === 'ready'
-      );
+      // Se não tiver praça atribuída, mostra pedidos que têm itens nas praças (pending, preparing, ready)
+      return nonDraftOrders.filter(o => {
+        // Sempre inclui se está em preparing ou ready
+        if (o.status === 'preparing' || o.status === 'ready') return true;
+        // Para pending, só inclui se algum item já tem current_station_id
+        if (o.status === 'pending') {
+          return o.order_items?.some(item => item.current_station_id !== null);
+        }
+        return false;
+      });
     }
 
     // Filtrar pedidos que têm itens nesta praça
