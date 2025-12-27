@@ -229,6 +229,50 @@ export default function Tables() {
   const [isOpeningTable, setIsOpeningTable] = useState(false);
   const [isFinalizingBill, setIsFinalizingBill] = useState(false);
 
+  // New order flow states - pending items before sending to kitchen
+  const [isAddingMode, setIsAddingMode] = useState(false);
+  const [pendingCartItems, setPendingCartItems] = useState<CartItem[]>([]);
+
+  // Pending cart helper functions
+  const addToPendingCart = useCallback((item: CartItem) => {
+    setPendingCartItems(prev => [...prev, item]);
+  }, []);
+
+  const removeFromPendingCart = useCallback((itemId: string) => {
+    setPendingCartItems(prev => prev.filter(item => item.id !== itemId));
+  }, []);
+
+  const updatePendingCartQuantity = useCallback((itemId: string, delta: number) => {
+    setPendingCartItems(prev => prev.map(item => {
+      if (item.id !== itemId) return item;
+      const newQty = Math.max(1, item.quantity + delta);
+      return { ...item, quantity: newQty, total_price: item.unit_price * newQty };
+    }));
+  }, []);
+
+  const duplicatePendingCartItem = useCallback((itemId: string) => {
+    setPendingCartItems(prev => {
+      const itemToDuplicate = prev.find(item => item.id === itemId);
+      if (!itemToDuplicate) return prev;
+      const newItem: CartItem = {
+        ...itemToDuplicate,
+        id: `${itemToDuplicate.product_id}-${Date.now()}`,
+        quantity: 1,
+        total_price: itemToDuplicate.unit_price,
+      };
+      return [...prev, newItem];
+    });
+  }, []);
+
+  const clearPendingCart = useCallback(() => {
+    setPendingCartItems([]);
+    setIsAddingMode(false);
+  }, []);
+
+  const pendingCartTotal = useMemo(() => {
+    return pendingCartItems.reduce((sum, item) => sum + item.total_price, 0);
+  }, [pendingCartItems]);
+
   // Realtime subscription for orders
   useEffect(() => {
     const channel = supabase
