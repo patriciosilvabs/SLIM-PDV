@@ -223,6 +223,12 @@ export default function Tables() {
   const [isCancellingOrder, setIsCancellingOrder] = useState(false);
   const MIN_REASON_LENGTH = 10;
 
+  // Loading states for better UX feedback
+  const [isClosingEmptyTable, setIsClosingEmptyTable] = useState(false);
+  const [isAddingItems, setIsAddingItems] = useState(false);
+  const [isOpeningTable, setIsOpeningTable] = useState(false);
+  const [isFinalizingBill, setIsFinalizingBill] = useState(false);
+
   // Realtime subscription for orders
   useEffect(() => {
     const channel = supabase
@@ -578,93 +584,108 @@ export default function Tables() {
     const order = getTableOrder(selectedTable.id);
     if (!order) return;
 
-    // O trigger auto_initialize_new_order_item cuidará de:
-    // 1. Atribuir estação KDS ao item
-    // 2. Mudar status do pedido de 'delivered' para 'preparing' automaticamente
+    // Fechar modal imediatamente para feedback visual
+    setIsAddOrderModalOpen(false);
+    setIsAddingItems(true);
 
-    for (const item of items) {
-      // Quando duplicateItems está ativo, "explodir" itens com quantity > 1
-      // salvando cada unidade como um registro separado no banco
-      const quantityToSave = duplicateItems && item.quantity > 1 ? 1 : item.quantity;
-      const iterationCount = duplicateItems && item.quantity > 1 ? item.quantity : 1;
-      
-      for (let i = 0; i < iterationCount; i++) {
-        const orderItem = await addOrderItem.mutateAsync({
-          order_id: order.id,
-          product_id: item.product_id,
-          variation_id: item.variation_id || null,
-          quantity: quantityToSave,
-          unit_price: item.unit_price,
-          total_price: item.unit_price * quantityToSave,
-          notes: item.notes || null,
-          status: getInitialOrderStatus(),
-        });
+    try {
+      // O trigger auto_initialize_new_order_item cuidará de:
+      // 1. Atribuir estação KDS ao item
+      // 2. Mudar status do pedido de 'delivered' para 'preparing' automaticamente
 
-        // Save complements/extras if present
-        if (item.complements && item.complements.length > 0) {
-          const extras = item.complements.map(c => ({
-            order_item_id: orderItem.id,
-            extra_name: `${c.group_name}: ${c.option_name}`,
-            price: c.price * c.quantity,
-            extra_id: null,
-          }));
-          await addOrderItemExtras.mutateAsync(extras);
-        }
-
-        // Save sub-items (individual pizzas in a combo) if present
-        if (item.subItems && item.subItems.length > 0) {
-          await addOrderItemSubItems.mutateAsync({
-            order_item_id: orderItem.id,
-            sub_items: item.subItems.map(si => ({
-              sub_item_index: si.sub_item_index,
-              notes: si.sub_item_notes || null,
-              extras: si.complements.map(c => ({
-                group_id: c.group_id || null,
-                group_name: c.group_name,
-                option_id: c.option_id || null,
-                option_name: c.option_name,
-                price: c.price,
-                quantity: c.quantity,
-              })),
-            })),
+      for (const item of items) {
+        // Quando duplicateItems está ativo, "explodir" itens com quantity > 1
+        // salvando cada unidade como um registro separado no banco
+        const quantityToSave = duplicateItems && item.quantity > 1 ? 1 : item.quantity;
+        const iterationCount = duplicateItems && item.quantity > 1 ? item.quantity : 1;
+        
+        for (let i = 0; i < iterationCount; i++) {
+          const orderItem = await addOrderItem.mutateAsync({
+            order_id: order.id,
+            product_id: item.product_id,
+            variation_id: item.variation_id || null,
+            quantity: quantityToSave,
+            unit_price: item.unit_price,
+            total_price: item.unit_price * quantityToSave,
+            notes: item.notes || null,
+            status: getInitialOrderStatus(),
           });
+
+          // Save complements/extras if present
+          if (item.complements && item.complements.length > 0) {
+            const extras = item.complements.map(c => ({
+              order_item_id: orderItem.id,
+              extra_name: `${c.group_name}: ${c.option_name}`,
+              price: c.price * c.quantity,
+              extra_id: null,
+            }));
+            await addOrderItemExtras.mutateAsync(extras);
+          }
+
+          // Save sub-items (individual pizzas in a combo) if present
+          if (item.subItems && item.subItems.length > 0) {
+            await addOrderItemSubItems.mutateAsync({
+              order_item_id: orderItem.id,
+              sub_items: item.subItems.map(si => ({
+                sub_item_index: si.sub_item_index,
+                notes: si.sub_item_notes || null,
+                extras: si.complements.map(c => ({
+                  group_id: c.group_id || null,
+                  group_name: c.group_name,
+                  option_id: c.option_id || null,
+                  option_name: c.option_name,
+                  price: c.price,
+                  quantity: c.quantity,
+                })),
+              })),
+            });
+          }
         }
       }
-    }
 
-    // Mark order as no longer draft - now it can appear in KDS
-    if (order.is_draft) {
-      await updateOrder.mutateAsync({
-        id: order.id,
-        is_draft: false
+      // Mark order as no longer draft - now it can appear in KDS
+      if (order.is_draft) {
+        await updateOrder.mutateAsync({
+          id: order.id,
+          is_draft: false
+        });
+      }
+
+      toast.success('Itens adicionados!');
+
+      // Auto-print kitchen ticket if enabled - with detailed logging
+      console.log('[Print Debug] Checking auto-print conditions:', {
+        autoPrintKitchenTicket,
+        printerExists: !!printer,
+        canPrintToKitchen: printer?.canPrintToKitchen,
+        selectedTable: selectedTable?.number,
       });
-    }
-
-    // Auto-print kitchen ticket if enabled - with detailed logging
-    console.log('[Print Debug] Checking auto-print conditions:', {
-      autoPrintKitchenTicket,
-      printerExists: !!printer,
-      canPrintToKitchen: printer?.canPrintToKitchen,
-      selectedTable: selectedTable?.number,
-    });
-    
-    if (!autoPrintKitchenTicket) {
-      console.log('[Print Debug] Auto-print disabled in settings');
-      // Only show info toast occasionally, not every time
-    } else if (!centralPrinting.canPrintToKitchen) {
-      console.log('[Print Debug] Cannot print to kitchen (no printer or queue)');
-      toast.info('Impressora não configurada ou fila não habilitada.');
-    } else if (selectedTable) {
-      try {
-        // Use centralized printing (queue or direct)
-        // "Explodir" itens com quantity > 1 quando duplicateItems está ativo
-        const sectorItems: SectorPrintItem[] = [];
-        for (const item of items) {
-          if (duplicateItems && item.quantity > 1) {
-            // Criar linhas separadas para cada unidade
-            for (let i = 0; i < item.quantity; i++) {
+      
+      if (!autoPrintKitchenTicket) {
+        console.log('[Print Debug] Auto-print disabled in settings');
+      } else if (!centralPrinting.canPrintToKitchen) {
+        console.log('[Print Debug] Cannot print to kitchen (no printer or queue)');
+      } else if (selectedTable) {
+        try {
+          // Use centralized printing (queue or direct)
+          // "Explodir" itens com quantity > 1 quando duplicateItems está ativo
+          const sectorItems: SectorPrintItem[] = [];
+          for (const item of items) {
+            if (duplicateItems && item.quantity > 1) {
+              // Criar linhas separadas para cada unidade
+              for (let i = 0; i < item.quantity; i++) {
+                sectorItems.push({
+                  quantity: 1,
+                  productName: item.product_name,
+                  variation: item.variation_name,
+                  extras: item.complements?.map(c => c.option_name),
+                  notes: item.notes,
+                  print_sector_id: item.print_sector_id,
+                });
+              }
+            } else {
               sectorItems.push({
-                quantity: 1,
+                quantity: item.quantity,
                 productName: item.product_name,
                 variation: item.variation_name,
                 extras: item.complements?.map(c => c.option_name),
@@ -672,36 +693,32 @@ export default function Tables() {
                 print_sector_id: item.print_sector_id,
               });
             }
-          } else {
-            sectorItems.push({
-              quantity: item.quantity,
-              productName: item.product_name,
-              variation: item.variation_name,
-              extras: item.complements?.map(c => c.option_name),
-              notes: item.notes,
-              print_sector_id: item.print_sector_id,
-            });
           }
+          
+          await centralPrinting.printKitchenTicketsBySector(
+            sectorItems,
+            {
+              orderNumber: order.id.slice(0, 8).toUpperCase(),
+              orderType: 'dine_in',
+              tableNumber: selectedTable.number,
+              customerName: order.customer_name || undefined,
+              notes: order.notes || undefined,
+              createdAt: new Date().toISOString(),
+            },
+            duplicateKitchenTicket
+          );
+          
+          toast.success(centralPrinting.shouldQueue ? '🖨️ Comanda enviada para fila' : '🖨️ Comanda impressa');
+        } catch (err) {
+          console.error('[Print Debug] Auto print failed:', err);
+          toast.error('Erro ao imprimir comanda.');
         }
-        
-        await centralPrinting.printKitchenTicketsBySector(
-          sectorItems,
-          {
-            orderNumber: order.id.slice(0, 8).toUpperCase(),
-            orderType: 'dine_in',
-            tableNumber: selectedTable.number,
-            customerName: order.customer_name || undefined,
-            notes: order.notes || undefined,
-            createdAt: new Date().toISOString(),
-          },
-          duplicateKitchenTicket
-        );
-        
-        toast.success(centralPrinting.shouldQueue ? '🖨️ Comanda enviada para fila' : '🖨️ Comanda impressa');
-      } catch (err) {
-        console.error('[Print Debug] Auto print failed:', err);
-        toast.error('Erro ao imprimir comanda.');
       }
+    } catch (error) {
+      console.error('Error adding order items:', error);
+      toast.error('Erro ao adicionar itens');
+    } finally {
+      setIsAddingItems(false);
     }
   };
 
@@ -756,6 +773,12 @@ export default function Tables() {
   const handleCloseEmptyTable = async () => {
     if (!selectedTable) return;
     
+    const tableNumber = selectedTable.number;
+    setIsClosingEmptyTable(true);
+    
+    // Fechar painel/dialog imediatamente para feedback visual
+    setSelectedTable(null);
+    
     try {
       // Buscar qualquer pedido draft vazio associado a esta mesa
       const draftOrder = orders?.find(o => 
@@ -780,11 +803,12 @@ export default function Tables() {
         status: 'available' 
       });
       
-      toast.success(`Mesa ${selectedTable.number} fechada (sem consumo)`);
-      setSelectedTable(null);
+      toast.success(`Mesa ${tableNumber} fechada (sem consumo)`);
     } catch (error) {
       console.error('Error closing empty table:', error);
       toast.error('Erro ao fechar mesa');
+    } finally {
+      setIsClosingEmptyTable(false);
     }
   };
 
@@ -1206,6 +1230,12 @@ export default function Tables() {
       return;
     }
     
+    const tableNumber = selectedTable.number;
+    
+    // Fechar modal de confirmação imediatamente
+    setConfirmCloseModalOpen(false);
+    setIsFinalizingBill(true);
+    
     try {
       // Register any pending session payments in database (non-partial)
       for (const payment of registeredPayments) {
@@ -1272,13 +1302,14 @@ export default function Tables() {
       // Clear state and close
       setIsClosingBill(false);
       setRegisteredPayments([]);
-      setConfirmCloseModalOpen(false);
       setSelectedTable(null);
       
-      toast.success(`Mesa ${selectedTable.number} fechada com sucesso!`);
+      toast.success(`Mesa ${tableNumber} fechada com sucesso!`);
     } catch (error) {
       console.error('Error finalizing bill:', error);
       toast.error('Erro ao finalizar conta');
+    } finally {
+      setIsFinalizingBill(false);
     }
   };
 
@@ -1695,9 +1726,10 @@ export default function Tables() {
                               variant="destructive" 
                               size="sm"
                               onClick={handleCloseEmptyTable}
+                              disabled={isClosingEmptyTable}
                             >
                               <XCircle className="h-4 w-4 mr-2" />
-                              Fechar Mesa (Sem Consumo)
+                              {isClosingEmptyTable ? 'Fechando...' : 'Fechar Mesa (Sem Consumo)'}
                             </Button>
                           </div>
                         ) : null}
@@ -1709,9 +1741,10 @@ export default function Tables() {
                               <Button 
                                 className="w-full" 
                                 onClick={() => setIsAddOrderModalOpen(true)}
+                                disabled={isAddingItems}
                               >
                                 <Plus className="h-4 w-4 mr-2" />
-                                Adicionar Pedido
+                                {isAddingItems ? 'Adicionando...' : 'Adicionar Pedido'}
                               </Button>
                               {selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
                               <Button 
@@ -2270,34 +2303,49 @@ export default function Tables() {
         table={tableToOpen}
         onConfirm={async (data) => {
           if (!tableToOpen) return;
-          setOpenTableData(data);
-          await updateTable.mutateAsync({ id: tableToOpen.id, status: 'occupied' });
-          await createOrder.mutateAsync({
-            table_id: tableToOpen.id,
-            order_type: 'dine_in',
-            status: getInitialOrderStatus(),
-            customer_name: data.identification || null,
-            notes: data.people ? `${data.people} pessoas` : null,
-            is_draft: true,
-          });
           
-          // Reset all closing states to prevent data leak from previous table
-          setIsClosingBill(false);
-          setRegisteredPayments([]);
-          setDiscountType('percentage');
-          setDiscountValue(0);
-          setServiceChargeEnabled(false);
-          setServiceChargePercent(10);
-          setSplitBillEnabled(false);
-          setSplitCount(2);
-          setSplitMode('equal');
-          setCustomSplits([]);
+          const tableNumber = tableToOpen.number;
+          const tableId = tableToOpen.id;
           
+          // Fechar dialog imediatamente para feedback visual
           setIsOpenTableDialogOpen(false);
-          setSelectedTable({ ...tableToOpen, status: 'occupied' });
-          setTableToOpen(null);
+          setOpenTableData(data);
+          setIsOpeningTable(true);
+          
+          try {
+            await updateTable.mutateAsync({ id: tableId, status: 'occupied' });
+            await createOrder.mutateAsync({
+              table_id: tableId,
+              order_type: 'dine_in',
+              status: getInitialOrderStatus(),
+              customer_name: data.identification || null,
+              notes: data.people ? `${data.people} pessoas` : null,
+              is_draft: true,
+            });
+            
+            // Reset all closing states to prevent data leak from previous table
+            setIsClosingBill(false);
+            setRegisteredPayments([]);
+            setDiscountType('percentage');
+            setDiscountValue(0);
+            setServiceChargeEnabled(false);
+            setServiceChargePercent(10);
+            setSplitBillEnabled(false);
+            setSplitCount(2);
+            setSplitMode('equal');
+            setCustomSplits([]);
+            
+            setSelectedTable({ ...tableToOpen, status: 'occupied' });
+            toast.success(`Mesa ${tableNumber} aberta!`);
+          } catch (error) {
+            console.error('Error opening table:', error);
+            toast.error('Erro ao abrir mesa');
+          } finally {
+            setIsOpeningTable(false);
+            setTableToOpen(null);
+          }
         }}
-        isPending={updateTable.isPending}
+        isPending={updateTable.isPending || isOpeningTable}
       />
 
       {/* Mobile Table Details Dialog */}
@@ -2447,18 +2495,19 @@ export default function Tables() {
                     variant="destructive" 
                     size="sm"
                     onClick={handleCloseEmptyTable}
+                    disabled={isClosingEmptyTable}
                   >
                     <XCircle className="h-4 w-4 mr-2" />
-                    Fechar Mesa (Sem Consumo)
+                    {isClosingEmptyTable ? 'Fechando...' : 'Fechar Mesa (Sem Consumo)'}
                   </Button>
                 </div>
               ) : null}
 
               {selectedTable?.status === 'occupied' && (
                 <>
-                  <Button className="w-full" onClick={() => setIsAddOrderModalOpen(true)}>
+                  <Button className="w-full" onClick={() => setIsAddOrderModalOpen(true)} disabled={isAddingItems}>
                     <Plus className="h-4 w-4 mr-2" />
-                    Adicionar Pedido
+                    {isAddingItems ? 'Adicionando...' : 'Adicionar Pedido'}
                   </Button>
                   {canCloseBill && selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
                     <Button variant="outline" className="w-full" onClick={handleStartClosing}>
@@ -2784,9 +2833,9 @@ export default function Tables() {
             </Button>
             <Button 
               onClick={handleFinalizeBill} 
-              disabled={createPayment.isPending}
+              disabled={createPayment.isPending || isFinalizingBill}
             >
-              {createPayment.isPending ? 'Finalizando...' : 'Confirmar'}
+              {(createPayment.isPending || isFinalizingBill) ? 'Finalizando...' : 'Confirmar'}
             </Button>
           </DialogFooter>
         </DialogContent>
