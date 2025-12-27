@@ -304,7 +304,7 @@ export default function Menu() {
     }
   };
 
-  const handleDuplicateGroup = async (group: ComplementGroup) => {
+  const handleDuplicateGroup = async (group: ComplementGroup, addToProductList = false) => {
     try {
       // 1. Create new group with "(cópia)" suffix
       const newGroupData = {
@@ -335,6 +335,11 @@ export default function Menu() {
           groupId: newGroup.id, 
           optionIds: groupOptions.map(o => o.option_id) 
         });
+      }
+      
+      // 4. If duplicating from product dialog, add to selected groups
+      if (addToProductList) {
+        setProductLinkedGroupIds(prev => [...prev, newGroup.id]);
       }
     } catch (error) {
       console.error('Error duplicating group:', error);
@@ -1237,7 +1242,7 @@ export default function Menu() {
                                       title="Duplicar grupo"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        handleDuplicateGroup(group);
+                                        handleDuplicateGroup(group, true);
                                       }}
                                     >
                                       <Copy className="h-4 w-4" />
