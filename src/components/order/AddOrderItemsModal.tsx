@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
 import { useProductVariations } from '@/hooks/useProductVariations';
-import { ProductDetailDialog, SelectedComplement } from './ProductDetailDialog';
+import { ProductDetailDialog, SelectedComplement, SubItemComplement } from './ProductDetailDialog';
 import { ShoppingCart, Trash2, Plus, Minus, X, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
@@ -29,6 +29,7 @@ export interface CartItem {
   complements: SelectedComplement[];
   combo_name?: string;
   print_sector_id?: string | null;
+  subItems?: SubItemComplement[];
 }
 
 interface AddOrderItemsModalProps {
@@ -71,9 +72,19 @@ export function AddOrderItemsModal({ open, onOpenChange, onSubmit, tableNumber }
     product: any, 
     quantity: number, 
     complements: SelectedComplement[], 
-    notes: string
+    notes: string,
+    subItems?: SubItemComplement[]
   ) => {
-    const complementsTotal = complements.reduce((sum, c) => sum + (c.price * c.quantity), 0);
+    // Calculate complements total - include sub-items if present
+    let complementsTotal = complements.reduce((sum, c) => sum + (c.price * c.quantity), 0);
+    if (subItems && subItems.length > 0) {
+      for (const subItem of subItems) {
+        for (const c of subItem.complements) {
+          complementsTotal += c.price * c.quantity;
+        }
+      }
+    }
+    
     const productPrice = product.is_promotion && product.promotion_price 
       ? product.promotion_price 
       : product.price;
@@ -93,6 +104,7 @@ export function AddOrderItemsModal({ open, onOpenChange, onSubmit, tableNumber }
           notes,
           complements,
           print_sector_id: product.print_sector_id,
+          subItems,
         });
       }
       setCartItems(prev => [...prev, ...newItems]);
@@ -107,6 +119,7 @@ export function AddOrderItemsModal({ open, onOpenChange, onSubmit, tableNumber }
         notes,
         complements,
         print_sector_id: product.print_sector_id,
+        subItems,
       };
       setCartItems(prev => [...prev, newItem]);
     }

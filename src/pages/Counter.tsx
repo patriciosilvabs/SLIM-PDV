@@ -24,7 +24,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useOpenCashRegister, useCashRegisterMutations, PaymentMethod } from '@/hooks/useCashRegister';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { AccessDenied } from '@/components/auth/AccessDenied';
-import { ProductDetailDialog, SelectedComplement } from '@/components/order/ProductDetailDialog';
+import { ProductDetailDialog, SelectedComplement, SubItemComplement } from '@/components/order/ProductDetailDialog';
 import { CancelOrderDialog } from '@/components/order/CancelOrderDialog';
 import { printCustomerReceipt } from '@/components/receipt/CustomerReceipt';
 import { usePrinterOptional, SectorPrintItem } from '@/contexts/PrinterContext';
@@ -102,6 +102,7 @@ interface OrderItem {
   combo_name?: string;
   complements?: SelectedComplement[];
   print_sector_id?: string | null;
+  subItems?: SubItemComplement[];
 }
 
 type OrderType = 'takeaway' | 'delivery';
@@ -114,7 +115,7 @@ export default function Counter() {
   const { data: categories } = useCategories();
   const { data: variations } = useProductVariations();
   const { data: allOrders = [] } = useOrders();
-  const { createOrder, updateOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
+  const { createOrder, updateOrder, addOrderItem, addOrderItemExtras, addOrderItemSubItems } = useOrderMutations();
   const { toast } = useToast();
   const { duplicateItems, autoPrintKitchenTicket, autoPrintCustomerReceipt, duplicateKitchenTicket } = useOrderSettings();
   const { getInitialOrderStatus, settings: kdsSettings } = useKdsSettings();
@@ -315,9 +316,19 @@ export default function Counter() {
     product: any, 
     quantity: number, 
     complements: SelectedComplement[], 
-    itemNotes: string
+    itemNotes: string,
+    subItems?: SubItemComplement[]
   ) => {
-    const complementsTotal = complements.reduce((sum, c) => sum + (c.price * c.quantity), 0);
+    // Calculate complements total - for per-unit groups, sum from subItems
+    let complementsTotal = complements.reduce((sum, c) => sum + (c.price * c.quantity), 0);
+    if (subItems && subItems.length > 0) {
+      for (const subItem of subItems) {
+        for (const c of subItem.complements) {
+          complementsTotal += c.price * c.quantity;
+        }
+      }
+    }
+    
     const productPrice = product.is_promotion && product.promotion_price 
       ? product.promotion_price 
       : product.price;
@@ -336,6 +347,7 @@ export default function Counter() {
           notes: itemNotes || undefined,
           complements,
           print_sector_id: product.print_sector_id,
+          subItems,
         }]);
       }
     } else {
@@ -349,6 +361,7 @@ export default function Counter() {
         notes: itemNotes || undefined,
         complements,
         print_sector_id: product.print_sector_id,
+        subItems,
       }]);
     }
   };
@@ -568,6 +581,26 @@ export default function Counter() {
               extra_id: null,
             }));
             await addOrderItemExtras.mutateAsync(extras);
+          }
+          
+          // Save sub-items (per-unit complements like individual pizzas)
+          if (item.subItems && item.subItems.length > 0) {
+            await addOrderItemSubItems.mutateAsync({
+              order_item_id: orderItem.id,
+              sub_items: item.subItems.map(si => ({
+                sub_item_index: si.sub_item_index,
+                notes: si.sub_item_notes || null,
+                extras: si.complements.map(c => ({
+                  group_id: c.group_id || null,
+                  group_name: c.group_name,
+                  option_id: c.option_id || null,
+                  option_name: c.option_name,
+                  price: c.price,
+                  quantity: c.quantity,
+                })),
+              })),
+            });
+            console.log('[Counter] Sub-items saved for order item:', orderItem.id);
           }
         }
       }
