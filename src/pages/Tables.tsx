@@ -34,7 +34,7 @@ import { cn } from '@/lib/utils';
 import { format, addDays, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
+import { mobileAwareToast as toast, setMobileDevice } from '@/lib/mobileToast';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { usePrinterOptional, SectorPrintItem } from '@/contexts/PrinterContext';
 import { useCentralizedPrinting } from '@/hooks/useCentralizedPrinting';
@@ -295,6 +295,11 @@ export default function Tables() {
     setIsCartReviewOpen(false);
     setIsAddingMode(false);
   };
+
+  // Set mobile device flag for toast suppression
+  useEffect(() => {
+    setMobileDevice(isMobile);
+  }, [isMobile]);
 
   // Realtime subscription for orders
   useEffect(() => {
