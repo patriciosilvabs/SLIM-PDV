@@ -13,8 +13,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useProducts, useProductMutations } from '@/hooks/useProducts';
 import { useCategories, useCategoryMutations } from '@/hooks/useCategories';
-import { useCombos, useComboMutations } from '@/hooks/useCombos';
-import { useComboItems, useComboItemsMutations } from '@/hooks/useComboItems';
 import { useProductVariations } from '@/hooks/useProductVariations';
 import { useComplementGroups, useComplementGroupsMutations, ComplementGroup } from '@/hooks/useComplementGroups';
 import { useComplementOptions, useComplementOptionsMutations, ComplementOption } from '@/hooks/useComplementOptions';
@@ -40,11 +38,6 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
-interface ComboItemForm {
-  product_id: string;
-  variation_id: string | null;
-  quantity: number;
-}
 
 interface ProductForm {
   name: string;
@@ -76,16 +69,11 @@ export default function Menu() {
   const { data: products } = useProducts();
   const { data: categories } = useCategories();
   const { data: variations } = useProductVariations();
-  const { data: combos } = useCombos();
-  const { data: comboItems } = useComboItems();
   const { data: complementGroups } = useComplementGroups();
   const { data: complementOptions } = useComplementOptions();
   const { data: printSectors } = usePrintSectors();
   const { createProduct, updateProduct, deleteProduct, updateSortOrder: updateProductSortOrder } = useProductMutations();
   const { createCategory, updateCategory, deleteCategory, updateSortOrder: updateCategorySortOrder } = useCategoryMutations();
-  const { createCombo, updateCombo, deleteCombo } = useComboMutations();
-  const { setComboItems } = useComboItemsMutations();
-  const { createGroup, updateGroup, deleteGroup } = useComplementGroupsMutations();
   const { createOption, updateOption, deleteOption } = useComplementOptionsMutations();
   const { setGroupOptions } = useComplementGroupOptionsMutations();
   const { setProductGroups, setGroupsForProduct } = useProductComplementGroupsMutations();
@@ -135,13 +123,6 @@ export default function Menu() {
   // Complement Option dialog state
   const [isOptionDialogOpen, setIsOptionDialogOpen] = useState(false);
   const [editingOption, setEditingOption] = useState<ComplementOption | null>(null);
-
-  // Combo dialog state
-  const [isComboDialogOpen, setIsComboDialogOpen] = useState(false);
-  const [editingCombo, setEditingCombo] = useState<any>(null);
-  const [comboForm, setComboForm] = useState({ name: '', description: '', image_url: null as string | null, combo_price: 0, is_active: true });
-  const [comboItemsForm, setComboItemsForm] = useState<ComboItemForm[]>([]);
-
   // DnD sensors
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -210,20 +191,6 @@ export default function Menu() {
     setFilterFeatured('all');
   };
 
-  // Calculate original price for combo
-  const calculateOriginalPrice = () => {
-    return comboItemsForm.reduce((total, item) => {
-      const product = products?.find(p => p.id === item.product_id);
-      if (!product) return total;
-      const variation = variations?.find(v => v.id === item.variation_id);
-      const price = product.price + (variation?.price_modifier ?? 0);
-      return total + (price * item.quantity);
-    }, 0);
-  };
-
-  const originalPrice = calculateOriginalPrice();
-  const savings = originalPrice - comboForm.combo_price;
-  const savingsPercent = originalPrice > 0 ? (savings / originalPrice) * 100 : 0;
 
   // Handlers
   const handleSaveProduct = async () => {

@@ -236,7 +236,7 @@ export interface KitchenTicketOptions {
   showComplementPrice?: boolean; // Mostrar preço dos complementos
   showComplementName?: boolean;  // Mostrar nome dos complementos
   largeFontProduction?: boolean; // Usar fonte maior para produtos
-  hideComboQuantity?: boolean;   // Ocultar quantidade (1x, 2x) quando nome contém "combo"
+  hideComboQuantity?: boolean;   // Ocultar quantidade (1x, 2x) quando nome começa com número
 }
 
 // Função para extrair nome do combo das notas (formato "[Combo: Nome]")
@@ -478,9 +478,9 @@ export function buildKitchenTicket(
     const extrasForName = item.extrasWithPrice || item.extras?.map(e => ({ name: e, price: 0 })) || [];
     const { displayName, filteredExtras } = getProductDisplayName(item.productName, extrasForName);
     
-    // Verificar se deve ocultar quantidade para combos
-    const isCombo = displayName.toLowerCase().includes('combo');
-    const shouldShowQuantity = !(hideQuantityForCombos && isCombo);
+    // Verificar se deve ocultar quantidade quando nome começa com número
+    const startsWithNumber = /^\d/.test(displayName.trim());
+    const shouldShowQuantity = !(hideQuantityForCombos && startsWithNumber);
     
     // Aplicar fonte maior se largeFontProduction está ativado
     if (largeFont) {

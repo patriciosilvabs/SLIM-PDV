@@ -5,9 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useOrders, useOrderMutations, Order, OrderStatus } from '@/hooks/useOrders';
 import { useProducts } from '@/hooks/useProducts';
-import { useCombos } from '@/hooks/useCombos';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
-import { useComboItems } from '@/hooks/useComboItems';
 import { useProductVariations } from '@/hooks/useProductVariations';
 import { Trash2, Clock, ChefHat, CheckCircle, XCircle, Printer, Package, Tag } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -30,14 +28,11 @@ function formatCurrency(value: number) {
 export default function Orders() {
   const [activeTab, setActiveTab] = useState('active');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [addItemsTab, setAddItemsTab] = useState<'products' | 'combos'>('products');
 
   const activeStatuses: OrderStatus[] = ['pending', 'preparing', 'ready'];
   const { data: activeOrders } = useOrders(activeStatuses);
   const { data: allOrders } = useOrders();
   const { data: products } = useProducts();
-  const { data: combos } = useCombos();
-  const { data: comboItems } = useComboItems();
   const { data: variations } = useProductVariations();
   const { updateOrder, addOrderItem, deleteOrderItem } = useOrderMutations();
   const { getInitialOrderStatus } = useKdsSettings();
@@ -46,8 +41,6 @@ export default function Orders() {
   const displayedOrders = activeTab === 'active' 
     ? activeOrders 
     : allOrders?.filter(o => o.status === 'delivered' || o.status === 'cancelled');
-
-  const activeCombos = combos?.filter(c => c.is_active);
 
 
   const handleStatusChange = async (order: Order, newStatus: OrderStatus) => {
@@ -72,54 +65,12 @@ export default function Orders() {
     });
   };
 
-  const handleAddCombo = async (comboId: string) => {
-    if (!selectedOrder) return;
-    
-    const combo = combos?.find(c => c.id === comboId);
-    const items = comboItems?.filter(item => item.combo_id === comboId);
-    
-    if (!combo || !items || items.length === 0) return;
-
-    // Calculate discount percentage
-    const discountPercent = combo.original_price > 0 
-      ? (combo.original_price - combo.combo_price) / combo.original_price 
-      : 0;
-
-    // Add each item with proportionally discounted price
-    for (const item of items) {
-      const product = products?.find(p => p.id === item.product_id);
-      if (!product) continue;
-
-      const variation = variations?.find(v => v.id === item.variation_id);
-      const originalPrice = product.price + (variation?.price_modifier ?? 0);
-      const discountedPrice = originalPrice * (1 - discountPercent);
-      const initialStatus = getInitialOrderStatus();
-      
-      await addOrderItem.mutateAsync({
-        order_id: selectedOrder.id,
-        product_id: item.product_id,
-        variation_id: item.variation_id,
-        quantity: item.quantity,
-        unit_price: discountedPrice,
-        total_price: discountedPrice * item.quantity,
-        notes: `[Combo: ${combo.name}]`,
-        status: initialStatus,
-      });
-    }
-  };
-
   const handleRemoveItem = async (itemId: string) => {
     if (!selectedOrder) return;
     await deleteOrderItem.mutateAsync({ id: itemId, order_id: selectedOrder.id });
   };
 
-  const getComboDiscount = (combo: { original_price: number; combo_price: number }) => {
-    if (combo.original_price <= 0) return 0;
-    return Math.round(((combo.original_price - combo.combo_price) / combo.original_price) * 100);
-  };
-
   
-
   return (
     <PDVLayout>
       <div className="space-y-6">
@@ -306,103 +257,30 @@ export default function Orders() {
                   </CardContent>
                 </Card>
 
-                {/* Add Products/Combos */}
+                {/* Add Products */}
                 {selectedOrder.status === 'pending' && (
                   <Card>
                     <CardHeader className="pb-3">
                       <CardTitle className="text-lg">Adicionar Itens</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                      <Tabs value={addItemsTab} onValueChange={(v) => setAddItemsTab(v as 'products' | 'combos')}>
-                        <TabsList className="w-full">
-                          <TabsTrigger value="products" className="flex-1">
-                            <Tag className="h-4 w-4 mr-2" />
-                            Produtos
-                          </TabsTrigger>
-                          <TabsTrigger value="combos" className="flex-1">
-                            <Package className="h-4 w-4 mr-2" />
-                            Combos
-                          </TabsTrigger>
-                        </TabsList>
-
-                        <TabsContent value="products" className="mt-4">
-                          <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto">
-                            {products?.filter(p => p.is_available).map((product) => (
-                              <Button
-                                key={product.id}
-                                variant="outline"
-                                className="h-auto py-2 px-3 flex flex-col items-start"
-                                onClick={() => handleAddItem(product.id, product.price, product.name)}
-                              >
-                                <span className="text-sm font-medium truncate w-full text-left">
-                                  {product.name}
-                                </span>
-                                <span className="text-xs text-primary">
-                                  {formatCurrency(product.price)}
-                                </span>
-                              </Button>
-                            ))}
-                          </div>
-                        </TabsContent>
-
-                        <TabsContent value="combos" className="mt-4">
-                          <div className="grid grid-cols-1 gap-3 max-h-[300px] overflow-y-auto">
-                            {activeCombos?.length ? activeCombos.map((combo) => {
-                              const discount = getComboDiscount(combo);
-                              return (
-                                <Card
-                                  key={combo.id}
-                                  className="cursor-pointer hover:border-primary transition-colors"
-                                  onClick={() => handleAddCombo(combo.id)}
-                                >
-                                  <CardContent className="p-3">
-                                    <div className="flex gap-3">
-                                      {combo.image_url ? (
-                                        <img 
-                                          src={combo.image_url} 
-                                          alt={combo.name}
-                                          className="w-16 h-16 rounded-lg object-cover"
-                                        />
-                                      ) : (
-                                        <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center">
-                                          <Package className="h-6 w-6 text-muted-foreground" />
-                                        </div>
-                                      )}
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-start justify-between gap-2">
-                                          <p className="font-semibold truncate">{combo.name}</p>
-                                          {discount > 0 && (
-                                            <Badge variant="destructive" className="shrink-0">
-                                              -{discount}%
-                                            </Badge>
-                                          )}
-                                        </div>
-                                        {combo.description && (
-                                          <p className="text-xs text-muted-foreground line-clamp-1">
-                                            {combo.description}
-                                          </p>
-                                        )}
-                                        <div className="flex items-center gap-2 mt-1">
-                                          <span className="text-xs text-muted-foreground line-through">
-                                            {formatCurrency(combo.original_price)}
-                                          </span>
-                                          <span className="text-sm font-bold text-green-600">
-                                            {formatCurrency(combo.combo_price)}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </CardContent>
-                                </Card>
-                              );
-                            }) : (
-                              <p className="text-center text-muted-foreground py-8">
-                                Nenhum combo disponível
-                              </p>
-                            )}
-                          </div>
-                        </TabsContent>
-                      </Tabs>
+                    <CardContent>
+                      <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto">
+                        {products?.filter(p => p.is_available).map((product) => (
+                          <Button
+                            key={product.id}
+                            variant="outline"
+                            className="h-auto py-2 px-3 flex flex-col items-start"
+                            onClick={() => handleAddItem(product.id, product.price, product.name)}
+                          >
+                            <span className="text-sm font-medium truncate w-full text-left">
+                              {product.name}
+                            </span>
+                            <span className="text-xs text-primary">
+                              {formatCurrency(product.price)}
+                            </span>
+                          </Button>
+                        ))}
+                      </div>
                     </CardContent>
                   </Card>
                 )}
