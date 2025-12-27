@@ -216,6 +216,7 @@ export interface KitchenTicketItem {
   notes?: string | null;
   print_sector_id?: string | null;
   addedBy?: string | null; // Nome do garçom que adicionou o item
+  comboName?: string | null; // Nome do combo (se fizer parte de um combo)
 }
 
 export interface KitchenTicketData {
@@ -235,6 +236,20 @@ export interface KitchenTicketOptions {
   showComplementPrice?: boolean; // Mostrar preço dos complementos
   showComplementName?: boolean;  // Mostrar nome dos complementos
   largeFontProduction?: boolean; // Usar fonte maior para produtos
+}
+
+// Função para extrair nome do combo das notas (formato "[Combo: Nome]")
+export function extractComboNameFromNotes(notes: string | null | undefined): string | null {
+  if (!notes) return null;
+  const match = notes.match(/\[Combo:\s*([^\]]+)\]/i);
+  return match ? match[1].trim() : null;
+}
+
+// Função para remover a tag de combo das notas
+export function removeComboTagFromNotes(notes: string | null | undefined): string | null {
+  if (!notes) return null;
+  const cleaned = notes.replace(/\[Combo:\s*[^\]]+\]\s*/gi, '').trim();
+  return cleaned || null;
 }
 
 export function buildKitchenTicket(
@@ -317,81 +332,216 @@ export function buildKitchenTicket(
   ticket += TEXT_NORMAL;
   ticket += DASHED_LINE(width);
 
-  // Items
+  // Pre-process items: extract combo names from notes and group by combo
+  const processedItems = data.items.map(item => {
+    const comboFromNotes = extractComboNameFromNotes(item.notes);
+    const cleanedNotes = removeComboTagFromNotes(item.notes);
+    return {
+      ...item,
+      comboName: item.comboName || comboFromNotes,
+      notes: cleanedNotes,
+    };
+  });
+
+  // Group items by combo name
+  interface ComboGroup {
+    comboName: string;
+    items: typeof processedItems;
+  }
+  
+  const comboGroups: ComboGroup[] = [];
+  const standaloneItems: typeof processedItems = [];
+  const comboMap = new Map<string, typeof processedItems>();
+
+  for (const item of processedItems) {
+    if (item.comboName) {
+      const existing = comboMap.get(item.comboName) || [];
+      existing.push(item);
+      comboMap.set(item.comboName, existing);
+    } else {
+      standaloneItems.push(item);
+    }
+  }
+
+  // Convert map to array
+  comboMap.forEach((items, comboName) => {
+    comboGroups.push({ comboName, items });
+  });
+
+  // Print standalone items first
   let itemNumber = 0;
-  for (const item of data.items) {
+  for (const item of standaloneItems) {
     itemNumber++;
+    ticket += printSingleItem(item, itemNumber, showItemNumber, largeFontProduction, fontCmd, showComplementName, showComplementPrice, processText);
+  }
+
+  // Print combo groups
+  for (const group of comboGroups) {
+    itemNumber++;
+    
+    // Combo header
+    ticket += TEXT_DOUBLE_SIZE;
+    ticket += TEXT_BOLD;
+    ticket += GS + 'B' + '\x01'; // INVERT ON (tarja preta para destaque)
+    if (showItemNumber) {
+      ticket += ` ${itemNumber}. COMBO: ${processText(group.comboName)} ` + LF;
+    } else {
+      ticket += ` COMBO: ${processText(group.comboName)} ` + LF;
+    }
+    ticket += GS + 'B' + '\x00'; // INVERT OFF
+    ticket += TEXT_BOLD_OFF;
+    ticket += fontCmd;
+    
+    // Print each item in the combo as a sub-item
+    for (const item of group.items) {
+      // Detectar se é produto placeholder e obter nome correto
+      const extrasForName = item.extrasWithPrice || item.extras?.map(e => ({ name: e, price: 0 })) || [];
+      const { displayName, filteredExtras } = getProductDisplayName(item.productName, extrasForName);
+      
+      // Aplicar fonte maior se largeFontProduction está ativado
+      if (largeFontProduction) {
+        ticket += TEXT_DOUBLE_SIZE;
+      } else {
+        ticket += fontCmd;
+      }
+      
+      ticket += TEXT_BOLD;
+      // Sub-item com bullet point
+      ticket += `  • ${item.quantity}x ${processText(displayName)}` + LF;
+      ticket += TEXT_BOLD_OFF;
+      
+      // Voltar para fonte normal para detalhes
+      if (largeFontProduction) {
+        ticket += fontCmd;
+      }
+
+      if (item.variation) {
+        ticket += `    > ${processText(item.variation)}` + LF;
+      }
+
+      // Processar complementos filtrados
+      const extrasToShow = filteredExtras as { name: string; price: number }[];
+      if (showComplementName && extrasToShow && extrasToShow.length > 0) {
+        for (const extra of extrasToShow) {
+          const isBorda = extra.name.toLowerCase().includes('borda');
+          let extraText = extra.name;
+          
+          if (showComplementPrice && extra.price > 0) {
+            extraText += ` (R$ ${extra.price.toFixed(2).replace('.', ',')})`;
+          }
+          
+          if (isBorda) {
+            ticket += TEXT_BOLD;
+            ticket += GS + 'B' + '\x01';
+            ticket += `   + ${processText(extraText)} ` + LF;
+            ticket += GS + 'B' + '\x00';
+            ticket += TEXT_BOLD_OFF;
+          } else {
+            ticket += `    + ${processText(extraText)}` + LF;
+          }
+        }
+      }
+
+      if (item.notes) {
+        ticket += TEXT_DOUBLE_SIZE;
+        ticket += GS + 'B' + '\x01';
+        ticket += ` OBS: ${processText(item.notes)} ` + LF;
+        ticket += GS + 'B' + '\x00';
+        ticket += fontCmd;
+      }
+
+      if (item.addedBy) {
+        ticket += `    [${processText(item.addedBy)}]` + LF;
+      }
+    }
+    
+    ticket += LF;
+  }
+
+  // Helper function to print a single item (defined inline for access to closure variables)
+  function printSingleItem(
+    item: typeof processedItems[0], 
+    num: number, 
+    showNum: boolean, 
+    largeFont: boolean, 
+    font: string, 
+    showComp: boolean, 
+    showCompPrice: boolean,
+    process: (text: string) => string
+  ): string {
+    let output = '';
     
     // Detectar se é produto placeholder e obter nome correto
     const extrasForName = item.extrasWithPrice || item.extras?.map(e => ({ name: e, price: 0 })) || [];
     const { displayName, filteredExtras } = getProductDisplayName(item.productName, extrasForName);
     
     // Aplicar fonte maior se largeFontProduction está ativado
-    if (largeFontProduction) {
-      ticket += TEXT_DOUBLE_SIZE;
+    if (largeFont) {
+      output += TEXT_DOUBLE_SIZE;
     } else {
-      ticket += fontCmd;
+      output += font;
     }
     
-    ticket += TEXT_BOLD;
+    output += TEXT_BOLD;
     
     // Construir linha do item com ou sem número sequencial
-    if (showItemNumber) {
-      ticket += `${itemNumber}. ${item.quantity}x ${processText(displayName)}` + LF;
+    if (showNum) {
+      output += `${num}. ${item.quantity}x ${process(displayName)}` + LF;
     } else {
-      ticket += `${item.quantity}x ${processText(displayName)}` + LF;
+      output += `${item.quantity}x ${process(displayName)}` + LF;
     }
-    ticket += TEXT_BOLD_OFF;
+    output += TEXT_BOLD_OFF;
     
     // Voltar para fonte normal para detalhes
-    if (largeFontProduction) {
-      ticket += fontCmd;
+    if (largeFont) {
+      output += font;
     }
 
     if (item.variation) {
-      ticket += `  > ${processText(item.variation)}` + LF;
+      output += `  > ${process(item.variation)}` + LF;
     }
 
     // Processar complementos filtrados (sem os sabores que foram para o nome)
     const extrasToShow = filteredExtras as { name: string; price: number }[];
-    if (showComplementName && extrasToShow && extrasToShow.length > 0) {
+    if (showComp && extrasToShow && extrasToShow.length > 0) {
       for (const extra of extrasToShow) {
         const isBorda = extra.name.toLowerCase().includes('borda');
         let extraText = extra.name;
         
         // Adicionar preço se configurado
-        if (showComplementPrice && extra.price > 0) {
+        if (showCompPrice && extra.price > 0) {
           extraText += ` (R$ ${extra.price.toFixed(2).replace('.', ',')})`;
         }
         
         if (isBorda) {
           // Tarja preta para destacar bordas
-          ticket += TEXT_BOLD;
-          ticket += GS + 'B' + '\x01'; // INVERT ON (tarja preta)
-          ticket += ` + ${processText(extraText)} ` + LF;
-          ticket += GS + 'B' + '\x00'; // INVERT OFF
-          ticket += TEXT_BOLD_OFF;
+          output += TEXT_BOLD;
+          output += GS + 'B' + '\x01'; // INVERT ON (tarja preta)
+          output += ` + ${process(extraText)} ` + LF;
+          output += GS + 'B' + '\x00'; // INVERT OFF
+          output += TEXT_BOLD_OFF;
         } else {
-          ticket += `  + ${processText(extraText)}` + LF;
+          output += `  + ${process(extraText)}` + LF;
         }
       }
     }
 
     if (item.notes) {
       // Tarja preta com fonte grande para destaque visual
-      ticket += TEXT_DOUBLE_SIZE;
-      ticket += GS + 'B' + '\x01'; // INVERT ON (tarja preta)
-      ticket += ` OBS: ${processText(item.notes)} ` + LF;
-      ticket += GS + 'B' + '\x00'; // INVERT OFF
-      ticket += fontCmd; // Volta para fonte configurada
+      output += TEXT_DOUBLE_SIZE;
+      output += GS + 'B' + '\x01'; // INVERT ON (tarja preta)
+      output += ` OBS: ${process(item.notes)} ` + LF;
+      output += GS + 'B' + '\x00'; // INVERT OFF
+      output += font; // Volta para fonte configurada
     }
 
     // Nome do garçom que adicionou o item
     if (item.addedBy) {
-      ticket += `  [${processText(item.addedBy)}]` + LF;
+      output += `  [${process(item.addedBy)}]` + LF;
     }
 
-    ticket += LF;
+    output += LF;
+    return output;
   }
 
   // General notes - NOT printed on kitchen ticket (only shown in system)
