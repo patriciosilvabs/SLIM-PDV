@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -25,7 +25,7 @@ import { useAudioNotification } from '@/hooks/useAudioNotification';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
 import { CancelOrderDialog } from '@/components/order/CancelOrderDialog';
-import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, Tag, Percent, UserPlus, Minus, ArrowRightLeft, Edit, XCircle, Printer, RotateCcw, Ban, ArrowRight, Wallet } from 'lucide-react';
+import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, UserPlus, Minus, ArrowRightLeft, XCircle, Printer, RotateCcw, Ban, ArrowRight, Wallet } from 'lucide-react';
 import { printKitchenOrderTicket } from '@/components/kitchen/KitchenOrderTicket';
 import { printCustomerReceipt, printPartialPaymentReceipt, propsToReceiptData } from '@/components/receipt/CustomerReceipt';
 import { Switch } from '@/components/ui/switch';
@@ -154,15 +154,6 @@ export default function Tables() {
   const [tableToOpen, setTableToOpen] = useState<Table | null>(null);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [openTableData, setOpenTableData] = useState({ people: 2, identification: '' });
-  const [newReservation, setNewReservation] = useState({
-    table_id: '',
-    customer_name: '',
-    customer_phone: '',
-    reservation_date: format(new Date(), 'yyyy-MM-dd'),
-    reservation_time: '19:00',
-    party_size: 2,
-    notes: '',
-  });
 
   // Bill closing flow states
   const [isClosingBill, setIsClosingBill] = useState(false);
@@ -195,7 +186,7 @@ export default function Tables() {
   const [isReopenDialogOpen, setIsReopenDialogOpen] = useState(false);
   const [closedOrderToReopen, setClosedOrderToReopen] = useState<Order | null>(null);
   const [isReopening, setIsReopening] = useState(false);
-  const [reopenReason, setReopenReason] = useState('');
+  
 
   // Cancel order states
   const [isCancelOrderDialogOpen, setIsCancelOrderDialogOpen] = useState(false);
@@ -483,90 +474,6 @@ export default function Tables() {
     ) || [];
   };
 
-  // Handle reopening a closed order
-  const handleReopenClosedOrder = async () => {
-    if (!closedOrderToReopen || !selectedTable) return;
-    
-    setIsReopening(true);
-    try {
-      const newStatus = getInitialOrderStatus();
-      
-      // Record the reopen for audit trail
-      await supabase.from('order_reopens').insert({
-        order_id: closedOrderToReopen.id,
-        table_id: selectedTable.id,
-        previous_status: closedOrderToReopen.status,
-        new_status: newStatus,
-        reopened_by: user?.id,
-        order_type: closedOrderToReopen.order_type,
-        customer_name: closedOrderToReopen.customer_name,
-        total_value: closedOrderToReopen.total,
-        reason: reopenReason,
-      });
-
-      // Send push notification to managers
-      try {
-        if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification(`⚠️ Mesa ${selectedTable.number} reaberta`, {
-            body: `Por: ${user?.user_metadata?.name || user?.email}. Motivo: ${reopenReason}`,
-            tag: 'table-reopen',
-          });
-        }
-      } catch (e) {
-        console.error('Push notification error:', e);
-      }
-
-      // Try to send email notification (will fail silently if RESEND_API_KEY not configured)
-      try {
-        await supabase.functions.invoke('send-reopen-notification', {
-          body: {
-            orderId: closedOrderToReopen.id,
-            tableNumber: selectedTable.number,
-            userName: user?.user_metadata?.name || user?.email,
-            reason: reopenReason,
-            totalValue: closedOrderToReopen.total,
-          }
-        });
-      } catch (e) {
-        console.log('Email notification not sent (RESEND_API_KEY may not be configured)');
-      }
-      
-      // Reopen the order (set status back to preparing)
-      await updateOrder.mutateAsync({
-        id: closedOrderToReopen.id,
-        status: newStatus,
-        updated_at: new Date().toISOString()
-      });
-      
-      // Reopen the table
-      await updateTable.mutateAsync({
-        id: selectedTable.id,
-        status: 'occupied'
-      });
-
-      // Update all order items status
-      if (closedOrderToReopen.order_items) {
-        for (const item of closedOrderToReopen.order_items) {
-          await supabase
-            .from('order_items')
-            .update({ status: newStatus })
-            .eq('id', item.id);
-        }
-      }
-      
-      toast.success(`Mesa ${selectedTable.number} reaberta com sucesso!`);
-      setIsReopenDialogOpen(false);
-      setClosedOrderToReopen(null);
-      setReopenReason('');
-      setSelectedTable({ ...selectedTable, status: 'occupied' });
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-    } catch (error) {
-      console.error('Error reopening order:', error);
-      toast.error('Erro ao reabrir mesa');
-    } finally {
-      setIsReopening(false);
-    }
-  };
 
   // Get the current KDS station for an order (based on items' current_station)
   const getOrderCurrentStation = (order: Order | undefined): OrderItemStation | null => {
@@ -600,23 +507,7 @@ export default function Tables() {
     }
   };
 
-  const handleOpenTable = async () => {
-    if (!tableToOpen) return;
-    
-    await updateTable.mutateAsync({ id: tableToOpen.id, status: 'occupied' });
-    await createOrder.mutateAsync({
-      table_id: tableToOpen.id,
-      order_type: 'dine_in',
-      status: getInitialOrderStatus(),
-      customer_name: openTableData.identification || null,
-      notes: openTableData.people ? `${openTableData.people} pessoas` : null,
-      is_draft: true, // Order starts as draft until items are added
-    });
-    
-    setIsOpenTableDialogOpen(false);
-    setSelectedTable({ ...tableToOpen, status: 'occupied' });
-    setTableToOpen(null);
-  };
+
 
   const handleCloseTable = async () => {
     if (!selectedTable) return;
@@ -874,30 +765,6 @@ export default function Tables() {
     }
   };
 
-  const handleCreateReservation = async () => {
-    if (!newReservation.table_id || !newReservation.customer_name) return;
-    
-    await createReservation.mutateAsync({
-      ...newReservation,
-      status: 'confirmed',
-      created_by: user?.id || null,
-    });
-    
-    if (newReservation.reservation_date === format(new Date(), 'yyyy-MM-dd')) {
-      await updateTable.mutateAsync({ id: newReservation.table_id, status: 'reserved' });
-    }
-    
-    setIsReservationDialogOpen(false);
-    setNewReservation({
-      table_id: '',
-      customer_name: '',
-      customer_phone: '',
-      reservation_date: format(new Date(), 'yyyy-MM-dd'),
-      reservation_time: '19:00',
-      party_size: 2,
-      notes: '',
-    });
-  };
 
   const handleConfirmArrival = async (reservation: Reservation) => {
     await updateReservation.mutateAsync({ id: reservation.id, status: 'completed' });
@@ -1198,16 +1065,6 @@ export default function Tables() {
       console.error('Error creating partial payment:', error);
       toast.error('Erro ao registrar pagamento parcial');
     }
-  };
-  
-  // Update custom split value
-  const handleCustomSplitChange = (index: number, value: string) => {
-    const numValue = parseFloat(value.replace(',', '.')) || 0;
-    setCustomSplits(prev => {
-      const updated = [...prev];
-      updated[index] = numValue;
-      return updated;
-    });
   };
 
   // Remove a registered payment
@@ -1830,78 +1687,24 @@ export default function Tables() {
                           </div>
                           
                           {/* Discount Section */}
-                          <div className="p-3 bg-muted/30 rounded-lg space-y-2">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <Tag className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm font-medium">Desconto</span>
-                              </div>
-                              <Switch 
-                                checked={discountValue > 0} 
-                                onCheckedChange={(checked) => setDiscountValue(checked ? 10 : 0)}
-                              />
-                            </div>
-                            {discountValue > 0 && (
-                              <div className="space-y-2">
-                                <RadioGroup 
-                                  value={discountType} 
-                                  onValueChange={(v: 'percentage' | 'fixed') => setDiscountType(v)}
-                                  className="flex gap-4"
-                                >
-                                  <div className="flex items-center gap-1">
-                                    <RadioGroupItem value="percentage" id="discount-pct" />
-                                    <Label htmlFor="discount-pct" className="text-xs">Percentual</Label>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <RadioGroupItem value="fixed" id="discount-fix" />
-                                    <Label htmlFor="discount-fix" className="text-xs">Valor fixo</Label>
-                                  </div>
-                                </RadioGroup>
-                                <div className="flex items-center gap-2">
-                                  <Input
-                                    type="number"
-                                    value={discountValue}
-                                    onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
-                                    className="h-8 w-20"
-                                  />
-                                  <span className="text-sm text-muted-foreground">
-                                    {discountType === 'percentage' ? '%' : 'R$'}
-                                  </span>
-                                  <span className="text-sm text-red-500 ml-auto">
-                                    -{formatCurrency(discountAmount)}
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
+                          <DiscountInput
+                            discountType={discountType}
+                            discountValue={discountValue}
+                            subtotal={subtotal}
+                            onChange={(type, value) => {
+                              setDiscountType(type);
+                              setDiscountValue(value);
+                            }}
+                          />
 
                           {/* Service Charge Section */}
-                          <div className="p-3 bg-muted/30 rounded-lg space-y-2">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <Percent className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm font-medium">Taxa de serviço</span>
-                              </div>
-                              <Switch 
-                                checked={serviceChargeEnabled} 
-                                onCheckedChange={setServiceChargeEnabled}
-                              />
-                            </div>
-                            {serviceChargeEnabled && (
-                              <div className="flex items-center gap-2">
-                                <Input
-                                  type="number"
-                                  value={serviceChargePercent}
-                                  onChange={(e) => setServiceChargePercent(parseFloat(e.target.value) || 0)}
-                                  className="h-8 w-20"
-                                />
-                                <span className="text-sm text-muted-foreground">%</span>
-                                <span className="text-sm text-green-600 ml-auto">
-                                  +{formatCurrency(serviceAmount)}
-                                </span>
-                              </div>
-                            )}
-                          </div>
+                          <ServiceChargeInput
+                            enabled={serviceChargeEnabled}
+                            percent={serviceChargePercent}
+                            afterDiscountTotal={afterDiscount}
+                            onEnabledChange={setServiceChargeEnabled}
+                            onPercentChange={setServiceChargePercent}
+                          />
 
                           {/* Final Total */}
                           <div className="flex items-center justify-between text-lg font-bold pt-2 border-t">
@@ -2009,17 +1812,18 @@ export default function Tables() {
                               ) : (
                                 <div className="space-y-2">
                                   {customSplits.map((value, i) => (
-                                    <div key={i} className="flex items-center gap-2">
-                                      <span className="text-xs text-muted-foreground w-16">Pessoa {i + 1}</span>
-                                      <span className="text-muted-foreground">R$</span>
-                                      <Input
-                                        type="number"
-                                        value={value || ''}
-                                        onChange={(e) => handleCustomSplitChange(i, e.target.value)}
-                                        className="h-8 flex-1"
-                                        placeholder="0,00"
-                                      />
-                                    </div>
+                                    <CustomSplitInput
+                                      key={i}
+                                      index={i}
+                                      value={value}
+                                      onChange={(idx, val) => {
+                                        setCustomSplits(prev => {
+                                          const updated = [...prev];
+                                          updated[idx] = val;
+                                          return updated;
+                                        });
+                                      }}
+                                    />
                                   ))}
                                   <div className={cn(
                                     "text-xs text-right",
@@ -2215,107 +2019,29 @@ export default function Tables() {
                 </SelectContent>
               </Select>
             </div>
-            <Dialog open={isReservationDialogOpen} onOpenChange={setIsReservationDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Nova Reserva
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Nova Reserva</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 pt-4">
-                  <div className="space-y-2">
-                    <Label>Mesa</Label>
-                    <Select 
-                      value={newReservation.table_id}
-                      onValueChange={(value) => setNewReservation({ ...newReservation, table_id: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione uma mesa" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {tables?.filter(t => t.status === 'available').map((table) => (
-                          <SelectItem key={table.id} value={table.id}>
-                            Mesa {table.number} ({table.capacity} lugares)
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Data</Label>
-                      <Input
-                        type="date"
-                        value={newReservation.reservation_date}
-                        onChange={(e) => setNewReservation({ ...newReservation, reservation_date: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Horário</Label>
-                      <Select 
-                        value={newReservation.reservation_time}
-                        onValueChange={(value) => setNewReservation({ ...newReservation, reservation_time: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {timeSlots.map((time) => (
-                            <SelectItem key={time} value={time}>{time}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Nome do Cliente</Label>
-                    <Input
-                      value={newReservation.customer_name}
-                      onChange={(e) => setNewReservation({ ...newReservation, customer_name: e.target.value })}
-                      placeholder="Nome completo"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Telefone</Label>
-                      <Input
-                        value={newReservation.customer_phone}
-                        onChange={(e) => setNewReservation({ ...newReservation, customer_phone: e.target.value })}
-                        placeholder="(11) 99999-9999"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Pessoas</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={newReservation.party_size}
-                        onChange={(e) => setNewReservation({ ...newReservation, party_size: parseInt(e.target.value) })}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Observações</Label>
-                    <Textarea
-                      value={newReservation.notes}
-                      onChange={(e) => setNewReservation({ ...newReservation, notes: e.target.value })}
-                      placeholder="Ex: aniversário, cadeira para bebê..."
-                    />
-                  </div>
-                  <Button 
-                    className="w-full" 
-                    onClick={handleCreateReservation}
-                    disabled={!newReservation.table_id || !newReservation.customer_name || createReservation.isPending}
-                  >
-                    Criar Reserva
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+            <Button onClick={() => setIsReservationDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nova Reserva
+            </Button>
+            <ReservationDialog
+              open={isReservationDialogOpen}
+              onOpenChange={setIsReservationDialogOpen}
+              tables={tables || []}
+              onConfirm={async (data) => {
+                await createReservation.mutateAsync({
+                  ...data,
+                  status: 'confirmed',
+                  created_by: user?.id || null,
+                });
+                
+                if (data.reservation_date === format(new Date(), 'yyyy-MM-dd')) {
+                  await updateTable.mutateAsync({ id: data.table_id, status: 'reserved' });
+                }
+                
+                setIsReservationDialogOpen(false);
+              }}
+              isPending={createReservation.isPending}
+            />
           </div>
 
           {/* Reservations List */}
@@ -2380,52 +2106,29 @@ export default function Tables() {
         </TabsContent>
       </Tabs>
 
-      {/* Open Table Dialog */}
-      <Dialog open={isOpenTableDialogOpen} onOpenChange={setIsOpenTableDialogOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Abrir Mesa {tableToOpen?.number}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <Label>Quantidade de Pessoas</Label>
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setOpenTableData(d => ({ ...d, people: Math.max(1, d.people - 1) }))}
-                >
-                  <span className="text-lg">-</span>
-                </Button>
-                <span className="text-2xl font-bold w-12 text-center">{openTableData.people}</span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setOpenTableData(d => ({ ...d, people: d.people + 1 }))}
-                >
-                  <span className="text-lg">+</span>
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Identificação (opcional)</Label>
-              <Input
-                value={openTableData.identification}
-                onChange={(e) => setOpenTableData({ ...openTableData, identification: e.target.value })}
-                placeholder="Nome do cliente ou observação"
-              />
-            </div>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setIsOpenTableDialogOpen(false)}>
-              Voltar
-            </Button>
-            <Button onClick={handleOpenTable} disabled={updateTable.isPending}>
-              Abrir Mesa
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Open Table Dialog - using optimized component */}
+      <OpenTableDialog
+        open={isOpenTableDialogOpen}
+        onOpenChange={setIsOpenTableDialogOpen}
+        table={tableToOpen}
+        onConfirm={async (data) => {
+          if (!tableToOpen) return;
+          setOpenTableData(data);
+          await updateTable.mutateAsync({ id: tableToOpen.id, status: 'occupied' });
+          await createOrder.mutateAsync({
+            table_id: tableToOpen.id,
+            order_type: 'dine_in',
+            status: getInitialOrderStatus(),
+            customer_name: data.identification || null,
+            notes: data.people ? `${data.people} pessoas` : null,
+            is_draft: true,
+          });
+          setIsOpenTableDialogOpen(false);
+          setSelectedTable({ ...tableToOpen, status: 'occupied' });
+          setTableToOpen(null);
+        }}
+        isPending={updateTable.isPending}
+      />
 
       {/* Mobile Table Details Dialog */}
       {isMobile && (
@@ -2955,88 +2658,101 @@ export default function Tables() {
         </DialogContent>
       </Dialog>
 
-      {/* Reopen Closed Order Dialog */}
-      <Dialog open={isReopenDialogOpen} onOpenChange={setIsReopenDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <RotateCcw className="h-5 w-5" />
-              Reabrir Mesa {selectedTable?.number}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-4">
-            {closedOrderToReopen && (
-              <>
-                <div className="p-4 bg-muted/50 rounded-lg space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Pedido</span>
-                    <span className="font-mono">#{closedOrderToReopen.id.slice(0, 8)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Itens</span>
-                    <span>{closedOrderToReopen.order_items?.length || 0}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Total</span>
-                    <span className="font-bold">{formatCurrency(closedOrderToReopen.total || 0)}</span>
-                  </div>
-                  {closedOrderToReopen.customer_name && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Cliente</span>
-                      <span>{closedOrderToReopen.customer_name}</span>
-                    </div>
-                  )}
-                </div>
-                
-                <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 text-sm">
-                  <p className="font-medium text-warning">Atenção</p>
-                  <p className="text-muted-foreground text-xs mt-1">
-                    Ao reabrir a mesa, o pedido voltará para produção e você poderá adicionar ou remover itens.
-                  </p>
-                </div>
+      {/* Reopen Closed Order Dialog - using optimized component */}
+      <ReopenOrderDialog
+        open={isReopenDialogOpen}
+        onOpenChange={(open) => {
+          setIsReopenDialogOpen(open);
+          if (!open) {
+            setClosedOrderToReopen(null);
+          }
+        }}
+        order={closedOrderToReopen}
+        table={selectedTable}
+        onConfirm={async (reason) => {
+          if (!closedOrderToReopen || !selectedTable) return;
+          
+          setIsReopening(true);
+          try {
+            const newStatus = getInitialOrderStatus();
+            
+            // Record the reopen for audit trail
+            await supabase.from('order_reopens').insert({
+              order_id: closedOrderToReopen.id,
+              table_id: selectedTable.id,
+              previous_status: closedOrderToReopen.status,
+              new_status: newStatus,
+              reopened_by: user?.id,
+              order_type: closedOrderToReopen.order_type,
+              customer_name: closedOrderToReopen.customer_name,
+              total_value: closedOrderToReopen.total,
+              reason: reason,
+            });
 
-                <div className="space-y-2">
-                  <Label>Motivo da Reabertura *</Label>
-                  <Textarea
-                    value={reopenReason}
-                    onChange={(e) => setReopenReason(e.target.value)}
-                    placeholder="Descreva o motivo da reabertura (mín. 10 caracteres)"
-                    className={cn(
-                      reopenReason.length > 0 && reopenReason.length < MIN_REASON_LENGTH
-                        ? "border-destructive"
-                        : ""
-                    )}
-                  />
-                  <p className={cn(
-                    "text-xs",
-                    reopenReason.length < MIN_REASON_LENGTH ? "text-muted-foreground" : "text-accent"
-                  )}>
-                    {reopenReason.length}/{MIN_REASON_LENGTH} caracteres mínimos
-                  </p>
-                </div>
-              </>
-            )}
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setIsReopenDialogOpen(false);
-                setClosedOrderToReopen(null);
-                setReopenReason('');
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button 
-              onClick={handleReopenClosedOrder}
-              disabled={isReopening || reopenReason.length < MIN_REASON_LENGTH}
-            >
-              {isReopening ? 'Reabrindo...' : 'Reabrir Mesa'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            // Send push notification to managers
+            try {
+              if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification(`⚠️ Mesa ${selectedTable.number} reaberta`, {
+                  body: `Por: ${user?.user_metadata?.name || user?.email}. Motivo: ${reason}`,
+                  tag: 'table-reopen',
+                });
+              }
+            } catch (e) {
+              console.error('Push notification error:', e);
+            }
+
+            // Try to send email notification
+            try {
+              await supabase.functions.invoke('send-reopen-notification', {
+                body: {
+                  orderId: closedOrderToReopen.id,
+                  tableNumber: selectedTable.number,
+                  userName: user?.user_metadata?.name || user?.email,
+                  reason: reason,
+                  totalValue: closedOrderToReopen.total,
+                }
+              });
+            } catch (e) {
+              console.log('Email notification not sent');
+            }
+            
+            // Reopen the order
+            await updateOrder.mutateAsync({
+              id: closedOrderToReopen.id,
+              status: newStatus,
+              updated_at: new Date().toISOString()
+            });
+            
+            // Reopen the table
+            await updateTable.mutateAsync({
+              id: selectedTable.id,
+              status: 'occupied'
+            });
+
+            // Update all order items status
+            if (closedOrderToReopen.order_items) {
+              for (const item of closedOrderToReopen.order_items) {
+                await supabase
+                  .from('order_items')
+                  .update({ status: newStatus })
+                  .eq('id', item.id);
+              }
+            }
+            
+            toast.success(`Mesa ${selectedTable.number} reaberta com sucesso!`);
+            setIsReopenDialogOpen(false);
+            setClosedOrderToReopen(null);
+            setSelectedTable({ ...selectedTable, status: 'occupied' });
+            queryClient.invalidateQueries({ queryKey: ['orders'] });
+          } catch (error) {
+            console.error('Error reopening order:', error);
+            toast.error('Erro ao reabrir mesa');
+          } finally {
+            setIsReopening(false);
+          }
+        }}
+        isReopening={isReopening}
+      />
 
       {/* Cancel Order Dialog */}
       <CancelOrderDialog
