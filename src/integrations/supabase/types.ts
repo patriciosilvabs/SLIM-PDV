@@ -313,6 +313,7 @@ export type Database = {
       }
       complement_groups: {
         Row: {
+          applies_per_unit: boolean | null
           channels: string[] | null
           created_at: string | null
           description: string | null
@@ -326,10 +327,12 @@ export type Database = {
           selection_type: string
           sort_order: number | null
           tenant_id: string | null
+          unit_count: number | null
           updated_at: string | null
           visibility: string | null
         }
         Insert: {
+          applies_per_unit?: boolean | null
           channels?: string[] | null
           created_at?: string | null
           description?: string | null
@@ -343,10 +346,12 @@ export type Database = {
           selection_type?: string
           sort_order?: number | null
           tenant_id?: string | null
+          unit_count?: number | null
           updated_at?: string | null
           visibility?: string | null
         }
         Update: {
+          applies_per_unit?: boolean | null
           channels?: string[] | null
           created_at?: string | null
           description?: string | null
@@ -360,6 +365,7 @@ export type Database = {
           selection_type?: string
           sort_order?: number | null
           tenant_id?: string | null
+          unit_count?: number | null
           updated_at?: string | null
           visibility?: string | null
         }
@@ -898,6 +904,116 @@ export type Database = {
           },
           {
             foreignKeyName: "order_item_extras_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_item_sub_item_extras: {
+        Row: {
+          created_at: string | null
+          group_id: string | null
+          group_name: string
+          id: string
+          option_id: string | null
+          option_name: string
+          price: number
+          quantity: number
+          sub_item_id: string
+          tenant_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          group_id?: string | null
+          group_name: string
+          id?: string
+          option_id?: string | null
+          option_name: string
+          price?: number
+          quantity?: number
+          sub_item_id: string
+          tenant_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          group_id?: string | null
+          group_name?: string
+          id?: string
+          option_id?: string | null
+          option_name?: string
+          price?: number
+          quantity?: number
+          sub_item_id?: string
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_item_sub_item_extras_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "complement_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_item_sub_item_extras_option_id_fkey"
+            columns: ["option_id"]
+            isOneToOne: false
+            referencedRelation: "complement_options"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_item_sub_item_extras_sub_item_id_fkey"
+            columns: ["sub_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_item_sub_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_item_sub_item_extras_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_item_sub_items: {
+        Row: {
+          created_at: string | null
+          id: string
+          notes: string | null
+          order_item_id: string
+          sub_item_index: number
+          tenant_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          order_item_id: string
+          sub_item_index: number
+          tenant_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          order_item_id?: string
+          sub_item_index?: number
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_item_sub_items_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_item_sub_items_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"

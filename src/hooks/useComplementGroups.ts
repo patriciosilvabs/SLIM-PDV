@@ -16,6 +16,8 @@ export interface ComplementGroup {
   sort_order: number | null;
   is_active: boolean | null;
   price_calculation_type: 'sum' | 'average' | 'highest' | 'lowest' | null;
+  applies_per_unit: boolean | null;
+  unit_count: number | null;
   created_at: string | null;
   updated_at: string | null;
 }

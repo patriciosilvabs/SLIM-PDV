@@ -5,11 +5,11 @@ import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { Plus, Minus, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { PizzaUnitCard, SubItemData, SubItemSelection } from './PizzaUnitCard';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -35,6 +35,8 @@ interface ComplementGroup {
   max_selections: number;
   sort_order: number;
   price_calculation_type: 'sum' | 'average' | 'highest' | 'lowest';
+  applies_per_unit?: boolean;
+  unit_count?: number;
 }
 
 interface ComplementOption {
@@ -59,11 +61,24 @@ export interface SelectedComplement {
   quantity: number;
 }
 
+// Extended interface for sub-items (individual pizzas in a combo)
+export interface SubItemComplement {
+  sub_item_index: number;
+  sub_item_notes: string;
+  complements: SelectedComplement[];
+}
+
 interface ProductDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   product: Product | null;
-  onAdd: (product: Product, quantity: number, complements: SelectedComplement[], notes: string) => void;
+  onAdd: (
+    product: Product, 
+    quantity: number, 
+    complements: SelectedComplement[], 
+    notes: string,
+    subItems?: SubItemComplement[]
+  ) => void;
   duplicateItems?: boolean;
   channel?: 'counter' | 'delivery' | 'table';
 }
@@ -74,6 +89,44 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // State for per-unit configuration (pizzas individuais)
+  const [subItems, setSubItems] = useState<SubItemData[]>([]);
+
+  // Determine if this product has per-unit groups
+  const hasPerUnitGroups = useMemo(() => {
+    return groups.some(g => g.applies_per_unit === true);
+  }, [groups]);
+
+  // Get the number of units from the first per-unit group
+  const unitCount = useMemo(() => {
+    const perUnitGroup = groups.find(g => g.applies_per_unit === true);
+    return perUnitGroup?.unit_count ?? 1;
+  }, [groups]);
+
+  // Groups that apply per unit (for each pizza)
+  const perUnitGroups = useMemo(() => {
+    return groups.filter(g => g.applies_per_unit === true);
+  }, [groups]);
+
+  // Groups that apply to the whole item (shared)
+  const sharedGroups = useMemo(() => {
+    return groups.filter(g => !g.applies_per_unit);
+  }, [groups]);
+
+  // Initialize sub-items when unitCount changes
+  useEffect(() => {
+    if (hasPerUnitGroups && unitCount > 0) {
+      const initialSubItems: SubItemData[] = Array.from({ length: unitCount }, (_, i) => ({
+        index: i,
+        selections: {},
+        notes: '',
+      }));
+      setSubItems(initialSubItems);
+    } else {
+      setSubItems([]);
+    }
+  }, [hasPerUnitGroups, unitCount]);
 
   // Fetch complement groups and options for this product
   useEffect(() => {
@@ -139,6 +192,8 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
             max_selections: group.max_selections ?? 1,
             sort_order: productGroups.find(pg => pg.group_id === group.id)?.sort_order ?? 0,
             price_calculation_type: (group.price_calculation_type as 'sum' | 'average' | 'highest' | 'lowest') ?? 'sum',
+            applies_per_unit: group.applies_per_unit ?? false,
+            unit_count: group.unit_count ?? 1,
             options: [],
           })).sort((a, b) => a.sort_order - b.sort_order);
           setGroups(groupsWithoutOptions);
@@ -197,6 +252,8 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
             max_selections: group.max_selections ?? 1,
             sort_order: productGroups.find(pg => pg.group_id === group.id)?.sort_order ?? 0,
             price_calculation_type: (group.price_calculation_type as 'sum' | 'average' | 'highest' | 'lowest') ?? 'sum',
+            applies_per_unit: group.applies_per_unit ?? false,
+            unit_count: group.unit_count ?? 1,
             options,
           };
         }).sort((a, b) => a.sort_order - b.sort_order);
@@ -214,6 +271,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
     setSelections({});
     setQuantity(1);
     setNotes('');
+    setSubItems([]);
   }, [product, open, channel]);
 
   const handleSingleSelect = (group: GroupWithOptions, option: ComplementOption) => {
@@ -302,6 +360,10 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
     });
   };
 
+  const handleSubItemChange = (index: number, data: SubItemData) => {
+    setSubItems(prev => prev.map((item, i) => i === index ? data : item));
+  };
+
   const getSelectionCount = (groupId: string) => {
     const groupSelections = selections[groupId] || [];
     return groupSelections.reduce((sum, s) => sum + s.quantity, 0);
@@ -336,11 +398,31 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
     }
   };
 
+  // Calculate price for sub-items
+  const calculateSubItemsPrice = (): number => {
+    let total = 0;
+    for (const subItem of subItems) {
+      for (const group of perUnitGroups) {
+        const groupSelections = subItem.selections[group.id] || [];
+        for (const sel of groupSelections) {
+          total += sel.price * sel.quantity;
+        }
+      }
+    }
+    return total;
+  };
+
   const complementsTotal = useMemo(() => {
-    return groups.reduce((total, group) => {
+    // Shared groups price
+    const sharedPrice = sharedGroups.reduce((total, group) => {
       return total + calculateGroupPrice(group.id, group.price_calculation_type);
     }, 0);
-  }, [selections, groups]);
+    
+    // Per-unit groups price
+    const perUnitPrice = calculateSubItemsPrice();
+    
+    return sharedPrice + perUnitPrice;
+  }, [selections, groups, subItems, sharedGroups, perUnitGroups]);
 
   const productPrice = product?.is_promotion && product?.promotion_price 
     ? product.promotion_price 
@@ -348,17 +430,59 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
 
   const totalPrice = (productPrice + complementsTotal) * quantity;
 
-  const invalidGroups = groups.filter(group => {
+  // Validate shared groups
+  const invalidSharedGroups = sharedGroups.filter(group => {
     const count = getSelectionCount(group.id);
     return group.is_required && count < group.min_selections;
   });
 
-  const canAdd = invalidGroups.length === 0;
+  // Validate per-unit groups
+  const invalidSubItems = useMemo(() => {
+    if (!hasPerUnitGroups) return [];
+    
+    const invalid: { subItemIndex: number; groupName: string }[] = [];
+    
+    for (let i = 0; i < subItems.length; i++) {
+      const subItem = subItems[i];
+      for (const group of perUnitGroups) {
+        if (group.is_required) {
+          const count = (subItem.selections[group.id] || []).reduce((sum, s) => sum + s.quantity, 0);
+          if (count < group.min_selections) {
+            invalid.push({ subItemIndex: i, groupName: group.name });
+          }
+        }
+      }
+    }
+    
+    return invalid;
+  }, [subItems, perUnitGroups, hasPerUnitGroups]);
+
+  const canAdd = invalidSharedGroups.length === 0 && invalidSubItems.length === 0;
 
   const handleAdd = () => {
     if (!product || !canAdd) return;
-    const allComplements = Object.values(selections).flat();
-    onAdd(product, quantity, allComplements, notes);
+    
+    // Shared complements
+    const sharedComplements = Object.values(selections).flat();
+    
+    // Build sub-items data if per-unit groups exist
+    let subItemsData: SubItemComplement[] | undefined;
+    if (hasPerUnitGroups && subItems.length > 0) {
+      subItemsData = subItems.map((subItem, index) => ({
+        sub_item_index: index + 1,
+        sub_item_notes: subItem.notes,
+        complements: Object.values(subItem.selections).flat().map(sel => ({
+          group_id: sel.group_id,
+          group_name: sel.group_name,
+          option_id: sel.option_id,
+          option_name: sel.option_name,
+          price: sel.price,
+          quantity: sel.quantity,
+        })),
+      }));
+    }
+    
+    onAdd(product, quantity, sharedComplements, notes, subItemsData);
     onOpenChange(false);
   };
 
@@ -417,37 +541,91 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
                 Este produto não possui complementos
               </div>
             ) : (
-              groups.map(group => (
-                <div key={group.id} className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold">{group.name}</h3>
-                        {group.is_required && (
-                          <Badge variant="destructive" className="text-xs">
-                            OBRIGATÓRIO
-                          </Badge>
+              <>
+                {/* Per-unit groups - Pizza individual cards */}
+                {hasPerUnitGroups && subItems.length > 0 && (
+                  <div className="space-y-4">
+                    {subItems.map((subItem, index) => (
+                      <PizzaUnitCard
+                        key={index}
+                        index={index}
+                        totalUnits={unitCount}
+                        groups={perUnitGroups}
+                        data={subItem}
+                        onChange={(data) => handleSubItemChange(index, data)}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* Shared groups - apply to whole item */}
+                {sharedGroups.map(group => (
+                  <div key={group.id} className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold">{group.name}</h3>
+                          {group.is_required && (
+                            <Badge variant="destructive" className="text-xs">
+                              OBRIGATÓRIO
+                            </Badge>
+                          )}
+                        </div>
+                        {group.description && (
+                          <p className="text-xs text-muted-foreground">{group.description}</p>
                         )}
                       </div>
-                      {group.description && (
-                        <p className="text-xs text-muted-foreground">{group.description}</p>
-                      )}
+                      <span className="text-sm text-muted-foreground">
+                        {getSelectionCount(group.id)}/{group.max_selections}
+                      </span>
                     </div>
-                    <span className="text-sm text-muted-foreground">
-                      {getSelectionCount(group.id)}/{group.max_selections}
-                    </span>
-                  </div>
 
-                  <div className="space-y-2">
-                    {group.selection_type === 'single' ? (
-                      <RadioGroup
-                        value={selections[group.id]?.[0]?.option_id || ''}
-                        onValueChange={(value) => {
-                          const option = group.options.find(o => o.id === value);
-                          if (option) handleSingleSelect(group, option);
-                        }}
-                      >
-                        {group.options.map(option => (
+                    <div className="space-y-2">
+                      {group.selection_type === 'single' ? (
+                        <RadioGroup
+                          value={selections[group.id]?.[0]?.option_id || ''}
+                          onValueChange={(value) => {
+                            const option = group.options.find(o => o.id === value);
+                            if (option) handleSingleSelect(group, option);
+                          }}
+                        >
+                          {group.options.map(option => (
+                            <div
+                              key={option.id}
+                              className={cn(
+                                'flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors',
+                                isOptionSelected(group.id, option.id)
+                                  ? 'border-primary bg-primary/5'
+                                  : 'hover:bg-muted/50'
+                              )}
+                              onClick={() => handleSingleSelect(group, option)}
+                            >
+                              <div className="flex items-center gap-3">
+                                <RadioGroupItem value={option.id} />
+                                {option.image_url && (
+                                  <img 
+                                    src={option.image_url} 
+                                    alt={option.name}
+                                    className="w-10 h-10 rounded object-cover"
+                                  />
+                                )}
+                                <div>
+                                  <p className="font-medium text-sm">{option.name}</p>
+                                  {option.description && (
+                                    <p className="text-xs text-muted-foreground">{option.description}</p>
+                                  )}
+                                </div>
+                              </div>
+                              {(option.price_override ?? option.price) > 0 && (
+                                <span className="text-sm text-primary font-medium">
+                                  +{formatCurrency(option.price_override ?? option.price)}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </RadioGroup>
+                      ) : group.selection_type === 'multiple' ? (
+                        group.options.map(option => (
                           <div
                             key={option.id}
                             className={cn(
@@ -456,10 +634,19 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
                                 ? 'border-primary bg-primary/5'
                                 : 'hover:bg-muted/50'
                             )}
-                            onClick={() => handleSingleSelect(group, option)}
+                            onClick={() => handleMultipleSelect(
+                              group, 
+                              option, 
+                              !isOptionSelected(group.id, option.id)
+                            )}
                           >
                             <div className="flex items-center gap-3">
-                              <RadioGroupItem value={option.id} />
+                              <Checkbox 
+                                checked={isOptionSelected(group.id, option.id)}
+                                onCheckedChange={(checked) => 
+                                  handleMultipleSelect(group, option, !!checked)
+                                }
+                              />
                               {option.image_url && (
                                 <img 
                                   src={option.image_url} 
@@ -480,134 +667,118 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
                               </span>
                             )}
                           </div>
-                        ))}
-                      </RadioGroup>
-                    ) : group.selection_type === 'multiple' ? (
-                      group.options.map(option => (
-                        <div
-                          key={option.id}
-                          className={cn(
-                            'flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors',
-                            isOptionSelected(group.id, option.id)
-                              ? 'border-primary bg-primary/5'
-                              : 'hover:bg-muted/50'
-                          )}
-                          onClick={() => handleMultipleSelect(
-                            group, 
-                            option, 
-                            !isOptionSelected(group.id, option.id)
-                          )}
-                        >
-                          <div className="flex items-center gap-3">
-                            <Checkbox 
-                              checked={isOptionSelected(group.id, option.id)}
-                              onCheckedChange={(checked) => 
-                                handleMultipleSelect(group, option, !!checked)
-                              }
-                            />
-                            {option.image_url && (
-                              <img 
-                                src={option.image_url} 
-                                alt={option.name}
-                                className="w-10 h-10 rounded object-cover"
-                              />
-                            )}
-                            <div>
-                              <p className="font-medium text-sm">{option.name}</p>
-                              {option.description && (
-                                <p className="text-xs text-muted-foreground">{option.description}</p>
+                        ))
+                      ) : (
+                        // multiple_repeat
+                        group.options.map(option => {
+                          const qty = getOptionQuantity(group.id, option.id);
+                          return (
+                            <div
+                              key={option.id}
+                              className={cn(
+                                'flex items-center justify-between p-3 rounded-lg border transition-colors',
+                                qty > 0 ? 'border-primary bg-primary/5' : ''
                               )}
-                            </div>
-                          </div>
-                          {(option.price_override ?? option.price) > 0 && (
-                            <span className="text-sm text-primary font-medium">
-                              +{formatCurrency(option.price_override ?? option.price)}
-                            </span>
-                          )}
-                        </div>
-                      ))
-                    ) : (
-                      // multiple_repeat
-                      group.options.map(option => {
-                        const qty = getOptionQuantity(group.id, option.id);
-                        return (
-                          <div
-                            key={option.id}
-                            className={cn(
-                              'flex items-center justify-between p-3 rounded-lg border transition-colors',
-                              qty > 0 ? 'border-primary bg-primary/5' : ''
-                            )}
-                          >
-                            <div className="flex items-center gap-3">
-                              {option.image_url && (
-                                <img 
-                                  src={option.image_url} 
-                                  alt={option.name}
-                                  className="w-10 h-10 rounded object-cover"
-                                />
-                              )}
-                              <div>
-                                <p className="font-medium text-sm">{option.name}</p>
-                                {option.description && (
-                                  <p className="text-xs text-muted-foreground">{option.description}</p>
+                            >
+                              <div className="flex items-center gap-3">
+                                {option.image_url && (
+                                  <img 
+                                    src={option.image_url} 
+                                    alt={option.name}
+                                    className="w-10 h-10 rounded object-cover"
+                                  />
                                 )}
-                                {(option.price_override ?? option.price) > 0 && (
-                                  <span className="text-xs text-primary font-medium">
-                                    +{formatCurrency(option.price_override ?? option.price)}
-                                  </span>
-                                )}
+                                <div>
+                                  <p className="font-medium text-sm">{option.name}</p>
+                                  {option.description && (
+                                    <p className="text-xs text-muted-foreground">{option.description}</p>
+                                  )}
+                                  {(option.price_override ?? option.price) > 0 && (
+                                    <span className="text-xs text-primary font-medium">
+                                      +{formatCurrency(option.price_override ?? option.price)}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  className="h-8 w-8"
+                                  onClick={() => handleRepeatQuantity(group, option, -1)}
+                                  disabled={qty === 0}
+                                >
+                                  <Minus className="h-4 w-4" />
+                                </Button>
+                                <span className="w-6 text-center font-medium">{qty}</span>
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  className="h-8 w-8"
+                                  onClick={() => handleRepeatQuantity(group, option, 1)}
+                                  disabled={getSelectionCount(group.id) >= group.max_selections}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                size="icon"
-                                variant="outline"
-                                className="h-8 w-8"
-                                onClick={() => handleRepeatQuantity(group, option, -1)}
-                                disabled={qty === 0}
-                              >
-                                <Minus className="h-4 w-4" />
-                              </Button>
-                              <span className="w-6 text-center font-medium">{qty}</span>
-                              <Button
-                                size="icon"
-                                variant="outline"
-                                className="h-8 w-8"
-                                onClick={() => handleRepeatQuantity(group, option, 1)}
-                                disabled={getSelectionCount(group.id) >= group.max_selections}
-                              >
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
+                          );
+                        })
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))
+                ))}
+              </>
             )}
 
-            {/* Notes */}
-            <div className="space-y-2">
-              <Label>Observações</Label>
-              <Textarea
-                placeholder="Ex: SEM CEBOLA, BEM PASSADO..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value.toUpperCase())}
-                rows={2}
-                className="uppercase"
-              />
-            </div>
+            {/* Notes - only show if no per-unit groups (each pizza has its own notes) */}
+            {!hasPerUnitGroups && (
+              <div className="space-y-2">
+                <Label>Observações</Label>
+                <Textarea
+                  placeholder="Ex: SEM CEBOLA, BEM PASSADO..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value.toUpperCase())}
+                  rows={2}
+                  className="uppercase"
+                />
+              </div>
+            )}
+
+            {/* General notes for combo - when has per-unit groups */}
+            {hasPerUnitGroups && (
+              <div className="space-y-2">
+                <Label>Observações Gerais do Pedido</Label>
+                <Textarea
+                  placeholder="Ex: URGENTE, ENTREGAR JUNTO..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value.toUpperCase())}
+                  rows={2}
+                  className="uppercase"
+                />
+              </div>
+            )}
           </div>
         </div>
 
         {/* Footer */}
         <div className="border-t p-4 space-y-3">
-          {invalidGroups.length > 0 && (
-            <div className="flex items-center gap-2 text-destructive text-sm">
-              <AlertCircle className="h-4 w-4" />
-              <span>Selecione: {invalidGroups.map(g => g.name).join(', ')}</span>
+          {(invalidSharedGroups.length > 0 || invalidSubItems.length > 0) && (
+            <div className="flex items-start gap-2 text-destructive text-sm">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <div>
+                {invalidSharedGroups.length > 0 && (
+                  <span>Selecione: {invalidSharedGroups.map(g => g.name).join(', ')}</span>
+                )}
+                {invalidSubItems.length > 0 && (
+                  <span>
+                    {invalidSharedGroups.length > 0 && ' | '}
+                    {invalidSubItems.map(item => 
+                      `Pizza ${item.subItemIndex + 1}: ${item.groupName}`
+                    ).join(', ')}
+                  </span>
+                )}
+              </div>
             </div>
           )}
 
