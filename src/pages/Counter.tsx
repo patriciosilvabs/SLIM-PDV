@@ -32,6 +32,7 @@ import { KitchenTicketData, CancellationTicketData } from '@/utils/escpos';
 import { usePrintSectors } from '@/hooks/usePrintSectors';
 import { useProfile } from '@/hooks/useProfile';
 import { supabase } from '@/integrations/supabase/client';
+import { calculateFullComplementsPrice, ComplementForCalc, SubItemForCalc } from '@/lib/complementPriceUtils';
 import { 
   Package, 
   ShoppingCart, 
@@ -319,15 +320,40 @@ export default function Counter() {
     itemNotes: string,
     subItems?: SubItemComplement[]
   ) => {
-    // Calculate complements total - for per-unit groups, sum from subItems
-    let complementsTotal = complements.reduce((sum, c) => sum + (c.price * c.quantity), 0);
-    if (subItems && subItems.length > 0) {
+    // Build group price types map from complements
+    const groupPriceTypes: Record<string, 'sum' | 'average' | 'highest' | 'lowest'> = {};
+    for (const c of complements) {
+      if (c.price_calculation_type && !groupPriceTypes[c.group_id]) {
+        groupPriceTypes[c.group_id] = c.price_calculation_type;
+      }
+    }
+    // Also get price types from subItems
+    if (subItems) {
       for (const subItem of subItems) {
         for (const c of subItem.complements) {
-          complementsTotal += c.price * c.quantity;
+          if (c.price_calculation_type && !groupPriceTypes[c.group_id]) {
+            groupPriceTypes[c.group_id] = c.price_calculation_type;
+          }
         }
       }
     }
+
+    // Convert to calc format
+    const sharedComplements: ComplementForCalc[] = complements.map(c => ({
+      group_id: c.group_id,
+      price: c.price,
+      quantity: c.quantity,
+    }));
+    const subItemsForCalc: SubItemForCalc[] | undefined = subItems?.map(si => ({
+      complements: si.complements.map(c => ({
+        group_id: c.group_id,
+        price: c.price,
+        quantity: c.quantity,
+      })),
+    }));
+
+    // Calculate complements total using price_calculation_type
+    const complementsTotal = calculateFullComplementsPrice(sharedComplements, subItemsForCalc, groupPriceTypes);
     
     const productPrice = product.is_promotion && product.promotion_price 
       ? product.promotion_price 

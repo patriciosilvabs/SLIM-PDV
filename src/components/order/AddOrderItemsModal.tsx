@@ -11,6 +11,7 @@ import { ProductDetailDialog, SelectedComplement, SubItemComplement } from './Pr
 import { ShoppingCart, Trash2, Plus, Minus, X, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
+import { calculateFullComplementsPrice, ComplementForCalc, SubItemForCalc } from '@/lib/complementPriceUtils';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -79,15 +80,40 @@ export function AddOrderItemsModal({ open, onOpenChange, onSubmit, tableNumber }
     notes: string,
     subItems?: SubItemComplement[]
   ) => {
-    // Calculate complements total - include sub-items if present
-    let complementsTotal = complements.reduce((sum, c) => sum + (c.price * c.quantity), 0);
-    if (subItems && subItems.length > 0) {
+    // Build group price types map from complements
+    const groupPriceTypes: Record<string, 'sum' | 'average' | 'highest' | 'lowest'> = {};
+    for (const c of complements) {
+      if (c.price_calculation_type && !groupPriceTypes[c.group_id]) {
+        groupPriceTypes[c.group_id] = c.price_calculation_type;
+      }
+    }
+    // Also get price types from subItems
+    if (subItems) {
       for (const subItem of subItems) {
         for (const c of subItem.complements) {
-          complementsTotal += c.price * c.quantity;
+          if (c.price_calculation_type && !groupPriceTypes[c.group_id]) {
+            groupPriceTypes[c.group_id] = c.price_calculation_type;
+          }
         }
       }
     }
+
+    // Convert to calc format
+    const sharedComplements: ComplementForCalc[] = complements.map(c => ({
+      group_id: c.group_id,
+      price: c.price,
+      quantity: c.quantity,
+    }));
+    const subItemsForCalc: SubItemForCalc[] | undefined = subItems?.map(si => ({
+      complements: si.complements.map(c => ({
+        group_id: c.group_id,
+        price: c.price,
+        quantity: c.quantity,
+      })),
+    }));
+
+    // Calculate complements total using price_calculation_type
+    const complementsTotal = calculateFullComplementsPrice(sharedComplements, subItemsForCalc, groupPriceTypes);
     
     const productPrice = product.is_promotion && product.promotion_price 
       ? product.promotion_price 

@@ -59,6 +59,7 @@ export interface SelectedComplement {
   option_name: string;
   price: number;
   quantity: number;
+  price_calculation_type?: 'sum' | 'average' | 'highest' | 'lowest';
 }
 
 // Extended interface for sub-items (individual pizzas in a combo)
@@ -285,6 +286,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
         option_name: option.name,
         price,
         quantity: 1,
+        price_calculation_type: group.price_calculation_type,
       }],
     }));
   };
@@ -305,6 +307,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
             option_name: option.name,
             price,
             quantity: 1,
+            price_calculation_type: group.price_calculation_type,
           }],
         };
       } else {
@@ -353,6 +356,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
             option_name: option.name,
             price,
             quantity: 1,
+            price_calculation_type: group.price_calculation_type,
           }],
         };
       }
@@ -398,14 +402,30 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
     }
   };
 
-  // Calculate price for sub-items
+  // Calculate price for sub-items using price_calculation_type
   const calculateSubItemsPrice = (): number => {
     let total = 0;
     for (const subItem of subItems) {
       for (const group of perUnitGroups) {
         const groupSelections = subItem.selections[group.id] || [];
-        for (const sel of groupSelections) {
-          total += sel.price * sel.quantity;
+        if (groupSelections.length === 0) continue;
+        
+        // Apply price_calculation_type for this group
+        switch (group.price_calculation_type) {
+          case 'average': {
+            const totalQty = groupSelections.reduce((sum, sel) => sum + sel.quantity, 0);
+            const totalPrice = groupSelections.reduce((sum, sel) => sum + (sel.price * sel.quantity), 0);
+            total += totalQty > 0 ? totalPrice / totalQty : 0;
+            break;
+          }
+          case 'highest':
+            total += Math.max(...groupSelections.map(s => s.price));
+            break;
+          case 'lowest':
+            total += Math.min(...groupSelections.map(s => s.price));
+            break;
+          default: // 'sum'
+            total += groupSelections.reduce((sum, sel) => sum + (sel.price * sel.quantity), 0);
         }
       }
     }
