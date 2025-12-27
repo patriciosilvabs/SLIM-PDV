@@ -61,11 +61,28 @@ export const SEPARATOR_LINE = (width: number) => '='.repeat(width) + LF;
 // Dashed line
 export const DASHED_LINE = (width: number) => '-'.repeat(width) + LF;
 
+// Calculate effective width based on charSpacing
+// charSpacing adds extra space between characters, reducing usable columns
+export function calculateEffectiveWidth(baseWidth: number, charSpacing: number): number {
+  if (charSpacing <= 0) return baseWidth;
+  // Each charSpacing unit reduces effective width by approximately 1-2 characters
+  // Conservative estimate: reduce by charSpacing * 1.5 to avoid cutoff
+  const reduction = Math.ceil(charSpacing * 1.5);
+  return Math.max(baseWidth - reduction, 20); // Minimum 20 chars
+}
+
 // Helper to create formatted text
+// Prioritizes the right value (price) to never be cut off
 export function formatLine(left: string, right: string, width: number): string {
   const spaces = width - left.length - right.length;
   if (spaces < 1) {
-    return left.substring(0, width - right.length - 1) + ' ' + right + LF;
+    // Ensure right value (price) is never cut - truncate left instead
+    const maxLeftLength = width - right.length - 1;
+    if (maxLeftLength < 3) {
+      // If even 3 chars don't fit, just show the right value
+      return right + LF;
+    }
+    return left.substring(0, maxLeftLength) + ' ' + right + LF;
   }
   return left + ' '.repeat(spaces) + right + LF;
 }
@@ -248,7 +265,18 @@ export function buildKitchenTicket(
 
     if (item.extras && item.extras.length > 0) {
       for (const extra of item.extras) {
-        ticket += `  + ${processText(extra)}` + LF;
+        // Check if extra is a "borda" type to highlight with stripe
+        const isBorda = extra.toLowerCase().includes('borda');
+        if (isBorda) {
+          // Tarja preta para destacar bordas
+          ticket += TEXT_BOLD;
+          ticket += GS + 'B' + '\x01'; // INVERT ON (tarja preta)
+          ticket += ` + ${processText(extra)} ` + LF;
+          ticket += GS + 'B' + '\x00'; // INVERT OFF
+          ticket += TEXT_BOLD_OFF;
+        } else {
+          ticket += `  + ${processText(extra)}` + LF;
+        }
       }
     }
 
@@ -329,7 +357,9 @@ export function buildCustomerReceipt(
   bottomMargin: number = 4,
   skipRestaurantName: boolean = false
 ): string {
-  const width = paperWidth === '58mm' ? 32 : 48;
+  const baseWidth = paperWidth === '58mm' ? 32 : 48;
+  // Calculate effective width accounting for charSpacing to avoid cutoff
+  const width = calculateEffectiveWidth(baseWidth, charSpacing);
   let receipt = '';
   const fontCmd = getFontSizeCommand(fontSize);
   const processText = (text: string) => asciiMode ? toAscii(text) : text;
