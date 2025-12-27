@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserRole } from './useUserRole';
+import { useTenant } from './useTenant';
 
 export type PermissionCode =
   // Orders
@@ -298,6 +299,7 @@ export function useUserPermissionsById(userId: string | null) {
 export function useUserPermissionMutations() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { tenantId } = useTenant();
 
   const setPermission = useMutation({
     mutationFn: async ({ userId, permission, granted }: { userId: string; permission: PermissionCode; granted: boolean }) => {
@@ -310,6 +312,7 @@ export function useUserPermissionMutations() {
             permission,
             granted: true,
             granted_by: user?.id,
+            tenant_id: tenantId,
           }, { onConflict: 'user_id,permission' });
         
         if (error) throw error;
@@ -347,6 +350,7 @@ export function useUserPermissionMutations() {
             permission: p.permission,
             granted: true,
             granted_by: user?.id,
+            tenant_id: tenantId,
           })));
         
         if (error) throw error;
@@ -383,6 +387,7 @@ export function useUserPermissionMutations() {
             permission: p.permission,
             granted: true,
             granted_by: user?.id,
+            tenant_id: tenantId,
           })));
         
         if (error) throw error;
