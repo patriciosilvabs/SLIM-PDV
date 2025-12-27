@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/hooks/useTenant';
 
@@ -141,6 +142,58 @@ export function useOrderSettings() {
   });
 
   const settings = data?.settings ?? defaultSettings;
+
+  // Sincronizar configurações do banco com localStorage para o PrinterContext
+  useEffect(() => {
+    if (!data?.settings) return;
+    
+    const s = data.settings;
+    
+    // Informações do restaurante
+    localStorage.setItem('pdv_restaurant_name', s.restaurantName);
+    localStorage.setItem('pdv_restaurant_address', s.restaurantAddress);
+    localStorage.setItem('pdv_restaurant_phone', s.restaurantPhone);
+    localStorage.setItem('pdv_restaurant_cnpj', s.restaurantCnpj);
+    
+    // Logo
+    localStorage.setItem('pdv_print_show_logo', String(s.showLogo));
+    localStorage.setItem('pdv_restaurant_logo_url', s.restaurantLogoUrl);
+    localStorage.setItem('pdv_logo_max_width', String(s.logoMaxWidth));
+    localStorage.setItem('pdv_logo_print_mode', s.logoPrintMode);
+    
+    // Tamanhos de fonte
+    localStorage.setItem('pdv_kitchen_font_size', s.kitchenFontSize);
+    localStorage.setItem('pdv_receipt_font_size', s.receiptFontSize);
+    
+    // Margens e espaçamentos
+    localStorage.setItem('pdv_line_spacing', String(s.lineSpacing));
+    localStorage.setItem('pdv_left_margin', String(s.leftMargin));
+    localStorage.setItem('pdv_char_spacing', String(s.charSpacing));
+    localStorage.setItem('pdv_top_margin', String(s.topMargin));
+    localStorage.setItem('pdv_bottom_margin_kitchen', String(s.bottomMarginKitchen));
+    localStorage.setItem('pdv_bottom_margin_receipt', String(s.bottomMarginReceipt));
+    
+    // Mensagens e QR codes
+    localStorage.setItem('pdv_print_message_standard', s.printMessageStandard);
+    localStorage.setItem('pdv_print_message_table', s.printMessageTable);
+    localStorage.setItem('pdv_print_qr_standard', s.printQrStandard);
+    localStorage.setItem('pdv_print_qr_table', s.printQrTable);
+    localStorage.setItem('pdv_qr_code_size', String(s.qrCodeSize));
+    
+    // Opções de impressão
+    localStorage.setItem('pdv_duplicate_items', String(s.duplicateItems));
+    localStorage.setItem('pdv_auto_print_kitchen', String(s.autoPrintKitchenTicket));
+    localStorage.setItem('pdv_auto_print_receipt', String(s.autoPrintCustomerReceipt));
+    localStorage.setItem('pdv_duplicate_kitchen_ticket', String(s.duplicateKitchenTicket));
+    localStorage.setItem('pdv_ascii_mode', String(s.asciiMode));
+    localStorage.setItem('pdv_show_item_number', String(s.showItemNumber));
+    localStorage.setItem('pdv_show_complement_price', String(s.showComplementPrice));
+    localStorage.setItem('pdv_show_complement_name', String(s.showComplementName));
+    localStorage.setItem('pdv_large_font_production', String(s.largeFontProduction));
+    localStorage.setItem('pdv_multiply_options', String(s.multiplyOptions));
+    localStorage.setItem('pdv_print_cancellation', String(s.printCancellation));
+    localStorage.setItem('pdv_print_rating_qr', String(s.printRatingQr));
+  }, [data?.settings]);
 
   // Toggle functions - mantendo compatibilidade com a API original
   const toggleDuplicateItems = (value: boolean) => updateMutation.mutate({ duplicateItems: value });
