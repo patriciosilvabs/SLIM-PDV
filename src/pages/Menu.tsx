@@ -1240,9 +1240,16 @@ export default function Menu() {
                                       size="icon"
                                       className="h-8 w-8 text-muted-foreground hover:text-foreground"
                                       title="Editar grupo"
-                                      onClick={(e) => {
+                                      onClick={async (e) => {
                                         e.stopPropagation();
                                         setEditingGroup(group);
+                                        // Carregar opções vinculadas ao grupo
+                                        const { data: groupOptions } = await supabase
+                                          .from('complement_group_options')
+                                          .select('option_id')
+                                          .eq('group_id', group.id)
+                                          .order('sort_order');
+                                        setGroupLinkedOptionIds(groupOptions?.map(o => o.option_id) || []);
                                         setIsGroupDialogOpen(true);
                                       }}
                                     >
