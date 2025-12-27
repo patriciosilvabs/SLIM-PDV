@@ -156,6 +156,56 @@ export function getFontSizeCommand(fontSize: PrintFontSize): string {
   }
 }
 
+// Detect if a product name is a "placeholder" (e.g., "Escolha até 2 Sabores")
+// These should be replaced by the actual flavor names from extras
+export function isPlaceholderProductName(name: string): boolean {
+  const lowerName = name.toLowerCase();
+  return (
+    lowerName.includes('escolha') ||
+    lowerName.includes('selecione') ||
+    /até \d+ sabor/.test(lowerName) ||
+    lowerName.includes('monte sua') ||
+    lowerName.includes('customize') ||
+    lowerName.includes('escolher') ||
+    lowerName.includes('sabores')
+  );
+}
+
+// Get the display name for a product, replacing placeholder names with flavor extras
+export function getProductDisplayName(
+  productName: string, 
+  extras?: string[] | { name: string; price: number }[]
+): { displayName: string; filteredExtras: string[] | { name: string; price: number }[] } {
+  if (!isPlaceholderProductName(productName) || !extras || extras.length === 0) {
+    return { displayName: productName, filteredExtras: extras || [] };
+  }
+  
+  // Normalize extras to string array for processing
+  const extraNames = extras.map(e => typeof e === 'string' ? e : e.name);
+  
+  // Separate flavors (non-borda) from bordas
+  const flavors = extraNames.filter(e => !e.toLowerCase().includes('borda'));
+  const bordas = extraNames.filter(e => e.toLowerCase().includes('borda'));
+  
+  // If we have flavors, use them as the product name
+  if (flavors.length > 0) {
+    const displayName = flavors.join(' + ').toUpperCase();
+    
+    // Return only bordas as remaining extras (flavors are now in the name)
+    if (typeof extras[0] === 'string') {
+      return { displayName, filteredExtras: bordas };
+    } else {
+      // For extras with price, filter to only bordas
+      const filteredExtras = (extras as { name: string; price: number }[]).filter(
+        e => e.name.toLowerCase().includes('borda')
+      );
+      return { displayName, filteredExtras };
+    }
+  }
+  
+  return { displayName: productName, filteredExtras: extras };
+}
+
 // Build kitchen ticket
 export interface KitchenTicketItem {
   quantity: number;
@@ -272,6 +322,10 @@ export function buildKitchenTicket(
   for (const item of data.items) {
     itemNumber++;
     
+    // Detectar se é produto placeholder e obter nome correto
+    const extrasForName = item.extrasWithPrice || item.extras?.map(e => ({ name: e, price: 0 })) || [];
+    const { displayName, filteredExtras } = getProductDisplayName(item.productName, extrasForName);
+    
     // Aplicar fonte maior se largeFontProduction está ativado
     if (largeFontProduction) {
       ticket += TEXT_DOUBLE_SIZE;
@@ -283,9 +337,9 @@ export function buildKitchenTicket(
     
     // Construir linha do item com ou sem número sequencial
     if (showItemNumber) {
-      ticket += `${itemNumber}. ${item.quantity}x ${processText(item.productName)}` + LF;
+      ticket += `${itemNumber}. ${item.quantity}x ${processText(displayName)}` + LF;
     } else {
-      ticket += `${item.quantity}x ${processText(item.productName)}` + LF;
+      ticket += `${item.quantity}x ${processText(displayName)}` + LF;
     }
     ticket += TEXT_BOLD_OFF;
     
@@ -298,9 +352,10 @@ export function buildKitchenTicket(
       ticket += `  > ${processText(item.variation)}` + LF;
     }
 
-    // Processar complementos com nome e/ou preço
-    if (showComplementName && item.extrasWithPrice && item.extrasWithPrice.length > 0) {
-      for (const extra of item.extrasWithPrice) {
+    // Processar complementos filtrados (sem os sabores que foram para o nome)
+    const extrasToShow = filteredExtras as { name: string; price: number }[];
+    if (showComplementName && extrasToShow && extrasToShow.length > 0) {
+      for (const extra of extrasToShow) {
         const isBorda = extra.name.toLowerCase().includes('borda');
         let extraText = extra.name;
         
@@ -318,21 +373,6 @@ export function buildKitchenTicket(
           ticket += TEXT_BOLD_OFF;
         } else {
           ticket += `  + ${processText(extraText)}` + LF;
-        }
-      }
-    } else if (showComplementName && item.extras && item.extras.length > 0) {
-      // Fallback para extras sem preço (compatibilidade)
-      for (const extra of item.extras) {
-        const isBorda = extra.toLowerCase().includes('borda');
-        if (isBorda) {
-          // Tarja preta para destacar bordas
-          ticket += TEXT_BOLD;
-          ticket += GS + 'B' + '\x01'; // INVERT ON (tarja preta)
-          ticket += ` + ${processText(extra)} ` + LF;
-          ticket += GS + 'B' + '\x00'; // INVERT OFF
-          ticket += TEXT_BOLD_OFF;
-        } else {
-          ticket += `  + ${processText(extra)}` + LF;
         }
       }
     }
@@ -519,7 +559,10 @@ export function buildCustomerReceipt(
   // Items
   receipt += fontCmd;
   for (const item of data.items) {
-    const itemName = `${item.quantity}x ${processText(item.productName)}${item.variation ? ` (${processText(item.variation)})` : ''}`;
+    // Detectar se é produto placeholder e obter nome correto
+    const { displayName, filteredExtras } = getProductDisplayName(item.productName, item.extras || []);
+    
+    const itemName = `${item.quantity}x ${processText(displayName)}${item.variation ? ` (${processText(item.variation)})` : ''}`;
     const itemPrice = formatCurrency(item.totalPrice);
     
     if (itemName.length + itemPrice.length + 1 > width) {
@@ -529,8 +572,10 @@ export function buildCustomerReceipt(
       receipt += formatLine(itemName, itemPrice, width);
     }
 
-    if (item.extras && item.extras.length > 0) {
-      for (const extra of item.extras) {
+    // Mostrar apenas extras filtrados (bordas, sem os sabores que estão no nome)
+    const extrasToShow = filteredExtras as { name: string; price: number }[];
+    if (extrasToShow && extrasToShow.length > 0) {
+      for (const extra of extrasToShow) {
         receipt += `  + ${processText(extra.name)}` + LF;
       }
     }
