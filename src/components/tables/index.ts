@@ -6,3 +6,4 @@ export { CustomerNameInput } from './CustomerNameInput';
 export { DiscountInput } from './DiscountInput';
 export { ServiceChargeInput } from './ServiceChargeInput';
 export { CustomSplitInput } from './CustomSplitInput';
+export { CartItemList, CartSummary } from './CartItemList';
