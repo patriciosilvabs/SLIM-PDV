@@ -1239,6 +1239,19 @@ export default function Menu() {
                                       variant="ghost"
                                       size="icon"
                                       className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                      title="Editar grupo"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingGroup(group);
+                                        setIsGroupDialogOpen(true);
+                                      }}
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
                                       title="Duplicar grupo"
                                       onClick={(e) => {
                                         e.stopPropagation();
