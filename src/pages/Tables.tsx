@@ -137,10 +137,39 @@ export default function Tables() {
   const { data: openCashRegister } = useOpenCashRegister();
   const { createPayment } = useCashRegisterMutations();
   
+// Session storage keys for cooldown persistence
+  const WAIT_COOLDOWN_KEY = 'table-wait-cooldowns';
+  const IDLE_COOLDOWN_KEY = 'idle-table-cooldowns';
+  
+  // Helper functions for cooldown persistence
+  const loadCooldowns = useCallback((key: string): Map<string, number> => {
+    try {
+      const stored = sessionStorage.getItem(key);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const now = Date.now();
+        // Filter out expired entries (older than 1 hour)
+        const filtered = Object.entries(parsed).filter(([_, time]) => now - (time as number) < 3600000);
+        return new Map(filtered.map(([k, v]) => [k, v as number]));
+      }
+    } catch (e) {
+      console.error('Error loading cooldowns:', e);
+    }
+    return new Map();
+  }, []);
+  
+  const saveCooldowns = useCallback((key: string, map: Map<string, number>) => {
+    try {
+      sessionStorage.setItem(key, JSON.stringify(Object.fromEntries(map)));
+    } catch (e) {
+      console.error('Error saving cooldowns:', e);
+    }
+  }, []);
+  
   // Refs for tracking order status changes
   const previousOrdersRef = useRef<Order[]>([]);
-  const tableWaitAlertCooldownRef = useRef<Map<string, number>>(new Map());
-  const idleTableCooldownRef = useRef<Map<string, number>>(new Map());
+  const tableWaitAlertCooldownRef = useRef<Map<string, number>>(loadCooldowns(WAIT_COOLDOWN_KEY));
+  const idleTableCooldownRef = useRef<Map<string, number>>(loadCooldowns(IDLE_COOLDOWN_KEY));
   const notifiedReadyOrdersRef = useRef<Set<string>>(new Set());
   
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -308,8 +337,9 @@ export default function Tables() {
               }
             );
             
-            // Update cooldown
+            // Update cooldown and persist
             tableWaitAlertCooldownRef.current.set(order.id, now);
+            saveCooldowns(WAIT_COOLDOWN_KEY, tableWaitAlertCooldownRef.current);
           }
         }
       });
@@ -320,7 +350,7 @@ export default function Tables() {
     const interval = setInterval(checkTableWaitTimes, 60000);
     
     return () => clearInterval(interval);
-  }, [orders, tables, tableWaitSettings, audioSettings.enabled, playTableWaitAlertSound]);
+  }, [orders, tables, tableWaitSettings, audioSettings.enabled, playTableWaitAlertSound, saveCooldowns, WAIT_COOLDOWN_KEY]);
 
   // Check for idle tables (opened without items OR delivered orders) and alert/auto-close
   useEffect(() => {
@@ -375,6 +405,10 @@ export default function Tables() {
           
           // Check cooldown
           if (now - lastAlert >= cooldownMs) {
+            // Update cooldown and persist FIRST to prevent re-alerts
+            idleTableCooldownRef.current.set(table.id, now);
+            saveCooldowns(IDLE_COOLDOWN_KEY, idleTableCooldownRef.current);
+            
             if (idleTableSettings.autoClose) {
               // AUTO-CLOSE: Update table to available and cancel/update order
               try {

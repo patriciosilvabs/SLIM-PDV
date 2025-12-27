@@ -1,11 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAudioNotification } from './useAudioNotification';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 export function useRealtimeNotifications() {
   const { playNewOrderSound, playNewReservationSound, playOrderReadySound, playStationChangeSound } = useAudioNotification();
-  const { toast } = useToast();
   const initializedRef = useRef(false);
 
   useEffect(() => {
@@ -25,8 +24,7 @@ export function useRealtimeNotifications() {
         (payload) => {
           console.log('New order:', payload);
           playNewOrderSound();
-          toast({
-            title: 'Novo Pedido!',
+          toast.success('Novo Pedido!', {
             description: `Pedido #${(payload.new as any).id?.slice(0, 8)} recebido.`,
           });
         }
@@ -45,8 +43,7 @@ export function useRealtimeNotifications() {
           // Play sound when order becomes ready
           if (oldData?.status !== 'ready' && newData?.status === 'ready') {
             playOrderReadySound();
-            toast({
-              title: 'Pedido Pronto!',
+            toast.success('Pedido Pronto!', {
               description: `Pedido #${newData.id?.slice(0, 8)} está pronto para entrega.`,
             });
           }
@@ -68,8 +65,7 @@ export function useRealtimeNotifications() {
           console.log('New reservation:', payload);
           playNewReservationSound();
           const reservation = payload.new as any;
-          toast({
-            title: 'Nova Reserva!',
+          toast.success('Nova Reserva!', {
             description: `Reserva de ${reservation.customer_name} para ${reservation.party_size} pessoas.`,
           });
         }
@@ -103,5 +99,5 @@ export function useRealtimeNotifications() {
       supabase.removeChannel(reservationsChannel);
       supabase.removeChannel(orderItemsChannel);
     };
-  }, [playNewOrderSound, playNewReservationSound, playOrderReadySound, playStationChangeSound, toast]);
+  }, [playNewOrderSound, playNewReservationSound, playOrderReadySound, playStationChangeSound]);
 }
