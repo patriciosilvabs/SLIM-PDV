@@ -1399,6 +1399,9 @@ export default function Menu() {
             setEditingOption(option);
             setIsOptionDialogOpen(true);
           }}
+          onToggleOptionActive={async (optionId, active) => {
+            await updateOption.mutateAsync({ id: optionId, is_active: active });
+          }}
           isEditing={!!editingGroup}
         />
 

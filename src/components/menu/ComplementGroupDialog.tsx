@@ -38,6 +38,7 @@ interface ComplementGroupDialogProps {
   onSave: (group: Partial<ComplementGroup>, optionIds: string[]) => void;
   onCreateOption?: (option: { name: string; price: number }) => Promise<ComplementOption | undefined>;
   onEditOption?: (option: ComplementOption) => void;
+  onToggleOptionActive?: (optionId: string, active: boolean) => void;
   isEditing: boolean;
 }
 
@@ -137,6 +138,7 @@ export function ComplementGroupDialog({
   onSave,
   onCreateOption,
   onEditOption,
+  onToggleOptionActive,
   isEditing
 }: ComplementGroupDialogProps) {
   const [form, setForm] = React.useState<Partial<ComplementGroup>>({
@@ -414,12 +416,7 @@ export function ComplementGroupDialog({
                       option={option}
                       onRemove={() => toggleOption(option.id)}
                       onEdit={onEditOption ? () => onEditOption(option) : undefined}
-                      onToggleActive={(active) => {
-                        // Update the option's is_active state in local options
-                        setLocalOptions(prev => 
-                          prev.map(o => o.id === option.id ? { ...o, is_active: active } : o)
-                        );
-                      }}
+                      onToggleActive={onToggleOptionActive ? (active) => onToggleOptionActive(option.id, active) : undefined}
                     />
                   ))}
                   {selectedOptions.length === 0 && (
