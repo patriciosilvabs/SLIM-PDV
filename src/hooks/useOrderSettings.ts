@@ -40,6 +40,7 @@ interface OrderSettings {
   logoMaxWidth: number;
   qrCodeSize: number;
   logoPrintMode: LogoPrintMode;
+  hideComboQuantity: boolean;
 }
 
 const defaultSettings: OrderSettings = {
@@ -76,6 +77,7 @@ const defaultSettings: OrderSettings = {
   logoMaxWidth: 300,
   qrCodeSize: 5,
   logoPrintMode: 'original',
+  hideComboQuantity: true,
 };
 
 const SETTINGS_KEY = 'order_settings';
@@ -193,6 +195,7 @@ export function useOrderSettings() {
     localStorage.setItem('pdv_multiply_options', String(s.multiplyOptions));
     localStorage.setItem('pdv_print_cancellation', String(s.printCancellation));
     localStorage.setItem('pdv_print_rating_qr', String(s.printRatingQr));
+    localStorage.setItem('pdv_hide_combo_quantity', String(s.hideComboQuantity));
   }, [data?.settings]);
 
   // Toggle functions - mantendo compatibilidade com a API original
@@ -209,6 +212,7 @@ export function useOrderSettings() {
   const toggleShowLogo = (value: boolean) => updateMutation.mutate({ showLogo: value });
   const togglePrintCancellation = (value: boolean) => updateMutation.mutate({ printCancellation: value });
   const togglePrintRatingQr = (value: boolean) => updateMutation.mutate({ printRatingQr: value });
+  const toggleHideComboQuantity = (value: boolean) => updateMutation.mutate({ hideComboQuantity: value });
 
   // Update functions
   const updateKitchenFontSize = (value: PrintFontSize) => updateMutation.mutate({ kitchenFontSize: value });
@@ -267,6 +271,7 @@ export function useOrderSettings() {
     logoMaxWidth: settings.logoMaxWidth,
     qrCodeSize: settings.qrCodeSize,
     logoPrintMode: settings.logoPrintMode,
+    hideComboQuantity: settings.hideComboQuantity,
 
     // Loading states
     isLoading,
@@ -286,6 +291,7 @@ export function useOrderSettings() {
     toggleShowLogo,
     togglePrintCancellation,
     togglePrintRatingQr,
+    toggleHideComboQuantity,
 
     // Update functions
     updateKitchenFontSize,

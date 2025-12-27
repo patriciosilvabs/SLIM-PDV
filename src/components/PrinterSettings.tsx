@@ -99,6 +99,8 @@ export function PrinterSettings() {
     togglePrintCancellation,
     printRatingQr,
     togglePrintRatingQr,
+    hideComboQuantity,
+    toggleHideComboQuantity,
     // Custom messages
     printMessageStandard,
     updatePrintMessageStandard,
@@ -1113,6 +1115,19 @@ export function PrinterSettings() {
                   <Switch 
                     checked={multiplyOptions}
                     onCheckedChange={toggleMultiplyOptions}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                  <div className="space-y-0.5">
+                    <p className="font-medium text-sm">Ocultar quantidade em combos</p>
+                    <p className="text-xs text-muted-foreground">
+                      Não exibe "1x", "2x" quando o nome do produto contém "combo"
+                    </p>
+                  </div>
+                  <Switch 
+                    checked={hideComboQuantity}
+                    onCheckedChange={toggleHideComboQuantity}
                   />
                 </div>
 

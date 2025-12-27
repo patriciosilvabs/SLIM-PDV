@@ -99,6 +99,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const showComplementPrice = localStorage.getItem('pdv_show_complement_price') === 'true';
       const showComplementName = localStorage.getItem('pdv_show_complement_name') !== 'false';
       const largeFontProduction = localStorage.getItem('pdv_large_font_production') === 'true';
+      const hideComboQuantity = localStorage.getItem('pdv_hide_combo_quantity') !== 'false';
       
       const ticketData = buildKitchenTicket(
         data, 
@@ -114,7 +115,8 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
           showItemNumber,
           showComplementPrice,
           showComplementName,
-          largeFontProduction
+          largeFontProduction,
+          hideComboQuantity
         }
       );
       await qz.printToKitchen(ticketData);
@@ -146,6 +148,7 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
       const showComplementPrice = localStorage.getItem('pdv_show_complement_price') === 'true';
       const showComplementName = localStorage.getItem('pdv_show_complement_name') !== 'false';
       const largeFontProduction = localStorage.getItem('pdv_large_font_production') === 'true';
+      const hideComboQuantity = localStorage.getItem('pdv_hide_combo_quantity') !== 'false';
 
       // Group items by sector
       const itemsBySector: Record<string, SectorPrintItem[]> = {};
@@ -211,7 +214,8 @@ export function PrinterProvider({ children }: { children: ReactNode }) {
             showItemNumber,
             showComplementPrice,
             showComplementName,
-            largeFontProduction
+            largeFontProduction,
+            hideComboQuantity
           }
         );
 
