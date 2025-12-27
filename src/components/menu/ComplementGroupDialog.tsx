@@ -100,21 +100,26 @@ function InlineOptionRow({
       </div>
       <div className="flex-1 text-sm font-medium truncate">{option.name}</div>
       <Input
-        type="number"
-        min={1}
+        type="text"
+        inputMode="numeric"
         value={maxQty}
-        onChange={(e) => onMaxQtyChange(parseInt(e.target.value) || 1)}
+        onChange={(e) => {
+          const val = e.target.value.replace(/[^0-9]/g, '');
+          onMaxQtyChange(parseInt(val) || 1);
+        }}
         className="w-20 h-8 text-center text-sm"
         placeholder="Qtd. Máx"
       />
       <div className="relative">
         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
         <Input
-          type="number"
-          step="0.01"
-          min={0}
-          value={priceOverride.toFixed(2)}
-          onChange={(e) => onPriceChange(parseFloat(e.target.value) || 0)}
+          type="text"
+          inputMode="decimal"
+          value={priceOverride}
+          onChange={(e) => {
+            const val = e.target.value.replace(/[^0-9.,]/g, '').replace(',', '.');
+            onPriceChange(parseFloat(val) || 0);
+          }}
           className="w-24 h-8 pl-8 text-sm"
           placeholder="0.00"
         />
