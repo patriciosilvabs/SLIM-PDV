@@ -644,14 +644,32 @@ export default function Counter() {
           
           if (activeSectors.length > 0) {
             // Use sector-based printing
-            const sectorItems: SectorPrintItem[] = orderItems.map(item => ({
-              quantity: item.quantity,
-              productName: item.product_name,
-              variation: item.variation_name,
-              extras: item.complements?.map(c => c.option_name),
-              notes: item.notes,
-              print_sector_id: item.print_sector_id,
-            }));
+            // "Explodir" itens com quantity > 1 quando duplicateItems está ativo
+            const sectorItems: SectorPrintItem[] = [];
+            for (const item of orderItems) {
+              if (duplicateItems && item.quantity > 1) {
+                // Criar linhas separadas para cada unidade
+                for (let i = 0; i < item.quantity; i++) {
+                  sectorItems.push({
+                    quantity: 1,
+                    productName: item.product_name,
+                    variation: item.variation_name,
+                    extras: item.complements?.map(c => c.option_name),
+                    notes: item.notes,
+                    print_sector_id: item.print_sector_id,
+                  });
+                }
+              } else {
+                sectorItems.push({
+                  quantity: item.quantity,
+                  productName: item.product_name,
+                  variation: item.variation_name,
+                  extras: item.complements?.map(c => c.option_name),
+                  notes: item.notes,
+                  print_sector_id: item.print_sector_id,
+                });
+              }
+            }
             
             await printer.printKitchenTicketsBySector(
               sectorItems,
@@ -669,17 +687,35 @@ export default function Counter() {
             toast({ title: '🖨️ Comandas impressas por setor' });
           } else {
             // Fallback: use default kitchen printer
+            // "Explodir" itens com quantity > 1 quando duplicateItems está ativo
+            const ticketItems: { quantity: number; productName: string; variation?: string; extras?: string[]; notes?: string }[] = [];
+            for (const item of orderItems) {
+              if (duplicateItems && item.quantity > 1) {
+                for (let i = 0; i < item.quantity; i++) {
+                  ticketItems.push({
+                    quantity: 1,
+                    productName: item.product_name,
+                    variation: item.variation_name,
+                    extras: item.complements?.map(c => c.option_name),
+                    notes: item.notes,
+                  });
+                }
+              } else {
+                ticketItems.push({
+                  quantity: item.quantity,
+                  productName: item.product_name,
+                  variation: item.variation_name,
+                  extras: item.complements?.map(c => c.option_name),
+                  notes: item.notes,
+                });
+              }
+            }
+            
             const ticketData: KitchenTicketData = {
               orderNumber: order.id.slice(0, 8).toUpperCase(),
               orderType: orderType,
               customerName: customerName || undefined,
-              items: orderItems.map(item => ({
-                quantity: item.quantity,
-                productName: item.product_name,
-                variation: item.variation_name,
-                extras: item.complements?.map(c => c.option_name),
-                notes: item.notes,
-              })),
+              items: ticketItems,
               notes: notes || undefined,
               createdAt: new Date().toISOString(),
             };
