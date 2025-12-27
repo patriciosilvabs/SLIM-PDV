@@ -122,7 +122,7 @@ export default function Tables() {
   const { settings: idleTableSettings } = useIdleTableSettings();
   const { playOrderReadySound, playTableWaitAlertSound, playIdleTableAlertSound, settings: audioSettings } = useAudioNotification();
   const { getInitialOrderStatus, settings: kdsSettings } = useKdsSettings();
-  const { autoPrintKitchenTicket, autoPrintCustomerReceipt, duplicateKitchenTicket } = useOrderSettings();
+  const { autoPrintKitchenTicket, autoPrintCustomerReceipt, duplicateKitchenTicket, duplicateItems } = useOrderSettings();
   const printer = usePrinterOptional();
   const centralPrinting = useCentralizedPrinting();
   const { data: printSectors } = usePrintSectors();
@@ -580,14 +580,32 @@ export default function Tables() {
     } else if (selectedTable) {
       try {
         // Use centralized printing (queue or direct)
-        const sectorItems: SectorPrintItem[] = items.map(item => ({
-          quantity: item.quantity,
-          productName: item.product_name,
-          variation: item.variation_name,
-          extras: item.complements?.map(c => c.option_name),
-          notes: item.notes,
-          print_sector_id: item.print_sector_id,
-        }));
+        // "Explodir" itens com quantity > 1 quando duplicateItems está ativo
+        const sectorItems: SectorPrintItem[] = [];
+        for (const item of items) {
+          if (duplicateItems && item.quantity > 1) {
+            // Criar linhas separadas para cada unidade
+            for (let i = 0; i < item.quantity; i++) {
+              sectorItems.push({
+                quantity: 1,
+                productName: item.product_name,
+                variation: item.variation_name,
+                extras: item.complements?.map(c => c.option_name),
+                notes: item.notes,
+                print_sector_id: item.print_sector_id,
+              });
+            }
+          } else {
+            sectorItems.push({
+              quantity: item.quantity,
+              productName: item.product_name,
+              variation: item.variation_name,
+              extras: item.complements?.map(c => c.option_name),
+              notes: item.notes,
+              print_sector_id: item.print_sector_id,
+            });
+          }
+        }
         
         await centralPrinting.printKitchenTicketsBySector(
           sectorItems,
