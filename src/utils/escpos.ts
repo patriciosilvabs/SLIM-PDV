@@ -236,6 +236,7 @@ export interface KitchenTicketOptions {
   showComplementPrice?: boolean; // Mostrar preço dos complementos
   showComplementName?: boolean;  // Mostrar nome dos complementos
   largeFontProduction?: boolean; // Usar fonte maior para produtos
+  hideComboQuantity?: boolean;   // Ocultar quantidade (1x, 2x) quando nome contém "combo"
 }
 
 // Função para extrair nome do combo das notas (formato "[Combo: Nome]")
@@ -269,6 +270,7 @@ export function buildKitchenTicket(
   const showComplementPrice = options.showComplementPrice ?? false;
   const showComplementName = options.showComplementName ?? true;
   const largeFontProduction = options.largeFontProduction ?? false;
+  const hideComboQuantity = options.hideComboQuantity ?? true;
   const width = paperWidth === '58mm' ? 32 : 48;
   let ticket = '';
   const fontCmd = getFontSizeCommand(fontSize);
@@ -372,7 +374,7 @@ export function buildKitchenTicket(
   let itemNumber = 0;
   for (const item of standaloneItems) {
     itemNumber++;
-    ticket += printSingleItem(item, itemNumber, showItemNumber, largeFontProduction, fontCmd, showComplementName, showComplementPrice, processText);
+    ticket += printSingleItem(item, itemNumber, showItemNumber, largeFontProduction, fontCmd, showComplementName, showComplementPrice, processText, hideComboQuantity);
   }
 
   // Print combo groups
@@ -467,13 +469,18 @@ export function buildKitchenTicket(
     font: string, 
     showComp: boolean, 
     showCompPrice: boolean,
-    process: (text: string) => string
+    process: (text: string) => string,
+    hideQuantityForCombos: boolean = true
   ): string {
     let output = '';
     
     // Detectar se é produto placeholder e obter nome correto
     const extrasForName = item.extrasWithPrice || item.extras?.map(e => ({ name: e, price: 0 })) || [];
     const { displayName, filteredExtras } = getProductDisplayName(item.productName, extrasForName);
+    
+    // Verificar se deve ocultar quantidade para combos
+    const isCombo = displayName.toLowerCase().includes('combo');
+    const shouldShowQuantity = !(hideQuantityForCombos && isCombo);
     
     // Aplicar fonte maior se largeFontProduction está ativado
     if (largeFont) {
@@ -484,11 +491,15 @@ export function buildKitchenTicket(
     
     output += TEXT_BOLD;
     
-    // Construir linha do item com ou sem número sequencial
-    if (showNum) {
+    // Construir linha do item com ou sem número sequencial e quantidade
+    if (showNum && shouldShowQuantity) {
       output += `${num}. ${item.quantity}x ${process(displayName)}` + LF;
-    } else {
+    } else if (showNum) {
+      output += `${num}. ${process(displayName)}` + LF;
+    } else if (shouldShowQuantity) {
       output += `${item.quantity}x ${process(displayName)}` + LF;
+    } else {
+      output += `${process(displayName)}` + LF;
     }
     output += TEXT_BOLD_OFF;
     
