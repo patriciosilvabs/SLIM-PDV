@@ -131,6 +131,7 @@ export function useComplementGroupOptionsMutations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['complement-group-options'] });
+      queryClient.invalidateQueries({ queryKey: ['complement-options'] });
     },
     onError: (error) => {
       toast({ title: 'Erro ao salvar opções', description: error.message, variant: 'destructive' });

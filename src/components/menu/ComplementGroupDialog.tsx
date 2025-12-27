@@ -135,12 +135,21 @@ export function ComplementGroupDialog({
     price_calculation_type: 'sum',
   });
   const [selectedOptionIds, setSelectedOptionIds] = React.useState<string[]>([]);
+  const [localOptions, setLocalOptions] = React.useState<ComplementOption[]>([]);
   const [isAdvancedOpen, setIsAdvancedOpen] = React.useState(false);
   const [showOptionPicker, setShowOptionPicker] = React.useState(false);
   const [showNewOptionForm, setShowNewOptionForm] = React.useState(false);
   const [newOptionName, setNewOptionName] = React.useState('');
   const [newOptionPrice, setNewOptionPrice] = React.useState('');
   const [isCreatingOption, setIsCreatingOption] = React.useState(false);
+  
+  // Merge options from props with locally created options
+  const allOptions = React.useMemo(() => {
+    const optionMap = new Map<string, ComplementOption>();
+    options.forEach(o => optionMap.set(o.id, o));
+    localOptions.forEach(o => optionMap.set(o.id, o));
+    return Array.from(optionMap.values());
+  }, [options, localOptions]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -150,22 +159,25 @@ export function ComplementGroupDialog({
   );
 
   React.useEffect(() => {
-    if (group) {
-      setForm({
-        name: group.name || '',
-        description: group.description || '',
-        selection_type: group.selection_type || 'single',
-        is_required: group.is_required ?? false,
-        min_selections: group.min_selections ?? 0,
-        max_selections: group.max_selections ?? 1,
-        visibility: group.visibility || 'visible',
-        channels: group.channels || ['delivery', 'counter', 'table'],
-        is_active: group.is_active ?? true,
-        price_calculation_type: group.price_calculation_type || 'sum',
-      });
-      setIsAdvancedOpen(group.price_calculation_type !== 'sum' && group.price_calculation_type !== null);
+    if (open) {
+      if (group) {
+        setForm({
+          name: group.name || '',
+          description: group.description || '',
+          selection_type: group.selection_type || 'single',
+          is_required: group.is_required ?? false,
+          min_selections: group.min_selections ?? 0,
+          max_selections: group.max_selections ?? 1,
+          visibility: group.visibility || 'visible',
+          channels: group.channels || ['delivery', 'counter', 'table'],
+          is_active: group.is_active ?? true,
+          price_calculation_type: group.price_calculation_type || 'sum',
+        });
+        setIsAdvancedOpen(group.price_calculation_type !== 'sum' && group.price_calculation_type !== null);
+      }
+      setSelectedOptionIds(linkedOptionIds);
+      setLocalOptions([]);
     }
-    setSelectedOptionIds(linkedOptionIds);
   }, [group, linkedOptionIds, open]);
 
   const handleSave = () => {
@@ -209,6 +221,8 @@ export function ComplementGroupDialog({
       const price = parseFloat(newOptionPrice) || 0;
       const newOption = await onCreateOption({ name: newOptionName.trim(), price });
       if (newOption) {
+        // Add to local options so it appears immediately
+        setLocalOptions(prev => [...prev, newOption as ComplementOption]);
         setSelectedOptionIds(prev => [...prev, newOption.id]);
         setNewOptionName('');
         setNewOptionPrice('');
@@ -220,7 +234,7 @@ export function ComplementGroupDialog({
   };
 
   const selectedOptions = selectedOptionIds
-    .map(id => options.find(o => o.id === id))
+    .map(id => allOptions.find(o => o.id === id))
     .filter((o): o is ComplementOption => !!o);
 
   return (
@@ -344,7 +358,7 @@ export function ComplementGroupDialog({
             {showOptionPicker && (
               <div className="border rounded-lg p-3 bg-muted/50 max-h-48 overflow-y-auto">
                 <div className="grid grid-cols-2 gap-2">
-                  {options.filter(o => !selectedOptionIds.includes(o.id)).map(option => (
+                  {allOptions.filter(o => !selectedOptionIds.includes(o.id)).map(option => (
                     <div
                       key={option.id}
                       className="flex items-center gap-2 p-2 rounded hover:bg-accent cursor-pointer"
@@ -358,7 +372,7 @@ export function ComplementGroupDialog({
                     </div>
                   ))}
                 </div>
-                {options.filter(o => !selectedOptionIds.includes(o.id)).length === 0 && (
+                {allOptions.filter(o => !selectedOptionIds.includes(o.id)).length === 0 && (
                   <p className="text-sm text-muted-foreground text-center py-2">
                     Todas as opções já foram adicionadas
                   </p>
