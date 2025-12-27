@@ -116,39 +116,74 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
           return;
         }
 
-        // Get options for all groups
-        const { data: groupOptions, error: optionsError } = await supabase
+        // Step 1: Get all complement_group_options links
+        const { data: groupOptionLinks, error: linksError } = await supabase
           .from('complement_group_options')
-          .select(`
-            group_id,
-            price_override,
-            sort_order,
-            option_id,
-            option:complement_options(*)
-          `)
+          .select('id, group_id, option_id, price_override, sort_order')
           .in('group_id', groupIds)
           .order('sort_order');
 
         console.log('[ProductDetailDialog] groupIds:', groupIds);
-        console.log('[ProductDetailDialog] groupOptions raw:', groupOptions);
+        console.log('[ProductDetailDialog] groupOptionLinks:', groupOptionLinks);
+        console.log('[ProductDetailDialog] linksError:', linksError);
+
+        if (!groupOptionLinks || groupOptionLinks.length === 0) {
+          // No options linked to these groups
+          const groupsWithoutOptions: GroupWithOptions[] = groupsData.map(group => ({
+            id: group.id,
+            name: group.name,
+            description: group.description,
+            selection_type: group.selection_type as 'single' | 'multiple' | 'multiple_repeat',
+            is_required: group.is_required ?? false,
+            min_selections: group.min_selections ?? 0,
+            max_selections: group.max_selections ?? 1,
+            sort_order: productGroups.find(pg => pg.group_id === group.id)?.sort_order ?? 0,
+            price_calculation_type: (group.price_calculation_type as 'sum' | 'average' | 'highest' | 'lowest') ?? 'sum',
+            options: [],
+          })).sort((a, b) => a.sort_order - b.sort_order);
+          setGroups(groupsWithoutOptions);
+          setLoading(false);
+          return;
+        }
+
+        // Step 2: Get all complement_options by their IDs
+        const optionIds = [...new Set(groupOptionLinks.map(go => go.option_id))];
+        const { data: optionsData, error: optionsError } = await supabase
+          .from('complement_options')
+          .select('*')
+          .in('id', optionIds);
+
+        console.log('[ProductDetailDialog] optionIds:', optionIds);
+        console.log('[ProductDetailDialog] optionsData:', optionsData);
         console.log('[ProductDetailDialog] optionsError:', optionsError);
+
+        // Step 3: Build a map of options for quick lookup
+        const optionsMap = new Map(optionsData?.map(opt => [opt.id, opt]) || []);
 
         // Build groups with options - filter active options only
         const groupsWithOptions: GroupWithOptions[] = groupsData.map(group => {
-          const filteredOptions = groupOptions?.filter(go => go.group_id === group.id && go.option);
-          console.log(`[ProductDetailDialog] Group ${group.name} - filtered options:`, filteredOptions);
+          const groupLinks = groupOptionLinks.filter(go => go.group_id === group.id);
+          console.log(`[ProductDetailDialog] Group ${group.name} - links:`, groupLinks);
           
-          const options = filteredOptions
-            ?.filter(go => {
-              const opt = go.option as Record<string, unknown>;
+          const options = groupLinks
+            .map(link => {
+              const opt = optionsMap.get(link.option_id);
+              if (!opt) return null;
               // Treat null, undefined, or true as active
-              return opt.is_active === true || opt.is_active === null || opt.is_active === undefined;
+              if (opt.is_active !== true && opt.is_active !== null && opt.is_active !== undefined) {
+                return null;
+              }
+              return {
+                ...opt,
+                price_override: link.price_override,
+              };
             })
-            .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
-            .map(go => ({
-              ...(go.option as Record<string, unknown>),
-              price_override: go.price_override,
-            })) as ComplementOption[] || [];
+            .filter((opt): opt is NonNullable<typeof opt> => opt !== null)
+            .sort((a, b) => {
+              const aLink = groupLinks.find(l => l.option_id === a.id);
+              const bLink = groupLinks.find(l => l.option_id === b.id);
+              return (aLink?.sort_order || 0) - (bLink?.sort_order || 0);
+            });
           
           console.log(`[ProductDetailDialog] Group ${group.name} - final options:`, options);
 
