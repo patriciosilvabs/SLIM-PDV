@@ -736,6 +736,7 @@ export default function Menu() {
           <TabsList className="w-fit">
             <TabsTrigger value="categories">CATEGORIAS</TabsTrigger>
             <TabsTrigger value="products">PRODUTOS</TabsTrigger>
+            <TabsTrigger value="combos">COMBOS</TabsTrigger>
             <TabsTrigger value="extras">COMPLEMENTOS</TabsTrigger>
             <TabsTrigger value="variations">OPÇÕES</TabsTrigger>
           </TabsList>
@@ -942,6 +943,101 @@ export default function Menu() {
                 )}
               </DragOverlay>
             </DndContext>
+          </TabsContent>
+
+          {/* Combos Tab */}
+          <TabsContent value="combos" className="flex-1 mt-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Combos</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Gerencie seus combos promocionais
+                  </p>
+                </div>
+                <Button onClick={() => { 
+                  setEditingCombo(null); 
+                  setComboForm({ name: '', description: '', image_url: null, combo_price: 0, is_active: true }); 
+                  setComboItemsForm([]); 
+                  setIsComboDialogOpen(true); 
+                }}>
+                  <Plus className="h-4 w-4 mr-2" />Novo Combo
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {combos?.map((combo) => (
+                    <div key={combo.id} className="flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
+                      {combo.image_url ? (
+                        <img src={combo.image_url} alt={combo.name} className="w-16 h-16 rounded object-cover" />
+                      ) : (
+                        <div className="w-16 h-16 rounded bg-muted flex items-center justify-center">
+                          <Package className="h-8 w-8 text-muted-foreground/50" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium truncate">{combo.name}</h3>
+                        {combo.description && (
+                          <p className="text-sm text-muted-foreground truncate">{combo.description}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {comboItems?.filter(ci => ci.combo_id === combo.id).length || 0} item(ns)
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm line-through text-muted-foreground">
+                          {formatCurrency(combo.original_price)}
+                        </p>
+                        <p className="font-bold text-green-600">
+                          {formatCurrency(combo.combo_price)}
+                        </p>
+                      </div>
+                      <Badge variant={combo.is_active ? 'default' : 'secondary'} className="shrink-0">
+                        {combo.is_active ? 'Ativo' : 'Inativo'}
+                      </Badge>
+                      <div className="flex gap-1 shrink-0">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={async () => {
+                            setEditingCombo(combo);
+                            setComboForm({
+                              name: combo.name,
+                              description: combo.description || '',
+                              image_url: combo.image_url,
+                              combo_price: combo.combo_price,
+                              is_active: combo.is_active ?? true
+                            });
+                            const items = comboItems?.filter(ci => ci.combo_id === combo.id) || [];
+                            setComboItemsForm(items.map(ci => ({
+                              product_id: ci.product_id,
+                              variation_id: ci.variation_id || null,
+                              quantity: ci.quantity || 1
+                            })));
+                            setIsComboDialogOpen(true);
+                          }}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="text-destructive"
+                          onClick={() => deleteCombo.mutate(combo.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {!combos?.length && (
+                    <div className="text-center py-12 text-muted-foreground">
+                      Nenhum combo cadastrado
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Complement Groups Tab */}
