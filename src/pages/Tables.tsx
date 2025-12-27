@@ -468,15 +468,15 @@ export default function Tables() {
   }, [orders, tables, idleTableSettings, audioSettings.enabled, playIdleTableAlertSound, updateTable, updateOrder]);
 
   const getTableOrder = (tableId: string) => {
-    const table = tables?.find(t => t.id === tableId);
-    // Se a mesa está livre, não retorna pedidos 'delivered'
+    // Retorna apenas pedidos ATIVOS (não-delivered, não-cancelled)
+    // Pedidos 'delivered' são histórico e não devem aparecer em mesas
     // Ignora pedidos em rascunho sem itens (drafts vazios)
     return orders?.find(o => 
       o.table_id === tableId && 
       o.status !== 'cancelled' &&
+      o.status !== 'delivered' && // Sempre excluir delivered - são histórico
       // Ignorar drafts sem itens
-      !(o.is_draft === true && (!o.order_items || o.order_items.length === 0)) &&
-      (table?.status !== 'available' || o.status !== 'delivered')
+      !(o.is_draft === true && (!o.order_items || o.order_items.length === 0))
     );
   };
 
@@ -1197,10 +1197,14 @@ export default function Tables() {
 
       // If no session payments but we have existing partial payments, we need to close the table manually
       if (registeredPayments.length === 0 && existingPaymentsTotal > 0) {
-        // Update order status to delivered
+        // Update order status to delivered and clear table_id
         await supabase
           .from('orders')
-          .update({ status: 'delivered' })
+          .update({ 
+            status: 'delivered',
+            table_id: null, // Desassociar da mesa para evitar conflitos futuros
+            delivered_at: new Date().toISOString()
+          })
           .eq('id', selectedOrder.id);
 
         // Update table status to available
