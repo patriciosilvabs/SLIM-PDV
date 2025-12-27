@@ -42,6 +42,7 @@ export interface SubItemSelection {
   option_name: string;
   price: number;
   quantity: number;
+  price_calculation_type?: 'sum' | 'average' | 'highest' | 'lowest';
 }
 
 export interface SubItemData {
@@ -78,6 +79,7 @@ export function PizzaUnitCard({ index, totalUnits, groups, data, onChange }: Piz
         option_name: option.name,
         price,
         quantity: 1,
+        price_calculation_type: group.price_calculation_type,
       }],
     });
   };
@@ -97,6 +99,7 @@ export function PizzaUnitCard({ index, totalUnits, groups, data, onChange }: Piz
           option_name: option.name,
           price,
           quantity: 1,
+          price_calculation_type: group.price_calculation_type,
         }],
       });
     } else {
@@ -143,6 +146,7 @@ export function PizzaUnitCard({ index, totalUnits, groups, data, onChange }: Piz
           option_name: option.name,
           price,
           quantity: 1,
+          price_calculation_type: group.price_calculation_type,
         }],
       });
     }
