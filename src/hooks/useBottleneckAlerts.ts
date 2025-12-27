@@ -5,12 +5,37 @@ import { useKdsSettings } from './useKdsSettings';
 import { toast } from 'sonner';
 
 const BOTTLENECK_ALERT_COOLDOWN = 5 * 60 * 1000; // 5 minutos entre alertas
+const BOTTLENECK_STORAGE_KEY = 'kds-bottleneck-alerts';
 
 interface AlertedBottleneck {
   stationId: string;
   severity: BottleneckInfo['severity'];
   alertedAt: number;
 }
+
+// Load persisted alerts from sessionStorage
+const loadPersistedAlerts = (): Map<string, AlertedBottleneck> => {
+  try {
+    const stored = sessionStorage.getItem(BOTTLENECK_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return new Map(Object.entries(parsed));
+    }
+  } catch (e) {
+    console.error('Error loading bottleneck alerts:', e);
+  }
+  return new Map();
+};
+
+// Persist alerts to sessionStorage
+const persistAlerts = (alerts: Map<string, AlertedBottleneck>) => {
+  try {
+    const obj = Object.fromEntries(alerts);
+    sessionStorage.setItem(BOTTLENECK_STORAGE_KEY, JSON.stringify(obj));
+  } catch (e) {
+    console.error('Error persisting bottleneck alerts:', e);
+  }
+};
 
 export function useBottleneckAlerts(enabled: boolean = true, soundEnabled: boolean = true) {
   const { settings } = useKdsSettings();
@@ -26,7 +51,7 @@ export function useBottleneckAlerts(enabled: boolean = true, soundEnabled: boole
   );
   
   const { playBottleneckAlertSound, settings: audioSettings } = useAudioNotification();
-  const alertedBottlenecksRef = useRef<Map<string, AlertedBottleneck>>(new Map());
+  const alertedBottlenecksRef = useRef<Map<string, AlertedBottleneck>>(loadPersistedAlerts());
   const lastCriticalAlertRef = useRef<number>(0);
 
   const shouldAlertBottleneck = useCallback((bottleneck: BottleneckInfo): boolean => {
@@ -59,6 +84,9 @@ export function useBottleneckAlerts(enabled: boolean = true, soundEnabled: boole
       severity: bottleneck.severity,
       alertedAt: now,
     });
+    
+    // Persist to sessionStorage
+    persistAlerts(alertedBottlenecksRef.current);
 
     // Toast visual
     const severityEmoji = {
@@ -112,11 +140,16 @@ export function useBottleneckAlerts(enabled: boolean = true, soundEnabled: boole
 
     // Limpa alertas antigos para praças que não são mais gargalos
     const currentBottleneckIds = new Set(bottlenecks.map(b => b.stationId));
+    let hasChanges = false;
     alertedBottlenecksRef.current.forEach((_, stationId) => {
       if (!currentBottleneckIds.has(stationId)) {
         alertedBottlenecksRef.current.delete(stationId);
+        hasChanges = true;
       }
     });
+    if (hasChanges) {
+      persistAlerts(alertedBottlenecksRef.current);
+    }
   }, [enabled, bottleneckSettings.enabled, bottlenecks, shouldAlertBottleneck, triggerAlert]);
 
   return {
