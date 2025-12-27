@@ -1384,6 +1384,10 @@ export default function Menu() {
           options={complementOptions || []}
           linkedOptionIds={groupLinkedOptionIds}
           onSave={handleSaveComplementGroup}
+          onCreateOption={async (optionData) => {
+            const result = await createOption.mutateAsync(optionData as any);
+            return result as any;
+          }}
           isEditing={!!editingGroup}
         />
 
