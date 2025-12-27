@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import PDVLayout from '@/components/layout/PDVLayout';
@@ -41,6 +41,16 @@ import { useCentralizedPrinting } from '@/hooks/useCentralizedPrinting';
 import { KitchenTicketData, CancellationTicketData } from '@/utils/escpos';
 import { usePrintSectors } from '@/hooks/usePrintSectors';
 import { useProfile } from '@/hooks/useProfile';
+import {
+  OpenTableDialog,
+  ReservationDialog,
+  PaymentModal,
+  ReopenOrderDialog,
+  CustomerNameInput,
+  DiscountInput,
+  ServiceChargeInput,
+  CustomSplitInput,
+} from '@/components/tables';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -180,10 +190,6 @@ export default function Tables() {
   // Switch table states
   const [isSwitchTableDialogOpen, setIsSwitchTableDialogOpen] = useState(false);
   const [isSwitchingTable, setIsSwitchingTable] = useState(false);
-
-  // Customer name editing states
-  const [isEditingCustomerName, setIsEditingCustomerName] = useState(false);
-  const [editedCustomerName, setEditedCustomerName] = useState('');
 
   // Reopen table states
   const [isReopenDialogOpen, setIsReopenDialogOpen] = useState(false);
@@ -759,20 +765,19 @@ export default function Tables() {
     }
   };
 
-  // Save edited customer name
-  const handleSaveCustomerName = async () => {
+  // Save edited customer name - now uses callback for CustomerNameInput component
+  const handleSaveCustomerName = useCallback(async (newName: string) => {
     if (!selectedOrder) return;
     try {
       await updateOrder.mutateAsync({
         id: selectedOrder.id,
-        customer_name: editedCustomerName.trim() || null
+        customer_name: newName.trim() || null
       });
       toast.success('Nome do cliente atualizado');
-      setIsEditingCustomerName(false);
     } catch (error) {
       toast.error('Erro ao atualizar nome');
     }
-  };
+  }, [selectedOrder, updateOrder]);
 
   // Close empty table (no consumption)
   const handleCloseEmptyTable = async () => {
@@ -1059,14 +1064,9 @@ export default function Tables() {
       setSplitCount(2);
       setSplitMode('equal');
       setCustomSplits([]);
-      // Reset customer name editing
-      setIsEditingCustomerName(false);
-      setEditedCustomerName('');
     } else {
       setIsClosingBill(false);
       setRegisteredPayments([]);
-      setIsEditingCustomerName(false);
-      setEditedCustomerName('');
     }
   }, [selectedTable?.id]);
   
@@ -1584,41 +1584,13 @@ export default function Tables() {
                                 <span>{selectedOrder.created_by_profile.name}</span>
                               </div>
                             )}
-                            {/* Editable Customer Name */}
+                            {/* Editable Customer Name - using optimized component */}
                             <div className="flex items-center justify-between text-sm">
                               <span className="text-muted-foreground">Cliente</span>
-                              {isEditingCustomerName ? (
-                                <div className="flex items-center gap-1">
-                                  <Input
-                                    value={editedCustomerName}
-                                    onChange={(e) => setEditedCustomerName(e.target.value)}
-                                    className="h-7 w-32 text-sm"
-                                    placeholder="Nome do cliente"
-                                    autoFocus
-                                  />
-                                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleSaveCustomerName}>
-                                    <Check className="h-3 w-3" />
-                                  </Button>
-                                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setIsEditingCustomerName(false)}>
-                                    <X className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-1">
-                                  <span>{selectedOrder.customer_name || '-'}</span>
-                                  <Button 
-                                    size="icon" 
-                                    variant="ghost" 
-                                    className="h-6 w-6"
-                                    onClick={() => {
-                                      setEditedCustomerName(selectedOrder.customer_name || '');
-                                      setIsEditingCustomerName(true);
-                                    }}
-                                  >
-                                    <Edit className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              )}
+                              <CustomerNameInput
+                                initialValue={selectedOrder.customer_name}
+                                onSave={handleSaveCustomerName}
+                              />
                             </div>
                           </div>
                         )}
