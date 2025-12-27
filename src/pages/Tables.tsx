@@ -161,7 +161,7 @@ export default function Tables() {
   const { data: orders } = useOrders(['pending', 'preparing', 'ready', 'delivered']);
   const { data: allOrders } = useOrders(['pending', 'preparing', 'ready', 'delivered', 'cancelled']);
   const { createTable, updateTable } = useTableMutations();
-  const { createOrder, updateOrder, addOrderItem, addOrderItemExtras } = useOrderMutations();
+  const { createOrder, updateOrder, addOrderItem, addOrderItemExtras, addOrderItemSubItems } = useOrderMutations();
   
   // Cash register hooks
   const { data: openCashRegister } = useOpenCashRegister();
@@ -593,6 +593,25 @@ export default function Tables() {
             extra_id: null,
           }));
           await addOrderItemExtras.mutateAsync(extras);
+        }
+
+        // Save sub-items (individual pizzas in a combo) if present
+        if (item.subItems && item.subItems.length > 0) {
+          await addOrderItemSubItems.mutateAsync({
+            order_item_id: orderItem.id,
+            sub_items: item.subItems.map(si => ({
+              sub_item_index: si.sub_item_index,
+              notes: si.sub_item_notes || null,
+              extras: si.complements.map(c => ({
+                group_id: c.group_id || null,
+                group_name: c.group_name,
+                option_id: c.option_id || null,
+                option_name: c.option_name,
+                price: c.price,
+                quantity: c.quantity,
+              })),
+            })),
+          });
         }
       }
     }
@@ -1528,15 +1547,38 @@ export default function Tables() {
                                           <span className="text-muted-foreground font-normal"> - {item.variation.name}</span>
                                         )}
                                       </p>
-                                      {/* Sabores/Complementos */}
-                                      {item.extras && item.extras.length > 0 && (
-                                        <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                                          {item.extras.map((extra: any, idx: number) => (
-                                            <p key={idx} className="pl-2">
-                                              • {extra.extra_name.split(': ').slice(1).join(': ')}
-                                            </p>
+                                      {/* Sub-items (pizzas individuais) */}
+                                      {item.sub_items && item.sub_items.length > 0 ? (
+                                        <div className="text-xs text-muted-foreground mt-1 space-y-1.5">
+                                          {item.sub_items
+                                            .sort((a: any, b: any) => a.sub_item_index - b.sub_item_index)
+                                            .map((subItem: any) => (
+                                            <div key={subItem.id} className="pl-2 border-l-2 border-primary/30">
+                                              <p className="font-medium text-foreground">🍕 Pizza {subItem.sub_item_index + 1}:</p>
+                                              {subItem.sub_extras && subItem.sub_extras.length > 0 && (
+                                                <div className="pl-2 space-y-0.5">
+                                                  {subItem.sub_extras.map((extra: any, idx: number) => (
+                                                    <p key={idx}>• {extra.option_name}</p>
+                                                  ))}
+                                                </div>
+                                              )}
+                                              {subItem.notes && (
+                                                <p className="pl-2 italic text-amber-600">📝 {subItem.notes}</p>
+                                              )}
+                                            </div>
                                           ))}
                                         </div>
+                                      ) : (
+                                        /* Sabores/Complementos tradicionais */
+                                        item.extras && item.extras.length > 0 && (
+                                          <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                                            {item.extras.map((extra: any, idx: number) => (
+                                              <p key={idx} className="pl-2">
+                                                • {extra.extra_name.split(': ').slice(1).join(': ')}
+                                              </p>
+                                            ))}
+                                          </div>
+                                        )
                                       )}
                                       {/* Observações */}
                                       {item.notes && (
@@ -2273,13 +2315,36 @@ export default function Tables() {
                                 <span className="text-muted-foreground font-normal"> - {item.variation.name}</span>
                               )}
                             </span>
-                            {/* Sabores/Complementos */}
-                            {item.extras && item.extras.length > 0 && (
-                              <div className="text-xs text-muted-foreground mt-1">
-                                {item.extras.map((extra: any, idx: number) => (
-                                  <p key={idx} className="pl-2">• {extra.extra_name.split(': ').slice(1).join(': ')}</p>
+                            {/* Sub-items (pizzas individuais) */}
+                            {item.sub_items && item.sub_items.length > 0 ? (
+                              <div className="text-xs text-muted-foreground mt-1 space-y-1.5">
+                                {item.sub_items
+                                  .sort((a: any, b: any) => a.sub_item_index - b.sub_item_index)
+                                  .map((subItem: any) => (
+                                  <div key={subItem.id} className="pl-2 border-l-2 border-primary/30">
+                                    <p className="font-medium text-foreground">🍕 Pizza {subItem.sub_item_index + 1}:</p>
+                                    {subItem.sub_extras && subItem.sub_extras.length > 0 && (
+                                      <div className="pl-2 space-y-0.5">
+                                        {subItem.sub_extras.map((extra: any, idx: number) => (
+                                          <p key={idx}>• {extra.option_name}</p>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {subItem.notes && (
+                                      <p className="pl-2 italic text-amber-600">📝 {subItem.notes}</p>
+                                    )}
+                                  </div>
                                 ))}
                               </div>
+                            ) : (
+                              /* Sabores/Complementos tradicionais */
+                              item.extras && item.extras.length > 0 && (
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  {item.extras.map((extra: any, idx: number) => (
+                                    <p key={idx} className="pl-2">• {extra.extra_name.split(': ').slice(1).join(': ')}</p>
+                                  ))}
+                                </div>
+                              )
                             )}
                             {item.notes && (
                               <p className="text-xs text-amber-600 mt-1 italic">📝 {item.notes}</p>
