@@ -8,7 +8,6 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useProducts, useProductMutations } from '@/hooks/useProducts';
@@ -21,7 +20,7 @@ import { useProductComplementGroups, useProductComplementGroupsMutations } from 
 import { usePrintSectors } from '@/hooks/usePrintSectors';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { AccessDenied } from '@/components/auth/AccessDenied';
-import { Plus, Edit, Trash2, Search, Link2, Package, GripVertical, MoreVertical, Star, Percent, Eye, EyeOff, Printer, Copy, Filter, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Package, GripVertical, MoreVertical, Star, Percent, Eye, EyeOff, Printer, Copy, X } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ImageUpload } from '@/components/ImageUpload';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, DragOverlay, DragStartEvent, useDroppable } from '@dnd-kit/core';
@@ -74,6 +73,7 @@ export default function Menu() {
   const { data: printSectors } = usePrintSectors();
   const { createProduct, updateProduct, deleteProduct, updateSortOrder: updateProductSortOrder } = useProductMutations();
   const { createCategory, updateCategory, deleteCategory, updateSortOrder: updateCategorySortOrder } = useCategoryMutations();
+  const { createGroup, updateGroup, deleteGroup } = useComplementGroupsMutations();
   const { createOption, updateOption, deleteOption } = useComplementOptionsMutations();
   const { setGroupOptions } = useComplementGroupOptionsMutations();
   const { setProductGroups, setGroupsForProduct } = useProductComplementGroupsMutations();
@@ -123,6 +123,7 @@ export default function Menu() {
   // Complement Option dialog state
   const [isOptionDialogOpen, setIsOptionDialogOpen] = useState(false);
   const [editingOption, setEditingOption] = useState<ComplementOption | null>(null);
+  
   // DnD sensors
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -370,41 +371,6 @@ export default function Menu() {
     setEditingOption(null);
   };
 
-  const handleSaveCombo = async () => {
-    const comboData = {
-      name: comboForm.name,
-      description: comboForm.description || null,
-      image_url: comboForm.image_url,
-      original_price: originalPrice,
-      combo_price: comboForm.combo_price,
-      is_active: comboForm.is_active
-    };
-
-    let comboId = editingCombo?.id;
-    if (editingCombo) {
-      await updateCombo.mutateAsync({ id: editingCombo.id, ...comboData });
-    } else {
-      const result = await createCombo.mutateAsync(comboData);
-      comboId = result.id;
-    }
-
-    if (comboId) {
-      await setComboItems.mutateAsync({ 
-        comboId, 
-        items: comboItemsForm.filter(item => item.product_id).map(item => ({
-          product_id: item.product_id,
-          variation_id: item.variation_id || null,
-          quantity: item.quantity
-        }))
-      });
-    }
-
-    setIsComboDialogOpen(false);
-    setEditingCombo(null);
-    setComboForm({ name: '', description: '', image_url: null, combo_price: 0, is_active: true });
-    setComboItemsForm([]);
-  };
-
   const closeProductDialog = () => {
     setIsProductDialogOpen(false);
     setEditingProduct(null);
@@ -458,24 +424,6 @@ export default function Menu() {
     setIsCategoryDialogOpen(true);
   };
 
-  const openEditCombo = (combo: any) => {
-    setEditingCombo(combo);
-    setComboForm({
-      name: combo.name,
-      description: combo.description || '',
-      image_url: combo.image_url,
-      combo_price: combo.combo_price,
-      is_active: combo.is_active ?? true
-    });
-    const items = comboItems?.filter(item => item.combo_id === combo.id).map(item => ({
-      product_id: item.product_id,
-      variation_id: item.variation_id,
-      quantity: item.quantity
-    })) || [];
-    setComboItemsForm(items);
-    setIsComboDialogOpen(true);
-  };
-
   const getGroupOptionCount = (groupId: string) => {
     return groupCounts[groupId]?.options || 0;
   };
@@ -489,28 +437,8 @@ export default function Menu() {
     return 0; // Placeholder - will be updated with actual data
   };
 
-  const addComboItem = () => {
-    setComboItemsForm(prev => [...prev, { product_id: '', variation_id: null, quantity: 1 }]);
-  };
-
-  const updateComboItemForm = (index: number, field: keyof ComboItemForm, value: any) => {
-    setComboItemsForm(prev => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: value };
-      return updated;
-    });
-  };
-
-  const removeComboItemForm = (index: number) => {
-    setComboItemsForm(prev => prev.filter((_, i) => i !== index));
-  };
-
   const getProductVariations = (productId: string) => {
     return variations?.filter(v => v.product_id === productId) || [];
-  };
-
-  const getComboItemCount = (comboId: string) => {
-    return comboItems?.filter(item => item.combo_id === comboId).length || 0;
   };
 
   const handleCategoryDragEnd = (event: DragEndEvent) => {
@@ -689,9 +617,6 @@ export default function Menu() {
                 onChange={(e) => setSearch(e.target.value)} 
               />
             </div>
-            <Button variant="outline" onClick={() => setIsComboDialogOpen(true)}>
-              <Package className="h-4 w-4 mr-2" />Combo
-            </Button>
             <Button onClick={() => setIsProductDialogOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />Produto
             </Button>
@@ -703,7 +628,6 @@ export default function Menu() {
           <TabsList className="w-fit">
             <TabsTrigger value="categories">CATEGORIAS</TabsTrigger>
             <TabsTrigger value="products">PRODUTOS</TabsTrigger>
-            <TabsTrigger value="combos">COMBOS</TabsTrigger>
             <TabsTrigger value="extras">COMPLEMENTOS</TabsTrigger>
             <TabsTrigger value="variations">OPÇÕES</TabsTrigger>
           </TabsList>
@@ -846,54 +770,40 @@ export default function Menu() {
                         <SelectItem value="no">Sem Destaque</SelectItem>
                       </SelectContent>
                     </Select>
-
+                    
                     {hasActiveFilters && (
                       <Button variant="ghost" size="sm" onClick={clearFilters}>
                         <X className="h-4 w-4 mr-1" />
                         Limpar filtros
                       </Button>
                     )}
-
+                    
                     <div className="ml-auto text-sm text-muted-foreground">
-                      {filteredProducts?.length || 0} produto(s)
+                      {selectedCategory?.name}: {filteredProducts?.length || 0} produto(s)
                     </div>
                   </div>
 
-                  {/* Category Header */}
-                  {selectedCategory && (
-                    <div className="mb-4 flex items-center justify-between">
-                      <div>
-                        <h2 className="text-lg font-semibold flex items-center gap-2">
-                          <span>{selectedCategory.icon || '📁'}</span>
-                          {selectedCategory.name}
-                        </h2>
-                        {selectedCategory.description && (
-                          <p className="text-sm text-muted-foreground">{selectedCategory.description}</p>
+                  <ScrollArea className="h-[calc(100vh-350px)]">
+                    <SortableContext items={filteredProducts?.map(p => p.id) || []} strategy={verticalListSortingStrategy}>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                        {filteredProducts?.map((product) => (
+                          <DraggableProductCard key={product.id} product={product} />
+                        ))}
+                        {!filteredProducts?.length && (
+                          <div className="col-span-full text-center py-12 text-muted-foreground">
+                            Nenhum produto encontrado
+                          </div>
                         )}
                       </div>
-                    </div>
-                  )}
-
-                  {/* Products Grid with Draggable Cards */}
-                  <SortableContext items={filteredProducts?.map(p => p.id) || []} strategy={verticalListSortingStrategy}>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                      {filteredProducts?.map((product) => (
-                        <DraggableProductCard key={product.id} product={product} />
-                      ))}
-                      {!filteredProducts?.length && (
-                        <div className="col-span-full text-center py-12 text-muted-foreground">
-                          Nenhum produto encontrado
-                        </div>
-                      )}
-                    </div>
-                  </SortableContext>
+                    </SortableContext>
+                  </ScrollArea>
                 </div>
               </div>
-
+              
               {/* Drag Overlay */}
               <DragOverlay>
                 {draggedProduct && (
-                  <Card className="w-48 shadow-lg ring-2 ring-primary">
+                  <Card className="w-40 opacity-90 shadow-lg">
                     <div className="aspect-square bg-muted">
                       {draggedProduct.image_url ? (
                         <img src={draggedProduct.image_url} alt={draggedProduct.name} className="w-full h-full object-cover" />
@@ -910,101 +820,6 @@ export default function Menu() {
                 )}
               </DragOverlay>
             </DndContext>
-          </TabsContent>
-
-          {/* Combos Tab */}
-          <TabsContent value="combos" className="flex-1 mt-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Combos</CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Gerencie seus combos promocionais
-                  </p>
-                </div>
-                <Button onClick={() => { 
-                  setEditingCombo(null); 
-                  setComboForm({ name: '', description: '', image_url: null, combo_price: 0, is_active: true }); 
-                  setComboItemsForm([]); 
-                  setIsComboDialogOpen(true); 
-                }}>
-                  <Plus className="h-4 w-4 mr-2" />Novo Combo
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {combos?.map((combo) => (
-                    <div key={combo.id} className="flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
-                      {combo.image_url ? (
-                        <img src={combo.image_url} alt={combo.name} className="w-16 h-16 rounded object-cover" />
-                      ) : (
-                        <div className="w-16 h-16 rounded bg-muted flex items-center justify-center">
-                          <Package className="h-8 w-8 text-muted-foreground/50" />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium truncate">{combo.name}</h3>
-                        {combo.description && (
-                          <p className="text-sm text-muted-foreground truncate">{combo.description}</p>
-                        )}
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {comboItems?.filter(ci => ci.combo_id === combo.id).length || 0} item(ns)
-                        </p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-sm line-through text-muted-foreground">
-                          {formatCurrency(combo.original_price)}
-                        </p>
-                        <p className="font-bold text-green-600">
-                          {formatCurrency(combo.combo_price)}
-                        </p>
-                      </div>
-                      <Badge variant={combo.is_active ? 'default' : 'secondary'} className="shrink-0">
-                        {combo.is_active ? 'Ativo' : 'Inativo'}
-                      </Badge>
-                      <div className="flex gap-1 shrink-0">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={async () => {
-                            setEditingCombo(combo);
-                            setComboForm({
-                              name: combo.name,
-                              description: combo.description || '',
-                              image_url: combo.image_url,
-                              combo_price: combo.combo_price,
-                              is_active: combo.is_active ?? true
-                            });
-                            const items = comboItems?.filter(ci => ci.combo_id === combo.id) || [];
-                            setComboItemsForm(items.map(ci => ({
-                              product_id: ci.product_id,
-                              variation_id: ci.variation_id || null,
-                              quantity: ci.quantity || 1
-                            })));
-                            setIsComboDialogOpen(true);
-                          }}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="text-destructive"
-                          onClick={() => deleteCombo.mutate(combo.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                  {!combos?.length && (
-                    <div className="text-center py-12 text-muted-foreground">
-                      Nenhum combo cadastrado
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
           </TabsContent>
 
           {/* Complement Groups Tab */}
@@ -1551,84 +1366,6 @@ export default function Menu() {
           onSave={handleSaveComplementOption}
           isEditing={!!editingOption}
         />
-
-        {/* Combo Dialog */}
-        <Dialog open={isComboDialogOpen} onOpenChange={(open) => { setIsComboDialogOpen(open); if (!open) { setEditingCombo(null); setComboForm({ name: '', description: '', image_url: null, combo_price: 0, is_active: true }); setComboItemsForm([]); } }}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>{editingCombo ? 'Editar' : 'Novo'} Combo</DialogTitle></DialogHeader>
-            <div className="space-y-4 pt-4">
-              <div className="flex gap-4">
-                <ImageUpload 
-                  value={comboForm.image_url} 
-                  onChange={(url) => setComboForm({...comboForm, image_url: url})}
-                  folder="combos"
-                />
-                <div className="flex-1 space-y-3">
-                  <div className="space-y-1">
-                    <Label>Nome do Combo</Label>
-                    <Input placeholder="Ex: Combo Família" value={comboForm.name} onChange={(e) => setComboForm({...comboForm, name: e.target.value})} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Descrição</Label>
-                    <Textarea 
-                      placeholder="Ex: 1 Pizza G + 1 Refri 2L + Sobremesa" 
-                      value={comboForm.description || ''} 
-                      onChange={(e) => setComboForm({...comboForm, description: e.target.value})}
-                      rows={2}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Itens do Combo</Label>
-                <div className="border rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
-                  {comboItemsForm.map((item, index) => (
-                    <div key={index} className="flex gap-2 items-center">
-                      <Select value={item.product_id} onValueChange={(v) => { updateComboItemForm(index, 'product_id', v); updateComboItemForm(index, 'variation_id', null); }}>
-                        <SelectTrigger className="flex-1"><SelectValue placeholder="Produto" /></SelectTrigger>
-                        <SelectContent>
-                          {products?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <Select value={item.variation_id || 'none'} onValueChange={(v) => updateComboItemForm(index, 'variation_id', v === 'none' ? null : v)}>
-                        <SelectTrigger className="w-32"><SelectValue placeholder="Variação" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Padrão</SelectItem>
-                          {getProductVariations(item.product_id).map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <Input type="number" min={1} className="w-16" value={item.quantity} onChange={(e) => updateComboItemForm(index, 'quantity', parseInt(e.target.value) || 1)} />
-                      <Button variant="ghost" size="icon" className="text-destructive" onClick={() => removeComboItemForm(index)}><Trash2 className="h-4 w-4" /></Button>
-                    </div>
-                  ))}
-                  <Button variant="outline" size="sm" onClick={addComboItem} className="w-full"><Plus className="h-4 w-4 mr-1" />Adicionar item</Button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 p-3 bg-muted/50 rounded-lg">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Preço Original (soma)</Label>
-                  <p className="text-lg font-semibold">{formatCurrency(originalPrice)}</p>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Preço do Combo</Label>
-                  <Input type="number" step="0.01" value={comboForm.combo_price} onChange={(e) => setComboForm({...comboForm, combo_price: parseFloat(e.target.value) || 0})} />
-                  {savings > 0 && (
-                    <p className="text-xs text-green-600 mt-1">Economia: {formatCurrency(savings)} ({savingsPercent.toFixed(0)}%)</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Switch checked={comboForm.is_active} onCheckedChange={(checked) => setComboForm({...comboForm, is_active: checked})} />
-                <Label>Ativo</Label>
-              </div>
-
-              <Button onClick={handleSaveCombo} className="w-full" disabled={!comboForm.name || comboItemsForm.length === 0}>Salvar Combo</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
     </PDVLayout>
   );
