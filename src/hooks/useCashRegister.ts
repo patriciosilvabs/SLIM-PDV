@@ -164,7 +164,8 @@ export function useCashRegisterMutations() {
             .from('orders')
             .update({ 
               status: 'delivered',
-              delivered_at: new Date().toISOString()
+              delivered_at: new Date().toISOString(),
+              table_id: null // Desassociar da mesa para evitar conflitos futuros
             })
             .eq('id', payment.order_id);
         }
