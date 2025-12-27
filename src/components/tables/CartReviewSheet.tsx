@@ -40,9 +40,11 @@ export function CartReviewSheet({
   const total = items.reduce((sum, item) => sum + item.total_price, 0);
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
+  if (!open) return null;
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="h-[90vh] flex flex-col p-0">
+      <SheetContent side="bottom" className="h-[90vh] flex flex-col p-0 [&>button]:hidden">
         <SheetHeader className="px-4 py-3 border-b flex-shrink-0">
           <div className="flex items-center gap-3">
             <Button 

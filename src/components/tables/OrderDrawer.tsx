@@ -139,6 +139,8 @@ export function OrderDrawer({
     }
   };
 
+  if (!open && !productDialogOpen) return null;
+
   return (
     <>
       <Drawer open={open} onOpenChange={onOpenChange}>
