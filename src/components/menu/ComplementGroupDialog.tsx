@@ -36,6 +36,7 @@ interface ComplementGroupDialogProps {
   options: ComplementOption[];
   linkedOptionIds: string[];
   onSave: (group: Partial<ComplementGroup>, optionIds: string[]) => void;
+  onCreateOption?: (option: { name: string; price: number }) => Promise<ComplementOption | undefined>;
   isEditing: boolean;
 }
 
@@ -118,6 +119,7 @@ export function ComplementGroupDialog({
   options,
   linkedOptionIds,
   onSave,
+  onCreateOption,
   isEditing
 }: ComplementGroupDialogProps) {
   const [form, setForm] = React.useState<Partial<ComplementGroup>>({
@@ -135,6 +137,10 @@ export function ComplementGroupDialog({
   const [selectedOptionIds, setSelectedOptionIds] = React.useState<string[]>([]);
   const [isAdvancedOpen, setIsAdvancedOpen] = React.useState(false);
   const [showOptionPicker, setShowOptionPicker] = React.useState(false);
+  const [showNewOptionForm, setShowNewOptionForm] = React.useState(false);
+  const [newOptionName, setNewOptionName] = React.useState('');
+  const [newOptionPrice, setNewOptionPrice] = React.useState('');
+  const [isCreatingOption, setIsCreatingOption] = React.useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -192,6 +198,24 @@ export function ComplementGroupDialog({
         const newIndex = prev.indexOf(over.id as string);
         return arrayMove(prev, oldIndex, newIndex);
       });
+    }
+  };
+
+  const handleCreateNewOption = async () => {
+    if (!newOptionName.trim() || !onCreateOption) return;
+    
+    setIsCreatingOption(true);
+    try {
+      const price = parseFloat(newOptionPrice) || 0;
+      const newOption = await onCreateOption({ name: newOptionName.trim(), price });
+      if (newOption) {
+        setSelectedOptionIds(prev => [...prev, newOption.id]);
+        setNewOptionName('');
+        setNewOptionPrice('');
+        setShowNewOptionForm(false);
+      }
+    } finally {
+      setIsCreatingOption(false);
     }
   };
 
@@ -256,11 +280,66 @@ export function ComplementGroupDialog({
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label className="text-base font-semibold">Opções</Label>
-              <Button variant="outline" size="sm" onClick={() => setShowOptionPicker(!showOptionPicker)}>
-                <Plus className="h-4 w-4 mr-1" />
-                Adicionar Opção
-              </Button>
+              <div className="flex gap-2">
+                {onCreateOption && (
+                  <Button variant="outline" size="sm" onClick={() => setShowNewOptionForm(!showNewOptionForm)}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Criar Opção
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={() => setShowOptionPicker(!showOptionPicker)}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Adicionar Existente
+                </Button>
+              </div>
             </div>
+
+            {/* New Option Form */}
+            {showNewOptionForm && (
+              <div className="border rounded-lg p-3 bg-muted/50 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-sm">Nome da opção</Label>
+                    <Input
+                      placeholder="Ex: Calabresa"
+                      value={newOptionName}
+                      onChange={(e) => setNewOptionName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm">Preço</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={newOptionPrice}
+                      onChange={(e) => setNewOptionPrice(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => {
+                      setShowNewOptionForm(false);
+                      setNewOptionName('');
+                      setNewOptionPrice('');
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    onClick={handleCreateNewOption}
+                    disabled={!newOptionName.trim() || isCreatingOption}
+                  >
+                    {isCreatingOption ? 'Criando...' : 'Criar e Adicionar'}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {showOptionPicker && (
               <div className="border rounded-lg p-3 bg-muted/50 max-h-48 overflow-y-auto">
