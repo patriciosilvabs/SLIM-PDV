@@ -23,11 +23,12 @@ import { useProductComplementGroups, useProductComplementGroupsMutations } from 
 import { usePrintSectors } from '@/hooks/usePrintSectors';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { AccessDenied } from '@/components/auth/AccessDenied';
-import { Plus, Edit, Trash2, Search, Link2, Package, GripVertical, MoreVertical, Star, Percent, Eye, EyeOff, Printer, Copy } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Link2, Package, GripVertical, MoreVertical, Star, Percent, Eye, EyeOff, Printer, Copy, Filter, X } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ImageUpload } from '@/components/ImageUpload';
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, DragOverlay, DragStartEvent, useDroppable } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { SortableItem } from '@/components/SortableItem';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -92,10 +93,18 @@ export default function Menu() {
   const canManageMenu = hasPermission('menu_manage');
   
   // ALL STATE HOOKS MUST BE BEFORE CONDITIONAL RETURN
-  const [mainTab, setMainTab] = useState('products');
+  const [mainTab, setMainTab] = useState('categories');
   const [search, setSearch] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [isCategorySortMode, setIsCategorySortMode] = useState(false);
+  
+  // Advanced filters
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [filterPromotion, setFilterPromotion] = useState<'all' | 'yes' | 'no'>('all');
+  const [filterFeatured, setFilterFeatured] = useState<'all' | 'yes' | 'no'>('all');
+  
+  // Drag & drop between categories
+  const [draggedProductId, setDraggedProductId] = useState<string | null>(null);
   
   // Group counts state
   const [groupCounts, setGroupCounts] = useState<Record<string, { options: number, products: number }>>({});
@@ -175,14 +184,31 @@ export default function Menu() {
     return <AccessDenied permission="menu_view" />;
   }
 
-  // Filter products by category and search
+  // Filter products by category, search, and advanced filters
   const filteredProducts = products?.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = !selectedCategoryId || p.category_id === selectedCategoryId;
-    return matchesSearch && matchesCategory;
+    const matchesStatus = filterStatus === 'all' || 
+      (filterStatus === 'active' && p.is_available) || 
+      (filterStatus === 'inactive' && !p.is_available);
+    const matchesPromotion = filterPromotion === 'all' || 
+      (filterPromotion === 'yes' && p.is_promotion) || 
+      (filterPromotion === 'no' && !p.is_promotion);
+    const matchesFeatured = filterFeatured === 'all' || 
+      (filterFeatured === 'yes' && p.is_featured) || 
+      (filterFeatured === 'no' && !p.is_featured);
+    return matchesSearch && matchesCategory && matchesStatus && matchesPromotion && matchesFeatured;
   });
 
   const selectedCategory = categories?.find(c => c.id === selectedCategoryId);
+  const draggedProduct = products?.find(p => p.id === draggedProductId);
+  const hasActiveFilters = filterStatus !== 'all' || filterPromotion !== 'all' || filterFeatured !== 'all';
+  
+  const clearFilters = () => {
+    setFilterStatus('all');
+    setFilterPromotion('all');
+    setFilterFeatured('all');
+  };
 
   // Calculate original price for combo
   const calculateOriginalPrice = () => {
@@ -532,6 +558,145 @@ export default function Menu() {
     updateCategorySortOrder.mutate(updates);
   };
 
+  const handleProductDragStart = (event: DragStartEvent) => {
+    setDraggedProductId(event.active.id as string);
+  };
+
+  const handleProductDragEnd = async (event: DragEndEvent) => {
+    setDraggedProductId(null);
+    const { active, over } = event;
+    if (!over) return;
+    
+    const productId = active.id as string;
+    const targetCategoryId = over.id as string;
+    
+    // Check if dropped on a category (not the same as current)
+    const product = products?.find(p => p.id === productId);
+    if (product && product.category_id !== targetCategoryId && categories?.find(c => c.id === targetCategoryId)) {
+      await updateProduct.mutateAsync({ id: productId, category_id: targetCategoryId });
+    }
+  };
+
+  // Droppable category component
+  function DroppableCategory({ category, isActive }: { category: any; isActive: boolean }) {
+    const { setNodeRef, isOver } = useDroppable({ id: category.id });
+    
+    return (
+      <div
+        ref={setNodeRef}
+        className={`p-3 rounded-lg border-2 transition-all ${
+          isOver ? 'border-primary bg-primary/10' : 'border-transparent'
+        } ${isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+      >
+        <div className="flex items-center gap-2">
+          <span>{category.icon || '📁'}</span>
+          <span className="flex-1 truncate font-medium">{category.name}</span>
+          <Badge variant="secondary" className="text-xs">
+            {products?.filter(p => p.category_id === category.id).length || 0}
+          </Badge>
+        </div>
+      </div>
+    );
+  }
+
+  // Draggable product component
+  function DraggableProductCard({ product }: { product: any }) {
+    const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: product.id });
+    
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      opacity: isDragging ? 0.5 : 1,
+    };
+
+    return (
+      <Card 
+        ref={setNodeRef} 
+        style={style}
+        className={`group overflow-hidden cursor-grab active:cursor-grabbing ${isDragging ? 'ring-2 ring-primary' : ''}`}
+        {...attributes}
+        {...listeners}
+      >
+        <div className="relative aspect-square bg-muted">
+          {product.image_url ? (
+            <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Package className="h-12 w-12 text-muted-foreground/50" />
+            </div>
+          )}
+          <Badge 
+            variant={product.is_available ? "default" : "secondary"}
+            className="absolute top-2 left-2 text-xs"
+          >
+            {product.is_available ? 'ATIVO' : 'OCULTO'}
+          </Badge>
+          {product.is_featured && (
+            <Badge variant="outline" className="absolute top-2 right-2 bg-background">
+              <Star className="h-3 w-3 mr-1 fill-yellow-500 text-yellow-500" />
+              Destaque
+            </Badge>
+          )}
+          {product.is_promotion && (
+            <Badge variant="destructive" className="absolute bottom-2 left-2">
+              <Percent className="h-3 w-3 mr-1" />
+              Promoção
+            </Badge>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="secondary" 
+                size="icon" 
+                className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditProduct(product); }}>
+                <Edit className="h-4 w-4 mr-2" />Editar
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={(e) => { e.stopPropagation(); updateProduct.mutate({ id: product.id, is_available: !product.is_available }); }}
+              >
+                {product.is_available ? (
+                  <><EyeOff className="h-4 w-4 mr-2" />Ocultar</>
+                ) : (
+                  <><Eye className="h-4 w-4 mr-2" />Mostrar</>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                className="text-destructive"
+                onClick={(e) => { e.stopPropagation(); deleteProduct.mutate(product.id); }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />Excluir
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <CardContent className="p-3">
+          <h3 className="font-medium truncate">{product.name}</h3>
+          <div className="flex items-center gap-2 mt-1">
+            {product.is_promotion && product.promotion_price ? (
+              <>
+                <span className="text-sm text-muted-foreground line-through">{formatCurrency(product.price)}</span>
+                <span className="font-semibold text-destructive">{formatCurrency(product.promotion_price)}</span>
+              </>
+            ) : (
+              <span className="font-semibold">{formatCurrency(product.price)}</span>
+            )}
+          </div>
+          {product.label && product.label !== 'none' && (
+            <Badge variant="outline" className="mt-2 text-xs">
+              {LABEL_OPTIONS.find(l => l.value === product.label)?.label || product.label}
+            </Badge>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <PDVLayout>
       <div className="h-full flex flex-col">
@@ -563,216 +728,214 @@ export default function Menu() {
         {/* Main Tabs */}
         <Tabs value={mainTab} onValueChange={setMainTab} className="flex-1 flex flex-col">
           <TabsList className="w-fit">
+            <TabsTrigger value="categories">CATEGORIAS</TabsTrigger>
             <TabsTrigger value="products">PRODUTOS</TabsTrigger>
             <TabsTrigger value="extras">COMPLEMENTOS</TabsTrigger>
             <TabsTrigger value="variations">OPÇÕES</TabsTrigger>
           </TabsList>
 
+          {/* Categories Tab */}
+          <TabsContent value="categories" className="flex-1 mt-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Categorias</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Organize suas categorias de produtos. Arraste para reordenar.
+                  </p>
+                </div>
+                <Button onClick={() => { setEditingCategory(null); setCategoryForm({ name: '', description: '', icon: '', is_active: true }); setIsCategoryDialogOpen(true); }}>
+                  <Plus className="h-4 w-4 mr-2" />Nova Categoria
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleCategoryDragEnd}>
+                  <SortableContext items={categories?.map(c => c.id) || []} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-2">
+                      {categories?.map((category) => (
+                        <SortableItem key={category.id} id={category.id}>
+                          <div className="flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
+                            <span className="text-2xl">{category.icon || '📁'}</span>
+                            <div className="flex-1">
+                              <h3 className="font-medium">{category.name}</h3>
+                              {category.description && (
+                                <p className="text-sm text-muted-foreground">{category.description}</p>
+                              )}
+                            </div>
+                            <Badge variant="secondary">
+                              {products?.filter(p => p.category_id === category.id).length || 0} produtos
+                            </Badge>
+                            <Badge variant={category.is_active ? 'default' : 'secondary'}>
+                              {category.is_active ? 'Ativa' : 'Inativa'}
+                            </Badge>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => openEditCategory(category)}>
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleDuplicateCategory(category)}>
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="text-destructive"
+                                onClick={() => deleteCategory.mutate(category.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </SortableItem>
+                      ))}
+                      {!categories?.length && (
+                        <div className="text-center py-12 text-muted-foreground">
+                          Nenhuma categoria cadastrada
+                        </div>
+                      )}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* Products Tab */}
           <TabsContent value="products" className="flex-1 mt-4">
-            <div className="flex gap-4 h-full">
-              {/* Category Sidebar */}
-              <Card className="w-64 shrink-0">
-                <CardHeader className="p-3 border-b">
-                  <div className="flex items-center justify-between">
+            <DndContext 
+              sensors={sensors} 
+              collisionDetection={closestCenter}
+              onDragStart={handleProductDragStart}
+              onDragEnd={handleProductDragEnd}
+            >
+              <div className="flex gap-4 h-full">
+                {/* Category Sidebar - Drop zones */}
+                <Card className="w-64 shrink-0">
+                  <CardHeader className="p-3 border-b">
                     <CardTitle className="text-sm font-medium">CATEGORIAS</CardTitle>
-                    <div className="flex gap-1">
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-7 w-7"
-                        onClick={() => setIsCategorySortMode(!isCategorySortMode)}
-                      >
-                        <GripVertical className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-7 w-7"
-                        onClick={() => { setEditingCategory(null); setCategoryForm({ name: '', description: '', icon: '', is_active: true }); setIsCategoryDialogOpen(true); }}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <ScrollArea className="h-[calc(100vh-320px)]">
-                    {isCategorySortMode && categories?.length ? (
-                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleCategoryDragEnd}>
-                        <SortableContext items={categories.map(c => c.id)} strategy={verticalListSortingStrategy}>
-                          <div className="p-2 space-y-1">
-                            {categories.map((category) => (
-                              <SortableItem key={category.id} id={category.id}>
-                                <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50 cursor-grab">
-                                  <GripVertical className="h-4 w-4 text-muted-foreground" />
-                                  <span>{category.icon || '📁'}</span>
-                                  <span className="text-sm truncate flex-1">{category.name}</span>
-                                </div>
-                              </SortableItem>
-                            ))}
-                          </div>
-                        </SortableContext>
-                      </DndContext>
-                    ) : (
-                      <div className="p-2 space-y-1">
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Arraste produtos para mover
+                    </p>
+                  </CardHeader>
+                  <CardContent className="p-2">
+                    <ScrollArea className="h-[calc(100vh-400px)]">
+                      <div className="space-y-2">
                         {categories?.map((category) => (
-                          <div key={category.id} className="group flex items-center">
-                            <button
-                              onClick={() => setSelectedCategoryId(category.id)}
-                              className={`flex-1 text-left p-2 rounded-md text-sm transition-colors flex items-center gap-2 ${
-                                selectedCategoryId === category.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                              }`}
-                            >
-                              <span>{category.icon || '📁'}</span>
-                              <span className="flex-1 truncate">{category.name}</span>
-                              <span className="text-xs opacity-70">
-                                {products?.filter(p => p.category_id === category.id).length || 0}
-                              </span>
-                            </button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100">
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => openEditCategory(category)}>
-                                  <Edit className="h-4 w-4 mr-2" />Editar
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleDuplicateCategory(category)}>
-                                  <Copy className="h-4 w-4 mr-2" />Duplicar
-                                </DropdownMenuItem>
-                                <DropdownMenuItem 
-                                  className="text-destructive"
-                                  onClick={() => deleteCategory.mutate(category.id)}
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />Excluir
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                          <div
+                            key={category.id}
+                            onClick={() => setSelectedCategoryId(category.id)}
+                            className="cursor-pointer"
+                          >
+                            <DroppableCategory 
+                              category={category} 
+                              isActive={selectedCategoryId === category.id}
+                            />
                           </div>
                         ))}
                       </div>
-                    )}
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-
-              {/* Products Grid */}
-              <div className="flex-1">
-                {/* Category Header */}
-                {selectedCategory && (
-                  <div className="mb-4 flex items-center justify-between">
-                    <div>
-                      <h2 className="text-lg font-semibold flex items-center gap-2">
-                        <span>{selectedCategory.icon || '📁'}</span>
-                        {selectedCategory.name}
-                      </h2>
-                      {selectedCategory.description && (
-                        <p className="text-sm text-muted-foreground">{selectedCategory.description}</p>
-                      )}
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => openEditCategory(selectedCategory)}>
-                      Editar Categoria
-                    </Button>
-                  </div>
-                )}
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
 
                 {/* Products Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {filteredProducts?.map((product) => (
-                    <Card key={product.id} className="group overflow-hidden">
-                      <div className="relative aspect-square bg-muted">
-                        {product.image_url ? (
-                          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Package className="h-12 w-12 text-muted-foreground/50" />
-                          </div>
+                <div className="flex-1">
+                  {/* Filters Bar */}
+                  <div className="mb-4 flex items-center gap-3 flex-wrap">
+                    <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as any)}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="active">Ativos</SelectItem>
+                        <SelectItem value="inactive">Inativos</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    
+                    <Select value={filterPromotion} onValueChange={(v) => setFilterPromotion(v as any)}>
+                      <SelectTrigger className="w-36">
+                        <SelectValue placeholder="Promoção" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas</SelectItem>
+                        <SelectItem value="yes">Em Promoção</SelectItem>
+                        <SelectItem value="no">Sem Promoção</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    
+                    <Select value={filterFeatured} onValueChange={(v) => setFilterFeatured(v as any)}>
+                      <SelectTrigger className="w-36">
+                        <SelectValue placeholder="Destaque" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="yes">Em Destaque</SelectItem>
+                        <SelectItem value="no">Sem Destaque</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {hasActiveFilters && (
+                      <Button variant="ghost" size="sm" onClick={clearFilters}>
+                        <X className="h-4 w-4 mr-1" />
+                        Limpar filtros
+                      </Button>
+                    )}
+
+                    <div className="ml-auto text-sm text-muted-foreground">
+                      {filteredProducts?.length || 0} produto(s)
+                    </div>
+                  </div>
+
+                  {/* Category Header */}
+                  {selectedCategory && (
+                    <div className="mb-4 flex items-center justify-between">
+                      <div>
+                        <h2 className="text-lg font-semibold flex items-center gap-2">
+                          <span>{selectedCategory.icon || '📁'}</span>
+                          {selectedCategory.name}
+                        </h2>
+                        {selectedCategory.description && (
+                          <p className="text-sm text-muted-foreground">{selectedCategory.description}</p>
                         )}
-                        {/* Status Badge */}
-                        <Badge 
-                          variant={product.is_available ? "default" : "secondary"}
-                          className="absolute top-2 left-2 text-xs"
-                        >
-                          {product.is_available ? 'ATIVO' : 'OCULTO'}
-                        </Badge>
-                        {/* Featured Badge */}
-                        {product.is_featured && (
-                          <Badge variant="outline" className="absolute top-2 right-2 bg-background">
-                            <Star className="h-3 w-3 mr-1 fill-yellow-500 text-yellow-500" />
-                            Destaque
-                          </Badge>
-                        )}
-                        {/* Promotion Badge */}
-                        {product.is_promotion && (
-                          <Badge variant="destructive" className="absolute bottom-2 left-2">
-                            <Percent className="h-3 w-3 mr-1" />
-                            Promoção
-                          </Badge>
-                        )}
-                        {/* Actions Menu */}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button 
-                              variant="secondary" 
-                              size="icon" 
-                              className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => openEditProduct(product)}>
-                              <Edit className="h-4 w-4 mr-2" />Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => updateProduct.mutate({ id: product.id, is_available: !product.is_available })}
-                            >
-                              {product.is_available ? (
-                                <><EyeOff className="h-4 w-4 mr-2" />Ocultar</>
-                              ) : (
-                                <><Eye className="h-4 w-4 mr-2" />Mostrar</>
-                              )}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              className="text-destructive"
-                              onClick={() => deleteProduct.mutate(product.id)}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />Excluir
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
                       </div>
-                      <CardContent className="p-3">
-                        <h3 className="font-medium truncate">{product.name}</h3>
-                        <div className="flex items-center gap-2 mt-1">
-                          {product.is_promotion && product.promotion_price ? (
-                            <>
-                              <span className="text-sm text-muted-foreground line-through">{formatCurrency(product.price)}</span>
-                              <span className="font-semibold text-destructive">{formatCurrency(product.promotion_price)}</span>
-                            </>
-                          ) : (
-                            <span className="font-semibold">{formatCurrency(product.price)}</span>
-                          )}
-                        </div>
-                        {product.label && product.label !== 'none' && (
-                          <Badge variant="outline" className="mt-2 text-xs">
-                            {LABEL_OPTIONS.find(l => l.value === product.label)?.label || product.label}
-                          </Badge>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
-                  {!filteredProducts?.length && (
-                    <div className="col-span-full text-center py-12 text-muted-foreground">
-                      Nenhum produto encontrado
                     </div>
                   )}
+
+                  {/* Products Grid with Draggable Cards */}
+                  <SortableContext items={filteredProducts?.map(p => p.id) || []} strategy={verticalListSortingStrategy}>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {filteredProducts?.map((product) => (
+                        <DraggableProductCard key={product.id} product={product} />
+                      ))}
+                      {!filteredProducts?.length && (
+                        <div className="col-span-full text-center py-12 text-muted-foreground">
+                          Nenhum produto encontrado
+                        </div>
+                      )}
+                    </div>
+                  </SortableContext>
                 </div>
               </div>
-            </div>
+
+              {/* Drag Overlay */}
+              <DragOverlay>
+                {draggedProduct && (
+                  <Card className="w-48 shadow-lg ring-2 ring-primary">
+                    <div className="aspect-square bg-muted">
+                      {draggedProduct.image_url ? (
+                        <img src={draggedProduct.image_url} alt={draggedProduct.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Package className="h-8 w-8 text-muted-foreground/50" />
+                        </div>
+                      )}
+                    </div>
+                    <CardContent className="p-2">
+                      <p className="font-medium text-sm truncate">{draggedProduct.name}</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </DragOverlay>
+            </DndContext>
           </TabsContent>
 
           {/* Complement Groups Tab */}
