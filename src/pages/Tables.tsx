@@ -765,19 +765,6 @@ export default function Tables() {
     }
   };
 
-  // Save edited customer name - now uses callback for CustomerNameInput component
-  const handleSaveCustomerName = useCallback(async (newName: string) => {
-    if (!selectedOrder) return;
-    try {
-      await updateOrder.mutateAsync({
-        id: selectedOrder.id,
-        customer_name: newName.trim() || null
-      });
-      toast.success('Nome do cliente atualizado');
-    } catch (error) {
-      toast.error('Erro ao atualizar nome');
-    }
-  }, [selectedOrder, updateOrder]);
 
   // Close empty table (no consumption)
   const handleCloseEmptyTable = async () => {
@@ -934,6 +921,20 @@ export default function Tables() {
   });
 
   const selectedOrder = selectedTable ? getTableOrder(selectedTable.id) : null;
+
+  // Save edited customer name - now uses callback for CustomerNameInput component
+  const handleSaveCustomerName = useCallback(async (newName: string) => {
+    if (!selectedOrder) return;
+    try {
+      await updateOrder.mutateAsync({
+        id: selectedOrder.id,
+        customer_name: newName.trim() || null
+      });
+      toast.success('Nome do cliente atualizado');
+    } catch (error) {
+      toast.error('Erro ao atualizar nome');
+    }
+  }, [selectedOrder, updateOrder]);
 
   // Fetch existing partial payments for the selected order WITH receiver profile
   const { data: existingPayments } = useQuery({
