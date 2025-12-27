@@ -366,7 +366,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col p-0">
+      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col p-0 overflow-hidden">
         {/* Header with image */}
         <div className="relative">
           {product.image_url ? (
@@ -402,7 +402,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
         </div>
 
         {/* Content */}
-        <ScrollArea className="flex-1 max-h-[50vh] px-4">
+        <ScrollArea className="flex-1 min-h-0 px-4">
           <div className="space-y-4 py-4">
             {product.description && (
               <p className="text-sm text-muted-foreground">{product.description}</p>
