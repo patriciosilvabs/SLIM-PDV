@@ -16,6 +16,21 @@ export interface OrderItemStation {
   sort_order: number | null;
 }
 
+export interface OrderItemSubExtra {
+  id: string;
+  group_name: string;
+  option_name: string;
+  price: number;
+  quantity: number;
+}
+
+export interface OrderItemSubItem {
+  id: string;
+  sub_item_index: number;
+  notes: string | null;
+  sub_extras: OrderItemSubExtra[];
+}
+
 export interface OrderItem {
   id: string;
   order_id: string;
@@ -35,6 +50,7 @@ export interface OrderItem {
   extras?: { extra_name: string; price: number }[] | null;
   current_station?: OrderItemStation | null;
   added_by_profile?: { name: string } | null;
+  sub_items?: OrderItemSubItem[] | null;
 }
 
 export interface Order {
@@ -72,7 +88,7 @@ export function useOrders(status?: OrderStatus[]) {
     queryFn: async () => {
       let q = supabase
         .from('orders')
-        .select('*, table:tables(number), order_items(*, added_by, product:products(name, image_url), variation:product_variations(name), extras:order_item_extras(extra_name, price), current_station:kds_stations(id, name, station_type, color, icon, sort_order))')
+        .select('*, table:tables(number), order_items(*, added_by, product:products(name, image_url), variation:product_variations(name), extras:order_item_extras(extra_name, price), current_station:kds_stations(id, name, station_type, color, icon, sort_order), sub_items:order_item_sub_items(id, sub_item_index, notes, sub_extras:order_item_sub_item_extras(id, group_name, option_name, price, quantity)))')
         .order('created_at', { ascending: false });
       
       if (status && status.length > 0) {
@@ -125,7 +141,8 @@ export function useOrders(status?: OrderStatus[]) {
           variation: item.variation as { name: string } | null,
           extras: item.extras as { extra_name: string; price: number }[] | null,
           current_station: item.current_station as OrderItemStation | null,
-          added_by_profile: (item.added_by as string) ? profilesMap[item.added_by as string] || null : null
+          added_by_profile: (item.added_by as string) ? profilesMap[item.added_by as string] || null : null,
+          sub_items: item.sub_items as OrderItemSubItem[] | null,
         })) as OrderItem[];
 
         return {
