@@ -51,7 +51,6 @@ import {
   ServiceChargeInput,
   CustomSplitInput,
   OrderDrawer,
-  CartBar,
   CartReviewSheet,
   ProductSelector,
   PendingCartPanel,
@@ -3145,11 +3144,8 @@ export default function Tables() {
             tableNumber={selectedTable?.number}
             onAddItem={addToPendingCart}
             pendingItemsCount={pendingCartItems.length}
-          />
-
-          <CartBar
-            items={pendingCartItems}
-            onClick={() => setIsCartReviewOpen(true)}
+            cartItems={pendingCartItems}
+            onCartClick={() => setIsCartReviewOpen(true)}
           />
 
           <CartReviewSheet
