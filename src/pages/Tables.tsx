@@ -537,6 +537,18 @@ export default function Tables() {
   };
 
   const handleTableClick = (table: Table) => {
+    // Reset closing states when switching tables to prevent data leak
+    setIsClosingBill(false);
+    setRegisteredPayments([]);
+    setDiscountType('percentage');
+    setDiscountValue(0);
+    setServiceChargeEnabled(false);
+    setServiceChargePercent(10);
+    setSplitBillEnabled(false);
+    setSplitCount(2);
+    setSplitMode('equal');
+    setCustomSplits([]);
+    
     if (table.status === 'available') {
       setTableToOpen(table);
       setOpenTableData({ people: table.capacity || 2, identification: '' });
@@ -2241,6 +2253,19 @@ export default function Tables() {
             notes: data.people ? `${data.people} pessoas` : null,
             is_draft: true,
           });
+          
+          // Reset all closing states to prevent data leak from previous table
+          setIsClosingBill(false);
+          setRegisteredPayments([]);
+          setDiscountType('percentage');
+          setDiscountValue(0);
+          setServiceChargeEnabled(false);
+          setServiceChargePercent(10);
+          setSplitBillEnabled(false);
+          setSplitCount(2);
+          setSplitMode('equal');
+          setCustomSplits([]);
+          
           setIsOpenTableDialogOpen(false);
           setSelectedTable({ ...tableToOpen, status: 'occupied' });
           setTableToOpen(null);
