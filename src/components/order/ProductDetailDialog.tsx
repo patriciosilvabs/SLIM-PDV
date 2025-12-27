@@ -117,7 +117,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
         }
 
         // Get options for all groups
-        const { data: groupOptions } = await supabase
+        const { data: groupOptions, error: optionsError } = await supabase
           .from('complement_group_options')
           .select(`
             group_id,
@@ -129,15 +129,24 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
           .in('group_id', groupIds)
           .order('sort_order');
 
+        console.log('[ProductDetailDialog] groupIds:', groupIds);
+        console.log('[ProductDetailDialog] groupOptions raw:', groupOptions);
+        console.log('[ProductDetailDialog] optionsError:', optionsError);
+
         // Build groups with options - filter active options only
         const groupsWithOptions: GroupWithOptions[] = groupsData.map(group => {
-          const options = groupOptions
-            ?.filter(go => go.group_id === group.id && go.option && (go.option as { is_active?: boolean }).is_active !== false)
+          const filteredOptions = groupOptions?.filter(go => go.group_id === group.id && go.option);
+          console.log(`[ProductDetailDialog] Group ${group.name} - filtered options:`, filteredOptions);
+          
+          const options = filteredOptions
+            ?.filter(go => (go.option as { is_active?: boolean }).is_active !== false)
             .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
             .map(go => ({
               ...(go.option as Record<string, unknown>),
               price_override: go.price_override,
             })) as ComplementOption[] || [];
+          
+          console.log(`[ProductDetailDialog] Group ${group.name} - final options:`, options);
 
           return {
             id: group.id,
