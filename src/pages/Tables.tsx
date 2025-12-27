@@ -56,6 +56,36 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
+// Session storage keys for cooldown persistence
+const WAIT_COOLDOWN_KEY = 'table-wait-cooldowns';
+const IDLE_COOLDOWN_KEY = 'idle-table-cooldowns';
+
+// Helper function to load cooldowns from sessionStorage (defined outside component to avoid hooks issues)
+function loadCooldowns(key: string): Map<string, number> {
+  try {
+    const stored = sessionStorage.getItem(key);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      const now = Date.now();
+      // Filter out expired entries (older than 1 hour)
+      const filtered = Object.entries(parsed).filter(([_, time]) => now - (time as number) < 3600000);
+      return new Map(filtered.map(([k, v]) => [k, v as number]));
+    }
+  } catch (e) {
+    console.error('Error loading cooldowns:', e);
+  }
+  return new Map();
+}
+
+// Helper function to save cooldowns to sessionStorage
+function saveCooldowns(key: string, map: Map<string, number>) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify(Object.fromEntries(map)));
+  } catch (e) {
+    console.error('Error saving cooldowns:', e);
+  }
+}
+
 const statusLabels: Record<TableStatus, string> = {
   available: 'Livre',
   occupied: 'Ocupada',
@@ -136,35 +166,6 @@ export default function Tables() {
   // Cash register hooks
   const { data: openCashRegister } = useOpenCashRegister();
   const { createPayment } = useCashRegisterMutations();
-  
-// Session storage keys for cooldown persistence
-  const WAIT_COOLDOWN_KEY = 'table-wait-cooldowns';
-  const IDLE_COOLDOWN_KEY = 'idle-table-cooldowns';
-  
-  // Helper functions for cooldown persistence
-  const loadCooldowns = useCallback((key: string): Map<string, number> => {
-    try {
-      const stored = sessionStorage.getItem(key);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const now = Date.now();
-        // Filter out expired entries (older than 1 hour)
-        const filtered = Object.entries(parsed).filter(([_, time]) => now - (time as number) < 3600000);
-        return new Map(filtered.map(([k, v]) => [k, v as number]));
-      }
-    } catch (e) {
-      console.error('Error loading cooldowns:', e);
-    }
-    return new Map();
-  }, []);
-  
-  const saveCooldowns = useCallback((key: string, map: Map<string, number>) => {
-    try {
-      sessionStorage.setItem(key, JSON.stringify(Object.fromEntries(map)));
-    } catch (e) {
-      console.error('Error saving cooldowns:', e);
-    }
-  }, []);
   
   // Refs for tracking order status changes
   const previousOrdersRef = useRef<Order[]>([]);
@@ -350,7 +351,7 @@ export default function Tables() {
     const interval = setInterval(checkTableWaitTimes, 60000);
     
     return () => clearInterval(interval);
-  }, [orders, tables, tableWaitSettings, audioSettings.enabled, playTableWaitAlertSound, saveCooldowns, WAIT_COOLDOWN_KEY]);
+  }, [orders, tables, tableWaitSettings, audioSettings.enabled, playTableWaitAlertSound]);
 
   // Check for idle tables (opened without items OR delivered orders) and alert/auto-close
   useEffect(() => {
