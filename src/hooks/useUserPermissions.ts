@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserRole } from './useUserRole';
-import { useTenant } from './useTenant';
 
 export type PermissionCode =
   // Orders
@@ -299,11 +298,17 @@ export function useUserPermissionsById(userId: string | null) {
 export function useUserPermissionMutations() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { tenantId } = useTenant();
+
+  // Helper function to get tenant_id via RPC (avoids hook order issues)
+  const getTenantId = async (): Promise<string | null> => {
+    const { data } = await supabase.rpc('get_user_tenant_id');
+    return data;
+  };
 
   const setPermission = useMutation({
     mutationFn: async ({ userId, permission, granted }: { userId: string; permission: PermissionCode; granted: boolean }) => {
       if (granted) {
+        const tenantId = await getTenantId();
         // Upsert permission
         const { error } = await supabase
           .from('user_permissions')
@@ -343,6 +348,7 @@ export function useUserPermissionMutations() {
       // Insert only granted permissions
       const grantedPermissions = permissions.filter(p => p.granted);
       if (grantedPermissions.length > 0) {
+        const tenantId = await getTenantId();
         const { error } = await supabase
           .from('user_permissions')
           .insert(grantedPermissions.map(p => ({
@@ -380,6 +386,7 @@ export function useUserPermissionMutations() {
 
       // Copy permissions
       if (sourcePermissions && sourcePermissions.length > 0) {
+        const tenantId = await getTenantId();
         const { error } = await supabase
           .from('user_permissions')
           .insert(sourcePermissions.map(p => ({
