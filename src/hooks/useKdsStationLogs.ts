@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKdsStations } from './useKdsStations';
+import { useTenant } from './useTenant';
 
 export interface KdsStationLog {
   id: string;
@@ -46,6 +47,7 @@ export interface BottleneckInfo {
 
 export function useKdsStationLogs() {
   const { user } = useAuth();
+  const { tenantId } = useTenant();
 
   // Registrar ação no log
   const logAction = useMutation({
@@ -71,6 +73,7 @@ export function useKdsStationLogs() {
           performed_by: user?.id,
           duration_seconds: durationSeconds,
           notes,
+          tenant_id: tenantId,
         })
         .select()
         .single();
