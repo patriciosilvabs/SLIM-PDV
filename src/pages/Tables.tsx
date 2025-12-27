@@ -364,11 +364,12 @@ export default function Tables() {
       const occupiedTables = tables.filter(t => t.status === 'occupied');
       
       for (const table of occupiedTables) {
-        // Scenario 1: Order WITHOUT items (empty)
+        // Scenario 1: Order WITHOUT items (empty) - ignora drafts
         const emptyOrder = orders.find(o => 
           o.table_id === table.id && 
           o.status !== 'delivered' && 
           o.status !== 'cancelled' &&
+          o.is_draft !== true && // Ignorar pedidos em rascunho
           (!o.order_items || o.order_items.length === 0)
         );
         
@@ -469,9 +470,12 @@ export default function Tables() {
   const getTableOrder = (tableId: string) => {
     const table = tables?.find(t => t.id === tableId);
     // Se a mesa está livre, não retorna pedidos 'delivered'
+    // Ignora pedidos em rascunho sem itens (drafts vazios)
     return orders?.find(o => 
       o.table_id === tableId && 
       o.status !== 'cancelled' &&
+      // Ignorar drafts sem itens
+      !(o.is_draft === true && (!o.order_items || o.order_items.length === 0)) &&
       (table?.status !== 'available' || o.status !== 'delivered')
     );
   };
