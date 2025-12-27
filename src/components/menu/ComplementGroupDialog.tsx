@@ -31,13 +31,21 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+export interface OptionConfig {
+  option_id: string;
+  max_quantity?: number;
+  price_override?: number | null;
+  sort_order?: number;
+}
+
 interface ComplementGroupDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   group: Partial<ComplementGroup> | null;
   options: ComplementOption[];
   linkedOptionIds: string[];
-  onSave: (group: Partial<ComplementGroup>, optionIds: string[]) => void;
+  linkedOptionConfigs?: Array<{ option_id: string; max_quantity?: number; price_override?: number | null }>;
+  onSave: (group: Partial<ComplementGroup>, optionConfigs: OptionConfig[]) => void;
   onCreateOption?: (option: { name: string; price: number }) => Promise<ComplementOption | undefined>;
   onEditOption?: (option: ComplementOption) => void;
   onToggleOptionActive?: (optionId: string, active: boolean) => void;
@@ -188,6 +196,7 @@ export function ComplementGroupDialog({
   group,
   options,
   linkedOptionIds,
+  linkedOptionConfigs,
   onSave,
   onCreateOption,
   onEditOption,
@@ -259,15 +268,45 @@ export function ComplementGroupDialog({
       }
       setSelectedOptionIds(linkedOptionIds);
       setLocalOptions([]);
-      setOptionConfigs({});
+      
+      // Initialize optionConfigs from linkedOptionConfigs if available
+      if (linkedOptionConfigs && linkedOptionConfigs.length > 0) {
+        const configs: Record<string, { maxQty: number; price: number; confirmed: boolean }> = {};
+        linkedOptionConfigs.forEach(config => {
+          const option = options.find(o => o.id === config.option_id);
+          configs[config.option_id] = {
+            maxQty: config.max_quantity ?? 1,
+            price: config.price_override ?? option?.price ?? 0,
+            confirmed: true
+          };
+        });
+        setOptionConfigs(configs);
+      } else {
+        setOptionConfigs({});
+      }
+      
       setSearchTerm('');
       setShowOptionSearch(false);
     }
-  }, [group, linkedOptionIds, open]);
+  }, [group, linkedOptionIds, linkedOptionConfigs, open, options]);
 
   const handleSave = () => {
     if (!form.name?.trim()) return;
-    onSave(form, selectedOptionIds);
+    
+    // Build array with configurations for each option
+    const configs: OptionConfig[] = selectedOptionIds.map((optionId, index) => {
+      const config = optionConfigs[optionId] || { maxQty: 1, price: 0 };
+      const option = allOptions.find(o => o.id === optionId);
+      
+      return {
+        option_id: optionId,
+        max_quantity: config.maxQty || 1,
+        price_override: config.price !== (option?.price ?? 0) ? config.price : null,
+        sort_order: index
+      };
+    });
+    
+    onSave(form, configs);
   };
 
   const toggleOption = (optionId: string) => {

@@ -8,8 +8,16 @@ export interface ComplementGroupOption {
   group_id: string;
   option_id: string;
   price_override: number | null;
+  max_quantity: number | null;
   sort_order: number | null;
   created_at: string | null;
+}
+
+export interface OptionWithConfig {
+  option_id: string;
+  max_quantity?: number;
+  price_override?: number | null;
+  sort_order?: number;
 }
 
 export interface GroupOptionWithDetails extends ComplementGroupOption {
@@ -104,7 +112,7 @@ export function useComplementGroupOptionsMutations() {
   });
 
   const setGroupOptions = useMutation({
-    mutationFn: async ({ groupId, optionIds }: { groupId: string; optionIds: string[] }) => {
+    mutationFn: async ({ groupId, options }: { groupId: string; options: OptionWithConfig[] }) => {
       // Delete existing
       const { error: deleteError } = await supabase
         .from('complement_group_options')
@@ -113,12 +121,14 @@ export function useComplementGroupOptionsMutations() {
       
       if (deleteError) throw deleteError;
       
-      // Insert new
-      if (optionIds.length > 0) {
-        const links = optionIds.map((option_id, index) => ({
+      // Insert new with all configurations
+      if (options.length > 0) {
+        const links = options.map((opt, index) => ({
           group_id: groupId,
-          option_id,
-          sort_order: index,
+          option_id: opt.option_id,
+          sort_order: opt.sort_order ?? index,
+          max_quantity: opt.max_quantity ?? 1,
+          price_override: opt.price_override ?? null,
           tenant_id: tenantId
         }));
         

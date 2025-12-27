@@ -118,6 +118,7 @@ export default function Menu() {
   const [isGroupDialogOpen, setIsGroupDialogOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<ComplementGroup | null>(null);
   const [groupLinkedOptionIds, setGroupLinkedOptionIds] = useState<string[]>([]);
+  const [groupLinkedOptionConfigs, setGroupLinkedOptionConfigs] = useState<Array<{ option_id: string; max_quantity?: number; price_override?: number | null }>>([]);
   const [groupLinkedProductIds, setGroupLinkedProductIds] = useState<string[]>([]);
 
   // Complement Option dialog state
@@ -335,7 +336,11 @@ export default function Menu() {
       if (groupOptions?.length) {
         await setGroupOptions.mutateAsync({ 
           groupId: newGroup.id, 
-          optionIds: groupOptions.map(o => o.option_id) 
+          options: groupOptions.map(o => ({ 
+            option_id: o.option_id, 
+            max_quantity: 1, 
+            price_override: null 
+          }))
         });
       }
       
@@ -350,7 +355,7 @@ export default function Menu() {
 
   const handleSaveComplementGroup = async (
     groupData: Partial<ComplementGroup>, 
-    optionIds: string[]
+    optionConfigs: Array<{ option_id: string; max_quantity?: number; price_override?: number | null; sort_order?: number }>
   ) => {
     let groupId = editingGroup?.id;
     if (editingGroup) {
@@ -360,11 +365,12 @@ export default function Menu() {
       groupId = result.id;
     }
     if (groupId) {
-      await setGroupOptions.mutateAsync({ groupId, optionIds });
+      await setGroupOptions.mutateAsync({ groupId, options: optionConfigs });
     }
     setIsGroupDialogOpen(false);
     setEditingGroup(null);
     setGroupLinkedOptionIds([]);
+    setGroupLinkedOptionConfigs([]);
     setGroupLinkedProductIds([]);
   };
 
@@ -834,7 +840,7 @@ export default function Menu() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Grupos de Complementos</CardTitle>
-                <Button onClick={() => { setEditingGroup(null); setGroupLinkedOptionIds([]); setGroupLinkedProductIds([]); setIsGroupDialogOpen(true); }}>
+                <Button onClick={() => { setEditingGroup(null); setGroupLinkedOptionIds([]); setGroupLinkedOptionConfigs([]); setGroupLinkedProductIds([]); setIsGroupDialogOpen(true); }}>
                   <Plus className="h-4 w-4 mr-2" />Novo Grupo
                 </Button>
               </CardHeader>
@@ -886,10 +892,10 @@ export default function Menu() {
                               size="icon" 
                               onClick={async () => { 
                                 setEditingGroup(group);
-                                // Carregar opções vinculadas ao grupo
+                                // Carregar opções vinculadas ao grupo com configs
                                 const { data: groupOptions } = await supabase
                                   .from('complement_group_options')
-                                  .select('option_id')
+                                  .select('option_id, max_quantity, price_override')
                                   .eq('group_id', group.id)
                                   .order('sort_order');
                                 // Carregar produtos vinculados ao grupo
@@ -898,6 +904,11 @@ export default function Menu() {
                                   .select('product_id')
                                   .eq('group_id', group.id);
                                 setGroupLinkedOptionIds(groupOptions?.map(o => o.option_id) || []);
+                                setGroupLinkedOptionConfigs(groupOptions?.map(o => ({ 
+                                  option_id: o.option_id, 
+                                  max_quantity: o.max_quantity, 
+                                  price_override: o.price_override 
+                                })) || []);
                                 setGroupLinkedProductIds(groupProducts?.map(p => p.product_id) || []);
                                 setIsGroupDialogOpen(true); 
                               }}
@@ -1245,13 +1256,18 @@ export default function Menu() {
                                       onClick={async (e) => {
                                         e.stopPropagation();
                                         setEditingGroup(group);
-                                        // Carregar opções vinculadas ao grupo
+                                        // Carregar opções vinculadas ao grupo com configs
                                         const { data: groupOptions } = await supabase
                                           .from('complement_group_options')
-                                          .select('option_id')
+                                          .select('option_id, max_quantity, price_override')
                                           .eq('group_id', group.id)
                                           .order('sort_order');
                                         setGroupLinkedOptionIds(groupOptions?.map(o => o.option_id) || []);
+                                        setGroupLinkedOptionConfigs(groupOptions?.map(o => ({ 
+                                          option_id: o.option_id, 
+                                          max_quantity: o.max_quantity, 
+                                          price_override: o.price_override 
+                                        })) || []);
                                         setIsGroupDialogOpen(true);
                                       }}
                                     >
@@ -1392,6 +1408,7 @@ export default function Menu() {
           group={editingGroup}
           options={complementOptions || []}
           linkedOptionIds={groupLinkedOptionIds}
+          linkedOptionConfigs={groupLinkedOptionConfigs}
           onSave={handleSaveComplementGroup}
           onCreateOption={async (optionData) => {
             const result = await createOption.mutateAsync(optionData as any);

@@ -264,6 +264,7 @@ export type Database = {
           created_at: string | null
           group_id: string
           id: string
+          max_quantity: number | null
           option_id: string
           price_override: number | null
           sort_order: number | null
@@ -273,6 +274,7 @@ export type Database = {
           created_at?: string | null
           group_id: string
           id?: string
+          max_quantity?: number | null
           option_id: string
           price_override?: number | null
           sort_order?: number | null
@@ -282,6 +284,7 @@ export type Database = {
           created_at?: string | null
           group_id?: string
           id?: string
+          max_quantity?: number | null
           option_id?: string
           price_override?: number | null
           sort_order?: number | null
