@@ -1395,6 +1395,10 @@ export default function Menu() {
             const result = await createOption.mutateAsync(optionData as any);
             return result as any;
           }}
+          onEditOption={(option) => {
+            setEditingOption(option);
+            setIsOptionDialogOpen(true);
+          }}
           isEditing={!!editingGroup}
         />
 
