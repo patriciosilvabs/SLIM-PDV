@@ -6,11 +6,13 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Plus, Trash2, GripVertical, Lock, ChevronDown, Settings2, Edit } from 'lucide-react';
+import { Plus, Trash2, GripVertical, ChevronDown, Settings2, Edit, Check, Package, ArrowUpDown } from 'lucide-react';
 import { ComplementGroup } from '@/hooks/useComplementGroups';
 import { ComplementOption } from '@/hooks/useComplementOptions';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   DndContext,
   closestCenter,
@@ -56,7 +58,8 @@ const VISIBILITY_OPTIONS = [
 const CHANNEL_OPTIONS = [
   { value: 'delivery', label: 'Delivery' },
   { value: 'counter', label: 'Balcão' },
-  { value: 'table', label: 'Mesa' },
+  { value: 'table', label: 'Mesa (público)' },
+  { value: 'table_internal', label: 'Mesa (interno)' },
 ];
 
 const PRICE_CALCULATION_TYPES = [
@@ -66,58 +69,64 @@ const PRICE_CALCULATION_TYPES = [
   { value: 'lowest', label: 'O preço da opção', description: 'mais barata escolhida' },
 ];
 
-interface SortableOptionProps {
+interface InlineOptionRowProps {
   option: ComplementOption;
+  maxQty: number;
+  priceOverride: number;
   onRemove: () => void;
-  onEdit?: () => void;
-  onToggleActive?: (active: boolean) => void;
+  onMaxQtyChange: (qty: number) => void;
+  onPriceChange: (price: number) => void;
+  onConfirm: () => void;
+  isConfirmed: boolean;
+  isDragging?: boolean;
+  dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
 }
 
-function SortableOption({ option, onRemove, onEdit, onToggleActive }: SortableOptionProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: option.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-
+function InlineOptionRow({ 
+  option, 
+  maxQty, 
+  priceOverride, 
+  onRemove, 
+  onMaxQtyChange, 
+  onPriceChange, 
+  onConfirm,
+  isConfirmed,
+  dragHandleProps 
+}: InlineOptionRowProps) {
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="flex items-center gap-3 p-3 border rounded-lg bg-card"
-    >
-      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
+    <div className="flex items-center gap-2 py-2">
+      <div {...dragHandleProps} className="cursor-grab active:cursor-grabbing">
         <GripVertical className="h-4 w-4 text-muted-foreground" />
       </div>
-      <Lock className="h-4 w-4 text-muted-foreground" />
-      <span className="flex-1 font-medium">{option.name}</span>
-      <span className="text-sm text-muted-foreground">
-        R$ {option.price.toFixed(2)}
-      </span>
-      <Switch 
-        checked={option.is_active ?? true} 
-        onCheckedChange={onToggleActive}
-        disabled={!onToggleActive}
+      <div className="flex-1 text-sm font-medium truncate">{option.name}</div>
+      <Input
+        type="number"
+        min={1}
+        value={maxQty}
+        onChange={(e) => onMaxQtyChange(parseInt(e.target.value) || 1)}
+        className="w-20 h-8 text-center text-sm"
+        placeholder="Qtd. Máx"
       />
-      {onEdit && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={onEdit}
-        >
-          <Edit className="h-4 w-4" />
-        </Button>
-      )}
+      <div className="relative">
+        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
+        <Input
+          type="number"
+          step="0.01"
+          min={0}
+          value={priceOverride.toFixed(2)}
+          onChange={(e) => onPriceChange(parseFloat(e.target.value) || 0)}
+          className="w-24 h-8 pl-8 text-sm"
+          placeholder="0.00"
+        />
+      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        className={`h-8 w-8 ${isConfirmed ? 'text-green-500' : 'text-muted-foreground'}`}
+        onClick={onConfirm}
+      >
+        <Check className="h-4 w-4" />
+      </Button>
       <Button
         variant="ghost"
         size="icon"
@@ -126,6 +135,44 @@ function SortableOption({ option, onRemove, onEdit, onToggleActive }: SortableOp
       >
         <Trash2 className="h-4 w-4" />
       </Button>
+    </div>
+  );
+}
+
+interface SortableOptionRowProps {
+  option: ComplementOption;
+  maxQty: number;
+  priceOverride: number;
+  onRemove: () => void;
+  onMaxQtyChange: (qty: number) => void;
+  onPriceChange: (price: number) => void;
+  onConfirm: () => void;
+  isConfirmed: boolean;
+}
+
+function SortableOptionRow(props: SortableOptionRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: props.option.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <InlineOptionRow 
+        {...props} 
+        isDragging={isDragging}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
     </div>
   );
 }
@@ -159,11 +206,14 @@ export function ComplementGroupDialog({
   const [selectedOptionIds, setSelectedOptionIds] = React.useState<string[]>([]);
   const [localOptions, setLocalOptions] = React.useState<ComplementOption[]>([]);
   const [isAdvancedOpen, setIsAdvancedOpen] = React.useState(false);
-  const [showOptionPicker, setShowOptionPicker] = React.useState(false);
-  const [showNewOptionForm, setShowNewOptionForm] = React.useState(false);
+  const [showNewOptionDialog, setShowNewOptionDialog] = React.useState(false);
   const [newOptionName, setNewOptionName] = React.useState('');
   const [newOptionPrice, setNewOptionPrice] = React.useState('');
   const [isCreatingOption, setIsCreatingOption] = React.useState(false);
+  const [showOptionSearch, setShowOptionSearch] = React.useState(false);
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const [isSortMode, setIsSortMode] = React.useState(false);
+  const [optionConfigs, setOptionConfigs] = React.useState<Record<string, { maxQty: number; price: number; confirmed: boolean }>>({});
   
   // Merge options from props with locally created options
   const allOptions = React.useMemo(() => {
@@ -204,6 +254,9 @@ export function ComplementGroupDialog({
       }
       setSelectedOptionIds(linkedOptionIds);
       setLocalOptions([]);
+      setOptionConfigs({});
+      setSearchTerm('');
+      setShowOptionSearch(false);
     }
   }, [group, linkedOptionIds, open]);
 
@@ -253,7 +306,11 @@ export function ComplementGroupDialog({
         setSelectedOptionIds(prev => [...prev, newOption.id]);
         setNewOptionName('');
         setNewOptionPrice('');
-        setShowNewOptionForm(false);
+        setShowNewOptionDialog(false);
+        setOptionConfigs(prev => ({
+          ...prev,
+          [newOption.id]: { maxQty: 10, price: newOption.price, confirmed: false }
+        }));
       }
     } finally {
       setIsCreatingOption(false);
@@ -321,91 +378,26 @@ export function ComplementGroupDialog({
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label className="text-base font-semibold">Opções</Label>
-              <div className="flex gap-2">
-                {onCreateOption && (
-                  <Button variant="outline" size="sm" onClick={() => setShowNewOptionForm(!showNewOptionForm)}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    Criar Opção
-                  </Button>
-                )}
-                <Button variant="outline" size="sm" onClick={() => setShowOptionPicker(!showOptionPicker)}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Adicionar Existente
-                </Button>
-              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-muted-foreground"
+                onClick={() => setIsSortMode(!isSortMode)}
+              >
+                <ArrowUpDown className="h-4 w-4 mr-1" />
+                ORDENAR
+              </Button>
             </div>
 
-            {/* New Option Form */}
-            {showNewOptionForm && (
-              <div className="border rounded-lg p-3 bg-muted/50 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-sm">Nome da opção</Label>
-                    <Input
-                      placeholder="Ex: Calabresa"
-                      value={newOptionName}
-                      onChange={(e) => setNewOptionName(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-sm">Preço</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="0.00"
-                      value={newOptionPrice}
-                      onChange={(e) => setNewOptionPrice(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => {
-                      setShowNewOptionForm(false);
-                      setNewOptionName('');
-                      setNewOptionPrice('');
-                    }}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    onClick={handleCreateNewOption}
-                    disabled={!newOptionName.trim() || isCreatingOption}
-                  >
-                    {isCreatingOption ? 'Criando...' : 'Criar e Adicionar'}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {showOptionPicker && (
-              <div className="border rounded-lg p-3 bg-muted/50 max-h-48 overflow-y-auto">
-                <div className="grid grid-cols-2 gap-2">
-                  {allOptions.filter(o => !selectedOptionIds.includes(o.id)).map(option => (
-                    <div
-                      key={option.id}
-                      className="flex items-center gap-2 p-2 rounded hover:bg-accent cursor-pointer"
-                      onClick={() => toggleOption(option.id)}
-                    >
-                      <Checkbox checked={false} />
-                      <span className="text-sm">{option.name}</span>
-                      <span className="text-xs text-muted-foreground ml-auto">
-                        R$ {option.price.toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                {allOptions.filter(o => !selectedOptionIds.includes(o.id)).length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-2">
-                    Todas as opções já foram adicionadas
-                  </p>
-                )}
-              </div>
-            )}
+            {/* Header Row */}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground border-b pb-2">
+              <div className="w-6" /> {/* Drag handle space */}
+              <div className="flex-1">Nome da opção</div>
+              <div className="w-20 text-center">Qtd. Máx</div>
+              <div className="w-24 text-center">Preço</div>
+              <div className="w-8" /> {/* Confirm button space */}
+              <div className="w-8" /> {/* Delete button space */}
+            </div>
 
             {/* Selected Options List with Drag and Drop */}
             <DndContext
@@ -417,24 +409,135 @@ export function ComplementGroupDialog({
                 items={selectedOptionIds}
                 strategy={verticalListSortingStrategy}
               >
-                <div className="space-y-2">
+                <div className="space-y-1">
                   {selectedOptions.map(option => (
-                    <SortableOption
+                    <SortableOptionRow
                       key={option.id}
                       option={option}
+                      maxQty={optionConfigs[option.id]?.maxQty ?? 10}
+                      priceOverride={optionConfigs[option.id]?.price ?? option.price}
+                      isConfirmed={optionConfigs[option.id]?.confirmed ?? false}
                       onRemove={() => toggleOption(option.id)}
-                      onEdit={onEditOption ? () => onEditOption(option) : undefined}
-                      onToggleActive={onToggleOptionActive ? (active) => onToggleOptionActive(option.id, active) : undefined}
+                      onMaxQtyChange={(qty) => setOptionConfigs(prev => ({
+                        ...prev,
+                        [option.id]: { ...prev[option.id], maxQty: qty }
+                      }))}
+                      onPriceChange={(price) => setOptionConfigs(prev => ({
+                        ...prev,
+                        [option.id]: { ...prev[option.id], price }
+                      }))}
+                      onConfirm={() => setOptionConfigs(prev => ({
+                        ...prev,
+                        [option.id]: { ...prev[option.id], confirmed: true }
+                      }))}
                     />
                   ))}
-                  {selectedOptions.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-4 border rounded-lg border-dashed">
-                      Nenhuma opção adicionada
-                    </p>
-                  )}
                 </div>
               </SortableContext>
             </DndContext>
+
+            {/* Add Option Row - Inline search */}
+            <div className="flex items-center gap-2 py-2 border-t">
+              <div className="w-6" />
+              <Popover open={showOptionSearch} onOpenChange={setShowOptionSearch}>
+                <PopoverTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    className="flex-1 justify-start text-muted-foreground font-normal h-8"
+                  >
+                    Nome da opção
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-0" align="start">
+                  <Command>
+                    <CommandInput 
+                      placeholder="Buscar opção..." 
+                      value={searchTerm}
+                      onValueChange={setSearchTerm}
+                    />
+                    <CommandList>
+                      <CommandEmpty>
+                        <div className="py-4 text-center">
+                          <p className="text-sm text-muted-foreground mb-2">Nenhuma opção encontrada</p>
+                          {searchTerm.trim() && onCreateOption && (
+                            <Button 
+                              size="sm" 
+                              onClick={() => {
+                                setNewOptionName(searchTerm);
+                                setShowOptionSearch(false);
+                                setShowNewOptionDialog(true);
+                              }}
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              Criar "{searchTerm}"
+                            </Button>
+                          )}
+                        </div>
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {allOptions
+                          .filter(o => !selectedOptionIds.includes(o.id))
+                          .filter(o => o.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                          .map(option => (
+                            <CommandItem
+                              key={option.id}
+                              value={option.name}
+                              onSelect={() => {
+                                toggleOption(option.id);
+                                setOptionConfigs(prev => ({
+                                  ...prev,
+                                  [option.id]: { maxQty: 10, price: option.price, confirmed: false }
+                                }));
+                                setShowOptionSearch(false);
+                                setSearchTerm('');
+                              }}
+                            >
+                              <span>{option.name}</span>
+                              <span className="ml-auto text-xs text-muted-foreground">
+                                R$ {option.price.toFixed(2)}
+                              </span>
+                            </CommandItem>
+                          ))
+                        }
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <Input
+                type="number"
+                min={1}
+                className="w-20 h-8 text-center text-sm"
+                placeholder="Qtd. Máx"
+                disabled
+              />
+              <div className="relative">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  className="w-24 h-8 pl-8 text-sm"
+                  placeholder="0.00"
+                  disabled
+                />
+              </div>
+              <div className="w-8" />
+              <div className="w-8" />
+            </div>
+
+            {/* Add Option Button */}
+            {onCreateOption && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="w-full text-primary hover:text-primary"
+                onClick={() => setShowNewOptionDialog(true)}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                ADICIONAR OPÇÃO
+              </Button>
+            )}
           </div>
 
           {/* Selection Type */}
@@ -570,6 +673,54 @@ export function ComplementGroupDialog({
           </Button>
         </div>
       </DialogContent>
+
+      {/* New Option Dialog */}
+      <Dialog open={showNewOptionDialog} onOpenChange={setShowNewOptionDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nova Opção</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome da opção *</Label>
+              <Input
+                value={newOptionName}
+                onChange={(e) => setNewOptionName(e.target.value)}
+                placeholder="Ex: Calabresa"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Preço</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={newOptionPrice}
+                onChange={(e) => setNewOptionPrice(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowNewOptionDialog(false);
+                setNewOptionName('');
+                setNewOptionPrice('');
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleCreateNewOption}
+              disabled={!newOptionName.trim() || isCreatingOption}
+            >
+              {isCreatingOption ? 'Criando...' : 'Criar e Adicionar'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
