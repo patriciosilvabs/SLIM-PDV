@@ -612,11 +612,17 @@ export default function Menu() {
       <Card 
         ref={setNodeRef} 
         style={style}
-        className={`group overflow-hidden cursor-grab active:cursor-grabbing ${isDragging ? 'ring-2 ring-primary' : ''}`}
-        {...attributes}
-        {...listeners}
+        className={`group overflow-hidden ${isDragging ? 'ring-2 ring-primary' : ''}`}
       >
         <div className="relative aspect-square bg-muted">
+          {/* Drag Handle */}
+          <div 
+            className="absolute top-2 right-10 cursor-grab active:cursor-grabbing z-20 bg-background/80 backdrop-blur-sm rounded p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4 text-muted-foreground" />
+          </div>
           {product.image_url ? (
             <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
           ) : (
