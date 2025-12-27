@@ -160,6 +160,22 @@ export function AddOrderItemsModal({ open, onOpenChange, onSubmit, tableNumber }
     }));
   };
 
+  const duplicateItem = (itemId: string) => {
+    setCartItems(prev => {
+      const itemToDuplicate = prev.find(item => item.id === itemId);
+      if (!itemToDuplicate) return prev;
+      
+      const newItem: CartItem = {
+        ...itemToDuplicate,
+        id: `${itemToDuplicate.product_id}-${Date.now()}`,
+        quantity: 1,
+        total_price: itemToDuplicate.unit_price,
+      };
+      
+      return [...prev, newItem];
+    });
+  };
+
   const removeItem = (itemId: string) => {
     setCartItems(prev => prev.filter(item => item.id !== itemId));
   };
@@ -388,31 +404,25 @@ export function AddOrderItemsModal({ open, onOpenChange, onSubmit, tableNumber }
                           </Button>
                         </div>
                         <div className="flex items-center justify-between">
-                          {!duplicateItems ? (
-                            <div className="flex items-center gap-1">
-                              <Button
-                                size="icon"
-                                variant="outline"
-                                className="h-6 w-6"
-                                onClick={() => updateQuantity(item.id, -1)}
-                              >
-                                <Minus className="h-3 w-3" />
-                              </Button>
-                              <span className="w-6 text-center text-sm">{item.quantity}</span>
-                              <Button
-                                size="icon"
-                                variant="outline"
-                                className="h-6 w-6"
-                                onClick={() => updateQuantity(item.id, 1)}
-                              >
-                                <Plus className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">
-                              Qtd: {item.quantity}
-                            </span>
-                          )}
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              className="h-6 w-6"
+                              onClick={() => removeItem(item.id)}
+                            >
+                              <Minus className="h-3 w-3" />
+                            </Button>
+                            <span className="w-6 text-center text-sm">{item.quantity}</span>
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              className="h-6 w-6"
+                              onClick={() => duplicateItems ? duplicateItem(item.id) : updateQuantity(item.id, 1)}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </div>
                           <span className="font-semibold text-sm">
                             {formatCurrency(item.total_price)}
                           </span>

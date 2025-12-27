@@ -426,6 +426,22 @@ export default function Counter() {
     }));
   };
 
+  const duplicateItem = (itemId: string) => {
+    setOrderItems(prev => {
+      const itemToDuplicate = prev.find(item => item.id === itemId);
+      if (!itemToDuplicate) return prev;
+      
+      const newItem: OrderItem = {
+        ...itemToDuplicate,
+        id: `${itemToDuplicate.product_id}-${Date.now()}`,
+        quantity: 1,
+        total_price: itemToDuplicate.unit_price,
+      };
+      
+      return [...prev, newItem];
+    });
+  };
+
   const removeItem = (itemId: string) => {
     setOrderItems(prev => prev.filter(item => item.id !== itemId));
   };
@@ -1337,29 +1353,23 @@ export default function Counter() {
                       </p>
                     </div>
                     <div className="flex items-center gap-1">
-                      {!duplicateItems ? (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => updateQuantity(item.id, -1)}
-                          >
-                            <Minus className="h-3 w-3" />
-                          </Button>
-                          <span className="w-5 text-center text-xs">{item.quantity}</span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => updateQuantity(item.id, 1)}
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
-                        </>
-                      ) : (
-                        <span className="text-xs text-muted-foreground px-1">×{item.quantity}</span>
-                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => removeItem(item.id)}
+                      >
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <span className="w-5 text-center text-xs">{item.quantity}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => duplicateItems ? duplicateItem(item.id) : updateQuantity(item.id, 1)}
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
