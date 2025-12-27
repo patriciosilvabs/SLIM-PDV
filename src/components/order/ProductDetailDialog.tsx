@@ -402,7 +402,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
         </div>
 
         {/* Content */}
-        <ScrollArea className="flex-1 min-h-0 px-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-4">
           <div className="space-y-4 py-4">
             {product.description && (
               <p className="text-sm text-muted-foreground">{product.description}</p>
@@ -600,7 +600,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
               />
             </div>
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Footer */}
         <div className="border-t p-4 space-y-3">
