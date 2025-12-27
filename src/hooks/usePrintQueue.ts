@@ -20,16 +20,19 @@ export interface PrintJob {
 export function usePrintQueue() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { tenantId } = useTenant();
+  const { tenantId, isLoading: tenantLoading } = useTenant();
 
-  // Get pending print jobs
+  // Get pending print jobs - only query when tenant is available
   const { data: pendingJobs } = useQuery({
-    queryKey: ['print-queue', 'pending'],
+    queryKey: ['print-queue', 'pending', tenantId],
     queryFn: async () => {
+      if (!tenantId) return [];
+      
       const { data, error } = await supabase
         .from('print_queue')
         .select('*')
         .eq('status', 'pending')
+        .eq('tenant_id', tenantId)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
@@ -38,6 +41,7 @@ export function usePrintQueue() {
         data: item.data as Record<string, unknown>,
       })) as PrintJob[];
     },
+    enabled: !!tenantId && !tenantLoading,
     refetchInterval: 5000, // Fallback polling every 5 seconds
   });
 
