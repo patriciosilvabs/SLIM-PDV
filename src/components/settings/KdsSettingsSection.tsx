@@ -6,10 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { useKdsSettings, KdsOperationMode, OrderManagementViewMode } from '@/hooks/useKdsSettings';
+import { useKdsSettings, KdsOperationMode, OrderManagementViewMode, KanbanColumn } from '@/hooks/useKdsSettings';
 import { useKdsStations } from '@/hooks/useKdsStations';
 import { useKdsDevice } from '@/hooks/useKdsDevice';
-import { ChefHat, Printer, Monitor, Factory, Clock, Circle, X, Plus, AlertTriangle, ChevronDown, Layers, User, Eye, Palette, ClipboardList } from 'lucide-react';
+import { ChefHat, Printer, Monitor, Factory, Clock, Circle, X, Plus, AlertTriangle, ChevronDown, Layers, User, Eye, Palette, ClipboardList, CheckCircle, Package } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { BADGE_COLOR_OPTIONS, getBadgeColorClasses } from '@/lib/badgeColors';
@@ -83,12 +83,31 @@ export function KdsSettingsSection() {
             >
               <div className="flex items-center gap-2 mb-2">
                 <Monitor className="h-5 w-5" />
-                <span className="font-medium">Tradicional</span>
+                <span className="font-medium">Tradicional (Kanban)</span>
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground mb-3">
                 Todos os pedidos aparecem em uma única tela. Ideal para operações pequenas
                 onde um único cozinheiro gerencia todo o processo.
               </p>
+              {/* Preview Kanban */}
+              <div className="flex gap-1 h-12 rounded overflow-hidden border border-border/50">
+                <div className="flex-1 bg-yellow-500/30 flex flex-col items-center justify-center">
+                  <Clock className="h-3 w-3 text-yellow-700 dark:text-yellow-300 mb-0.5" />
+                  <span className="text-[8px] text-yellow-700 dark:text-yellow-300 font-medium">Pendente</span>
+                </div>
+                <div className="flex-1 bg-blue-500/30 flex flex-col items-center justify-center">
+                  <ChefHat className="h-3 w-3 text-blue-700 dark:text-blue-300 mb-0.5" />
+                  <span className="text-[8px] text-blue-700 dark:text-blue-300 font-medium">Preparo</span>
+                </div>
+                <div className="flex-1 bg-green-500/30 flex flex-col items-center justify-center">
+                  <CheckCircle className="h-3 w-3 text-green-700 dark:text-green-300 mb-0.5" />
+                  <span className="text-[8px] text-green-700 dark:text-green-300 font-medium">Pronto</span>
+                </div>
+                <div className="flex-1 bg-gray-500/30 flex flex-col items-center justify-center">
+                  <Package className="h-3 w-3 text-gray-700 dark:text-gray-300 mb-0.5" />
+                  <span className="text-[8px] text-gray-700 dark:text-gray-300 font-medium">Entregue</span>
+                </div>
+              </div>
             </button>
 
             <button
@@ -104,10 +123,47 @@ export function KdsSettingsSection() {
                 <Factory className="h-5 w-5" />
                 <span className="font-medium">Linha de Produção</span>
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground mb-3">
                 Cada dispositivo mostra apenas sua praça. O item avança conforme a etapa
                 é concluída. Ideal para alta demanda.
               </p>
+              {/* Preview Linha de Produção */}
+              <div className="flex gap-1 h-12 rounded overflow-hidden border border-border/50">
+                {activeStations.slice(0, 4).map((station, idx) => (
+                  <div 
+                    key={station.id}
+                    className="flex-1 flex flex-col items-center justify-center"
+                    style={{ backgroundColor: `${station.color}30` }}
+                  >
+                    <Circle 
+                      className="h-3 w-3 mb-0.5" 
+                      style={{ color: station.color, fill: station.color }} 
+                    />
+                    <span 
+                      className="text-[8px] font-medium truncate px-1 max-w-full"
+                      style={{ color: station.color }}
+                    >
+                      {station.name.slice(0, 8)}
+                    </span>
+                  </div>
+                ))}
+                {activeStations.length === 0 && (
+                  <>
+                    <div className="flex-1 bg-primary/20 flex flex-col items-center justify-center">
+                      <Circle className="h-3 w-3 text-primary mb-0.5" />
+                      <span className="text-[8px] text-primary font-medium">Praça 1</span>
+                    </div>
+                    <div className="flex-1 bg-primary/20 flex flex-col items-center justify-center">
+                      <Circle className="h-3 w-3 text-primary mb-0.5" />
+                      <span className="text-[8px] text-primary font-medium">Praça 2</span>
+                    </div>
+                    <div className="flex-1 bg-primary/20 flex flex-col items-center justify-center">
+                      <Circle className="h-3 w-3 text-primary mb-0.5" />
+                      <span className="text-[8px] text-primary font-medium">Praça 3</span>
+                    </div>
+                  </>
+                )}
+              </div>
             </button>
           </div>
 
@@ -229,6 +285,70 @@ export function KdsSettingsSection() {
               </p>
             </button>
           </div>
+
+          {/* Colunas Visíveis do Kanban */}
+          {(settings.operationMode === 'traditional' || 
+            (settings.orderManagementViewMode === 'kanban' || settings.orderManagementViewMode === 'follow_kds')) && (
+            <div className="mt-6 pt-4 border-t">
+              <Label className="font-medium text-base mb-3 block flex items-center gap-2">
+                <Layers className="h-4 w-4" />
+                Colunas Visíveis no Kanban
+              </Label>
+              <p className="text-sm text-muted-foreground mb-4">
+                Escolha quais colunas exibir no modo Kanban
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { key: 'pending' as KanbanColumn, label: 'Pendentes', icon: Clock, color: 'yellow' },
+                  { key: 'preparing' as KanbanColumn, label: 'Em Preparo', icon: ChefHat, color: 'blue' },
+                  { key: 'ready' as KanbanColumn, label: 'Prontos', icon: CheckCircle, color: 'green' },
+                  { key: 'delivered_today' as KanbanColumn, label: 'Entregues Hoje', icon: Package, color: 'gray' },
+                ].map(({ key, label, icon: Icon, color }) => {
+                  const isVisible = settings.kanbanVisibleColumns.includes(key);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        const newColumns = isVisible
+                          ? settings.kanbanVisibleColumns.filter(c => c !== key)
+                          : [...settings.kanbanVisibleColumns, key];
+                        // Ensure at least one column is visible
+                        if (newColumns.length > 0) {
+                          updateSettings({ kanbanVisibleColumns: newColumns });
+                        }
+                      }}
+                      className={cn(
+                        "flex items-center gap-2 p-3 rounded-lg border-2 transition-all",
+                        isVisible 
+                          ? `border-${color}-500 bg-${color}-500/10` 
+                          : "border-border opacity-50 hover:opacity-75"
+                      )}
+                      style={{
+                        borderColor: isVisible ? `var(--${color}-500, hsl(var(--${color})))` : undefined,
+                        backgroundColor: isVisible ? `hsl(var(--${color}) / 0.1)` : undefined,
+                      }}
+                    >
+                      <Switch
+                        checked={isVisible}
+                        onCheckedChange={(checked) => {
+                          const newColumns = checked
+                            ? [...settings.kanbanVisibleColumns, key]
+                            : settings.kanbanVisibleColumns.filter(c => c !== key);
+                          if (newColumns.length > 0) {
+                            updateSettings({ kanbanVisibleColumns: newColumns });
+                          }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <Icon className="h-4 w-4" />
+                      <span className="text-sm font-medium">{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
