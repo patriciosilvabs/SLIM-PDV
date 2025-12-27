@@ -162,6 +162,7 @@ export interface KitchenTicketItem {
   productName: string;
   variation?: string | null;
   extras?: string[];
+  extrasWithPrice?: { name: string; price: number }[]; // Extras com preço
   notes?: string | null;
   print_sector_id?: string | null;
   addedBy?: string | null; // Nome do garçom que adicionou o item
@@ -178,6 +179,14 @@ export interface KitchenTicketData {
   createdAt: string;
 }
 
+// Options for kitchen ticket printing
+export interface KitchenTicketOptions {
+  showItemNumber?: boolean;      // Mostrar número sequencial do item
+  showComplementPrice?: boolean; // Mostrar preço dos complementos
+  showComplementName?: boolean;  // Mostrar nome dos complementos
+  largeFontProduction?: boolean; // Usar fonte maior para produtos
+}
+
 export function buildKitchenTicket(
   data: KitchenTicketData, 
   paperWidth: '58mm' | '80mm' = '80mm', 
@@ -187,8 +196,14 @@ export function buildKitchenTicket(
   asciiMode: boolean = false,
   charSpacing: number = 1,
   topMargin: number = 0,
-  bottomMargin: number = 3
+  bottomMargin: number = 3,
+  options: KitchenTicketOptions = {}
 ): string {
+  // Apply defaults for options
+  const showItemNumber = options.showItemNumber ?? true;
+  const showComplementPrice = options.showComplementPrice ?? false;
+  const showComplementName = options.showComplementName ?? true;
+  const largeFontProduction = options.largeFontProduction ?? false;
   const width = paperWidth === '58mm' ? 32 : 48;
   let ticket = '';
   const fontCmd = getFontSizeCommand(fontSize);
@@ -253,19 +268,61 @@ export function buildKitchenTicket(
   ticket += DASHED_LINE(width);
 
   // Items
+  let itemNumber = 0;
   for (const item of data.items) {
-    ticket += fontCmd;
+    itemNumber++;
+    
+    // Aplicar fonte maior se largeFontProduction está ativado
+    if (largeFontProduction) {
+      ticket += TEXT_DOUBLE_SIZE;
+    } else {
+      ticket += fontCmd;
+    }
+    
     ticket += TEXT_BOLD;
-    ticket += `${item.quantity}x ${processText(item.productName)}` + LF;
+    
+    // Construir linha do item com ou sem número sequencial
+    if (showItemNumber) {
+      ticket += `${itemNumber}. ${item.quantity}x ${processText(item.productName)}` + LF;
+    } else {
+      ticket += `${item.quantity}x ${processText(item.productName)}` + LF;
+    }
     ticket += TEXT_BOLD_OFF;
+    
+    // Voltar para fonte normal para detalhes
+    if (largeFontProduction) {
+      ticket += fontCmd;
+    }
 
     if (item.variation) {
       ticket += `  > ${processText(item.variation)}` + LF;
     }
 
-    if (item.extras && item.extras.length > 0) {
+    // Processar complementos com nome e/ou preço
+    if (showComplementName && item.extrasWithPrice && item.extrasWithPrice.length > 0) {
+      for (const extra of item.extrasWithPrice) {
+        const isBorda = extra.name.toLowerCase().includes('borda');
+        let extraText = extra.name;
+        
+        // Adicionar preço se configurado
+        if (showComplementPrice && extra.price > 0) {
+          extraText += ` (R$ ${extra.price.toFixed(2).replace('.', ',')})`;
+        }
+        
+        if (isBorda) {
+          // Tarja preta para destacar bordas
+          ticket += TEXT_BOLD;
+          ticket += GS + 'B' + '\x01'; // INVERT ON (tarja preta)
+          ticket += ` + ${processText(extraText)} ` + LF;
+          ticket += GS + 'B' + '\x00'; // INVERT OFF
+          ticket += TEXT_BOLD_OFF;
+        } else {
+          ticket += `  + ${processText(extraText)}` + LF;
+        }
+      }
+    } else if (showComplementName && item.extras && item.extras.length > 0) {
+      // Fallback para extras sem preço (compatibilidade)
       for (const extra of item.extras) {
-        // Check if extra is a "borda" type to highlight with stripe
         const isBorda = extra.toLowerCase().includes('borda');
         if (isBorda) {
           // Tarja preta para destacar bordas
