@@ -319,6 +319,8 @@ export default function Menu() {
         sort_order: (complementGroups?.length ?? 0),
         is_active: group.is_active,
         price_calculation_type: group.price_calculation_type,
+        applies_per_unit: group.applies_per_unit ?? false,
+        unit_count: group.unit_count ?? 1,
       };
       const newGroup = await createGroup.mutateAsync(newGroupData);
       
