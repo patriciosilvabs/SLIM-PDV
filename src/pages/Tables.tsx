@@ -754,13 +754,36 @@ export default function Tables() {
 
   // Close empty table (no consumption)
   const handleCloseEmptyTable = async () => {
-    if (!selectedTable || !selectedOrder) return;
+    if (!selectedTable) return;
+    
     try {
-      await updateOrder.mutateAsync({ id: selectedOrder.id, status: 'cancelled' });
-      await updateTable.mutateAsync({ id: selectedTable.id, status: 'available' });
+      // Buscar qualquer pedido draft vazio associado a esta mesa
+      const draftOrder = orders?.find(o => 
+        o.table_id === selectedTable.id && 
+        o.is_draft === true && 
+        (!o.order_items || o.order_items.length === 0) &&
+        o.status !== 'cancelled'
+      );
+      
+      // Se existir draft vazio, cancelar para limpeza
+      if (draftOrder) {
+        await updateOrder.mutateAsync({ 
+          id: draftOrder.id, 
+          status: 'cancelled',
+          table_id: null // Desassociar da mesa
+        });
+      }
+      
+      // Atualizar mesa para disponível
+      await updateTable.mutateAsync({ 
+        id: selectedTable.id, 
+        status: 'available' 
+      });
+      
       toast.success(`Mesa ${selectedTable.number} fechada (sem consumo)`);
       setSelectedTable(null);
     } catch (error) {
+      console.error('Error closing empty table:', error);
       toast.error('Erro ao fechar mesa');
     }
   };
