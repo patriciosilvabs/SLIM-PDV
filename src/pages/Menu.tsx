@@ -23,7 +23,7 @@ import { useProductComplementGroups, useProductComplementGroupsMutations } from 
 import { usePrintSectors } from '@/hooks/usePrintSectors';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { AccessDenied } from '@/components/auth/AccessDenied';
-import { Plus, Edit, Trash2, Search, Link2, Package, GripVertical, MoreVertical, Star, Percent, Eye, EyeOff, Printer } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Link2, Package, GripVertical, MoreVertical, Star, Percent, Eye, EyeOff, Printer, Copy } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ImageUpload } from '@/components/ImageUpload';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
@@ -163,6 +163,13 @@ export default function Menu() {
     }
   }, [complementGroups]);
 
+  // Auto-select first category when categories load and none is selected
+  useEffect(() => {
+    if (categories?.length && !selectedCategoryId) {
+      setSelectedCategoryId(categories[0].id);
+    }
+  }, [categories, selectedCategoryId]);
+
   // Permission check AFTER all hooks
   if (!permissionsLoading && !hasPermission('menu_view')) {
     return <AccessDenied permission="menu_view" />;
@@ -246,6 +253,98 @@ export default function Menu() {
     setIsCategoryDialogOpen(false);
     setEditingCategory(null);
     setCategoryForm({ name: '', description: '', icon: '', is_active: true });
+  };
+
+  const handleDuplicateCategory = async (category: any) => {
+    try {
+      // 1. Create new category with "(cópia)" suffix
+      const newCategoryData = {
+        name: `${category.name} (cópia)`,
+        description: category.description || null,
+        icon: category.icon || null,
+        is_active: category.is_active ?? true,
+        sort_order: (categories?.length ?? 0)
+      };
+      const newCategory = await createCategory.mutateAsync(newCategoryData);
+      
+      // 2. Get all products from the original category
+      const categoryProducts = products?.filter(p => p.category_id === category.id) || [];
+      
+      // 3. Duplicate each product to the new category
+      for (const product of categoryProducts) {
+        const newProductData = {
+          name: product.name,
+          description: product.description || null,
+          price: product.price,
+          cost_price: product.cost_price || 0,
+          category_id: newCategory.id,
+          is_available: product.is_available ?? true,
+          is_featured: product.is_featured ?? false,
+          is_promotion: product.is_promotion ?? false,
+          promotion_price: product.promotion_price || null,
+          label: product.label || null,
+          internal_code: product.internal_code || null,
+          pdv_code: product.pdv_code || null,
+          image_url: product.image_url,
+          preparation_time: product.preparation_time || 15,
+          sort_order: product.sort_order || 0,
+          print_sector_id: product.print_sector_id || null,
+        };
+        const newProduct = await createProduct.mutateAsync(newProductData);
+        
+        // 4. Copy complement group links
+        const { data: linkedGroups } = await supabase
+          .from('product_complement_groups')
+          .select('group_id, sort_order')
+          .eq('product_id', product.id);
+        
+        if (linkedGroups?.length) {
+          await setGroupsForProduct.mutateAsync({ 
+            productId: newProduct.id, 
+            groupIds: linkedGroups.map(g => g.group_id) 
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error duplicating category:', error);
+    }
+  };
+
+  const handleDuplicateGroup = async (group: ComplementGroup) => {
+    try {
+      // 1. Create new group with "(cópia)" suffix
+      const newGroupData = {
+        name: `${group.name} (cópia)`,
+        description: group.description,
+        selection_type: group.selection_type,
+        is_required: group.is_required,
+        min_selections: group.min_selections,
+        max_selections: group.max_selections,
+        visibility: group.visibility,
+        channels: group.channels,
+        sort_order: (complementGroups?.length ?? 0),
+        is_active: group.is_active,
+        price_calculation_type: group.price_calculation_type,
+      };
+      const newGroup = await createGroup.mutateAsync(newGroupData);
+      
+      // 2. Get linked options from original group
+      const { data: groupOptions } = await supabase
+        .from('complement_group_options')
+        .select('option_id')
+        .eq('group_id', group.id)
+        .order('sort_order');
+      
+      // 3. Link same options to new group
+      if (groupOptions?.length) {
+        await setGroupOptions.mutateAsync({ 
+          groupId: newGroup.id, 
+          optionIds: groupOptions.map(o => o.option_id) 
+        });
+      }
+    } catch (error) {
+      console.error('Error duplicating group:', error);
+    }
   };
 
   const handleSaveComplementGroup = async (
@@ -517,16 +616,6 @@ export default function Menu() {
                       </DndContext>
                     ) : (
                       <div className="p-2 space-y-1">
-                        <button
-                          onClick={() => setSelectedCategoryId(null)}
-                          className={`w-full text-left p-2 rounded-md text-sm transition-colors flex items-center gap-2 ${
-                            selectedCategoryId === null ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                          }`}
-                        >
-                          <span>📋</span>
-                          <span className="flex-1 truncate">Todos</span>
-                          <span className="text-xs opacity-70">{products?.length || 0}</span>
-                        </button>
                         {categories?.map((category) => (
                           <div key={category.id} className="group flex items-center">
                             <button
@@ -550,6 +639,9 @@ export default function Menu() {
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => openEditCategory(category)}>
                                   <Edit className="h-4 w-4 mr-2" />Editar
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleDuplicateCategory(category)}>
+                                  <Copy className="h-4 w-4 mr-2" />Duplicar
                                 </DropdownMenuItem>
                                 <DropdownMenuItem 
                                   className="text-destructive"
@@ -757,6 +849,14 @@ export default function Menu() {
                               }}
                             >
                               <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleDuplicateGroup(group)}
+                              title="Duplicar grupo"
+                            >
+                              <Copy className="h-4 w-4" />
                             </Button>
                             <Button 
                               variant="ghost" 
