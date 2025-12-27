@@ -9,7 +9,7 @@ import { ProductDetailDialog, SelectedComplement, SubItemComplement } from '@/co
 import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { calculateFullComplementsPrice, ComplementForCalc, SubItemForCalc } from '@/lib/complementPriceUtils';
 import { CartItem } from '@/components/order/AddOrderItemsModal';
-import { X } from 'lucide-react';
+import { X, ShoppingCart, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 function formatCurrency(value: number) {
@@ -22,6 +22,8 @@ interface OrderDrawerProps {
   tableNumber?: number;
   onAddItem: (item: CartItem) => void;
   pendingItemsCount: number;
+  cartItems: CartItem[];
+  onCartClick: () => void;
 }
 
 export function OrderDrawer({ 
@@ -30,6 +32,8 @@ export function OrderDrawer({
   tableNumber,
   onAddItem,
   pendingItemsCount,
+  cartItems,
+  onCartClick,
 }: OrderDrawerProps) {
   const { data: products } = useProducts();
   const { data: categories } = useCategories();
@@ -144,7 +148,7 @@ export function OrderDrawer({
   return (
     <>
       <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent className="h-[85vh] flex flex-col">
+        <DrawerContent className="h-[85vh] flex flex-col relative">
           <DrawerHeader className="border-b px-4 py-3 flex-shrink-0">
             <div className="flex items-center justify-between">
               <DrawerTitle>
@@ -224,8 +228,40 @@ export function OrderDrawer({
               </div>
             </div>
             {/* Spacer for CartBar */}
-            {pendingItemsCount > 0 && <div className="h-20" />}
+            {cartItems.length > 0 && <div className="h-20" />}
           </ScrollArea>
+
+          {/* CartBar inside drawer */}
+          {cartItems.length > 0 && (
+            <button
+              onClick={onCartClick}
+              className={cn(
+                "absolute bottom-0 left-0 right-0",
+                "bg-primary text-primary-foreground",
+                "px-4 py-3 flex items-center justify-between",
+                "shadow-[0_-4px_20px_rgba(0,0,0,0.15)]",
+                "active:bg-primary/90 transition-colors",
+                "safe-area-inset-bottom rounded-b-xl"
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <ShoppingCart className="h-6 w-6" />
+                  <span className="absolute -top-2 -right-2 bg-background text-foreground text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                    {cartItems.reduce((sum, item) => sum + item.quantity, 0)}
+                  </span>
+                </div>
+                <span className="font-medium">
+                  {cartItems.reduce((sum, item) => sum + item.quantity, 0)} {cartItems.reduce((sum, item) => sum + item.quantity, 0) === 1 ? 'item' : 'itens'}
+                </span>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-lg">{formatCurrency(cartItems.reduce((sum, item) => sum + item.total_price, 0))}</span>
+                <ChevronRight className="h-5 w-5" />
+              </div>
+            </button>
+          )}
         </DrawerContent>
       </Drawer>
 
