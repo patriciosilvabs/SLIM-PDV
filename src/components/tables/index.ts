@@ -10,3 +10,5 @@ export { CartItemList, CartSummary } from './CartItemList';
 export { OrderDrawer } from './OrderDrawer';
 export { CartBar } from './CartBar';
 export { CartReviewSheet } from './CartReviewSheet';
+export { ProductSelector } from './ProductSelector';
+export { PendingCartPanel } from './PendingCartPanel';
