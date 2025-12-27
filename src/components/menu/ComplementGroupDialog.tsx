@@ -106,6 +106,7 @@ function SortableOption({ option, onRemove, onEdit, onToggleActive }: SortableOp
       <Switch 
         checked={option.is_active ?? true} 
         onCheckedChange={onToggleActive}
+        disabled={!onToggleActive}
       />
       {onEdit && (
         <Button

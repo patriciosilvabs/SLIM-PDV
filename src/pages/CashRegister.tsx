@@ -88,8 +88,7 @@ export default function CashRegister() {
           order:orders!inner(
             id, customer_name, table_id, total,
             table:tables(number)
-          ),
-          received_by_profile:profiles!payments_received_by_fkey(id, name)
+          )
         `)
         .eq('is_partial', true)
         .eq('cash_register_id', openRegister.id)
