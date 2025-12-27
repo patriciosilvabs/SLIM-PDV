@@ -581,7 +581,12 @@ export default function Tables() {
   const handleAddOrderItems = async (items: CartItem[]) => {
     if (!selectedTable) return;
     
-    const order = getTableOrder(selectedTable.id);
+    // Buscar pedido da mesa incluindo drafts vazios (mesa recém-aberta)
+    const order = orders?.find(o => 
+      o.table_id === selectedTable.id && 
+      o.status !== 'cancelled' &&
+      o.status !== 'delivered'
+    );
     if (!order) return;
 
     // Fechar modal imediatamente para feedback visual
