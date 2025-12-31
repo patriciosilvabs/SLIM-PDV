@@ -2636,8 +2636,16 @@ export default function Tables() {
                   <Button 
                     className="w-full" 
                     onClick={() => {
-                      setIsAddingMode(true);
-                      setIsOrderDrawerOpen(true);
+                      // Guarda referência da mesa antes de fechar o dialog
+                      const currentTable = selectedTable;
+                      // Fecha o dialog primeiro para evitar sobreposição
+                      setSelectedTable(null);
+                      // Pequeno delay para animação de fechamento do dialog
+                      setTimeout(() => {
+                        setSelectedTable(currentTable);
+                        setIsAddingMode(true);
+                        setIsOrderDrawerOpen(true);
+                      }, 100);
                     }} 
                     disabled={isAddingItems}
                   >

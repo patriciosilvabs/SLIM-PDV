@@ -147,7 +147,7 @@ export function OrderDrawer({
 
   return (
     <>
-      <Drawer open={open} onOpenChange={onOpenChange}>
+      <Drawer open={open} onOpenChange={onOpenChange} shouldScaleBackground={false}>
         <DrawerContent className="h-[85vh] flex flex-col relative">
           <DrawerHeader className="border-b px-4 py-3 flex-shrink-0">
             <div className="flex items-center justify-between">
