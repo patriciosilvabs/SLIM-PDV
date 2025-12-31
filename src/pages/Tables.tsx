@@ -2463,8 +2463,15 @@ export default function Tables() {
             setSplitMode('equal');
             setCustomSplits([]);
             
-            setSelectedTable({ ...tableToOpen, status: 'occupied' });
+            const openedTable = { ...tableToOpen, status: 'occupied' as const };
+            setSelectedTable(openedTable);
             toast.success(`Mesa ${tableNumber} aberta!`);
+            
+            // Abrir OrderDrawer automaticamente no mobile após abrir mesa
+            if (isMobile) {
+              setIsAddingMode(true);
+              setIsOrderDrawerOpen(true);
+            }
           } catch (error) {
             console.error('Error opening table:', error);
             toast.error('Erro ao abrir mesa');
