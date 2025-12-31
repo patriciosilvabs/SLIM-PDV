@@ -16,29 +16,29 @@ interface OrderItem {
   quantity: number;
 }
 
+interface OrderData {
+  id: string;
+  order_items: OrderItem[];
+  [key: string]: unknown;
+}
+
 export function useKdsWorkflow() {
   const queryClient = useQueryClient();
   const { activeStations, getNextStation, orderStatusStation, isLastProductionStation } = useKdsStations();
   const { logAction } = useKdsStationLogs();
   const { user } = useAuth();
 
-  // Mover item diretamente para a próxima estação (clique único)
+  // Mover item diretamente para a próxima estação (clique único) - OTIMIZADO
   const moveItemToNextStation = useMutation({
     mutationFn: async ({ itemId, currentStationId }: { itemId: string; currentStationId: string }) => {
       const now = new Date().toISOString();
       
-      // Log de conclusão na estação atual
-      await logAction.mutateAsync({
-        orderItemId: itemId,
-        stationId: currentStationId,
-        action: 'completed',
-      });
-
       // Buscar próxima praça de produção
       const nextStation = getNextStation(currentStationId);
+      const targetStationId = nextStation?.id || orderStatusStation?.id || null;
 
+      // CRÍTICO: Update primeiro (mais importante)
       if (nextStation) {
-        // Mover para próxima praça
         const { error } = await supabase
           .from('order_items')
           .update({
@@ -50,95 +50,130 @@ export function useKdsWorkflow() {
           .eq('id', itemId);
 
         if (error) throw error;
+      } else if (orderStatusStation) {
+        const { error } = await supabase
+          .from('order_items')
+          .update({
+            current_station_id: orderStatusStation.id,
+            station_status: 'waiting',
+            station_started_at: null,
+            station_completed_at: now,
+          })
+          .eq('id', itemId);
 
-        // Log de entrada na nova praça
-        await logAction.mutateAsync({
-          orderItemId: itemId,
-          stationId: nextStation.id,
-          action: 'entered',
-        });
-
-        return { itemId, nextStationId: nextStation.id, isComplete: false };
+        if (error) throw error;
       } else {
-        // Última praça de produção - mover para order_status ou marcar como ready
-        const { data: itemData } = await supabase
+        // Sem estação de status - marcar item como done
+        const { error } = await supabase
+          .from('order_items')
+          .update({
+            current_station_id: null,
+            station_status: 'done',
+            station_completed_at: now,
+            status: 'delivered',
+          })
+          .eq('id', itemId);
+
+        if (error) throw error;
+      }
+
+      // Logs em paralelo (fire-and-forget, não bloqueiam)
+      Promise.all([
+        logAction.mutateAsync({
+          orderItemId: itemId,
+          stationId: currentStationId,
+          action: 'completed',
+        }).catch(() => {}),
+        targetStationId ? logAction.mutateAsync({
+          orderItemId: itemId,
+          stationId: targetStationId,
+          action: 'entered',
+        }).catch(() => {}) : Promise.resolve(),
+      ]);
+
+      // Verificar se pedido está pronto (em background)
+      if (!nextStation) {
+        supabase
           .from('order_items')
           .select('order_id')
           .eq('id', itemId)
-          .single();
-
-        // Se tiver estação de status do pedido, mover o item para lá
-        if (orderStatusStation) {
-          const { error } = await supabase
-            .from('order_items')
-            .update({
-              current_station_id: orderStatusStation.id,
-              station_status: 'waiting',
-              station_started_at: null,
-              station_completed_at: now,
-            })
-            .eq('id', itemId);
-
-          if (error) throw error;
-
-          // Log de entrada na estação de status
-          await logAction.mutateAsync({
-            orderItemId: itemId,
-            stationId: orderStatusStation.id,
-            action: 'entered',
+          .single()
+          .then(({ data: itemData }) => {
+            if (itemData?.order_id) {
+              supabase
+                .from('order_items')
+                .select('id, current_station_id, station_status')
+                .eq('order_id', itemData.order_id)
+                .then(({ data: allItems }) => {
+                  const allItemsReady = allItems?.every(item => 
+                    (orderStatusStation && item.current_station_id === orderStatusStation.id) ||
+                    item.station_status === 'done'
+                  );
+                  if (allItemsReady) {
+                    supabase
+                      .from('orders')
+                      .update({ status: 'ready', ready_at: new Date().toISOString() })
+                      .eq('id', itemData.order_id);
+                  }
+                });
+            }
           });
-        } else {
-          // Sem estação de status - marcar item como done diretamente
-          const { error } = await supabase
-            .from('order_items')
-            .update({
-              current_station_id: null,
-              station_status: 'done',
-              station_completed_at: now,
-              status: 'delivered',
-            })
-            .eq('id', itemId);
-
-          if (error) throw error;
-        }
-
-        // Verificar se todos os itens do pedido terminaram a produção
-        if (itemData?.order_id) {
-          const { data: allItems } = await supabase
-            .from('order_items')
-            .select('id, current_station_id, station_status')
-            .eq('order_id', itemData.order_id);
-
-          // Todos estão na estação order_status ou já finalizados
-          const allItemsReady = allItems?.every(item => 
-            (orderStatusStation && item.current_station_id === orderStatusStation.id) ||
-            item.station_status === 'done'
-          );
-
-          if (allItemsReady) {
-            // Atualizar pedido para 'ready'
-            await supabase
-              .from('orders')
-              .update({ 
-                status: 'ready',
-                ready_at: new Date().toISOString()
-              })
-              .eq('id', itemData.order_id);
-          }
-        }
-
-        return { itemId, nextStationId: orderStatusStation?.id || null, isComplete: !orderStatusStation };
       }
+
+      return { itemId, nextStationId: targetStationId, isComplete: !nextStation && !orderStatusStation };
     },
+    
+    // OPTIMISTIC UPDATE: Atualiza UI imediatamente
+    onMutate: async ({ itemId, currentStationId }) => {
+      // Cancelar refetches em andamento
+      await queryClient.cancelQueries({ queryKey: ['orders'] });
+      
+      // Salvar estado anterior para rollback
+      const previousOrders = queryClient.getQueryData(['orders']);
+      
+      // Calcular próxima estação
+      const nextStation = getNextStation(currentStationId);
+      const targetStationId = nextStation?.id || orderStatusStation?.id || null;
+      
+      // Atualizar cache otimisticamente
+      queryClient.setQueryData(['orders'], (old: OrderData[] | undefined) => {
+        if (!old) return old;
+        return old.map(order => ({
+          ...order,
+          order_items: order.order_items?.map((item: OrderItem) => 
+            item.id === itemId 
+              ? { 
+                  ...item, 
+                  current_station_id: targetStationId, 
+                  station_status: targetStationId ? 'waiting' : 'done',
+                  station_started_at: null,
+                }
+              : item
+          ) || []
+        }));
+      });
+      
+      return { previousOrders };
+    },
+    
+    onError: (error, variables, context) => {
+      // Rollback em caso de erro
+      if (context?.previousOrders) {
+        queryClient.setQueryData(['orders'], context.previousOrders);
+      }
+      toast.error('Erro ao mover item');
+      console.error(error);
+    },
+    
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      // Refetch suave em background após 2 segundos para garantir sincronização
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['orders'] });
+      }, 2000);
+      
       if (result.isComplete) {
         toast.success('Item concluído!');
       }
-    },
-    onError: (error) => {
-      toast.error('Erro ao mover item');
-      console.error(error);
     },
   });
 
