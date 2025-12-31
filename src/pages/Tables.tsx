@@ -1195,6 +1195,14 @@ export default function Tables() {
     if (!selectedTable) return;
     const order = getTableOrder(selectedTable.id);
     
+    // Block closing if order is not ready yet
+    if (order && !['ready', 'delivered'].includes(order.status)) {
+      toast.error('Pedido ainda em preparo', {
+        description: 'A conta só pode ser fechada após o pedido ficar pronto.',
+      });
+      return;
+    }
+    
     setIsClosingBill(true);
     await updateTable.mutateAsync({ id: selectedTable.id, status: 'bill_requested' });
     setSelectedTable({ ...selectedTable, status: 'bill_requested' });
@@ -1893,9 +1901,15 @@ export default function Tables() {
                               )}
                               {/* Only show Fechar Conta if there are items and permission */}
                               {canCloseBill && selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
-                                <Button variant="outline" className="w-full" onClick={handleStartClosing}>
+                                <Button 
+                                  variant="outline" 
+                                  className="w-full" 
+                                  onClick={handleStartClosing}
+                                  disabled={!['ready', 'delivered'].includes(selectedOrder.status)}
+                                  title={!['ready', 'delivered'].includes(selectedOrder.status) ? 'Aguardando pedido ficar pronto' : undefined}
+                                >
                                   <Receipt className="h-4 w-4 mr-2" />
-                                  Fechar Conta
+                                  {['ready', 'delivered'].includes(selectedOrder.status) ? 'Fechar Conta' : 'Aguardando Preparo...'}
                                 </Button>
                               )}
                               {/* Cancel Order button - only show when order has items */}
@@ -2659,9 +2673,15 @@ export default function Tables() {
                     {isAddingItems ? 'Adicionando...' : 'Adicionar Pedido'}
                   </Button>
                   {canCloseBill && selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
-                    <Button variant="outline" className="w-full" onClick={handleStartClosing}>
+                    <Button 
+                      variant="outline" 
+                      className="w-full" 
+                      onClick={handleStartClosing}
+                      disabled={!['ready', 'delivered'].includes(selectedOrder.status)}
+                      title={!['ready', 'delivered'].includes(selectedOrder.status) ? 'Aguardando pedido ficar pronto' : undefined}
+                    >
                       <Receipt className="h-4 w-4 mr-2" />
-                      Fechar Conta
+                      {['ready', 'delivered'].includes(selectedOrder.status) ? 'Fechar Conta' : 'Aguardando Preparo...'}
                     </Button>
                   )}
                 </>
