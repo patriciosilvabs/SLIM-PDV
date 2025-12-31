@@ -1469,9 +1469,46 @@ export default function Tables() {
                         )}
                         onClick={() => handleTableClick(table)}
                       >
-                        <CardContent className="p-3 flex flex-col items-center justify-center aspect-square">
+                        <CardContent className="p-3 flex flex-col items-center justify-center aspect-square relative">
+                          {/* KDS Status Badges - Posicionados no topo */}
+                          <div className="absolute top-1 left-0 right-0 flex justify-center gap-1">
+                            {isOrderReady && (
+                              <span className="px-1.5 py-0.5 bg-green-500 text-white text-[10px] font-bold rounded animate-pulse">
+                                PRONTO
+                              </span>
+                            )}
+                            {isOrderPreparing && currentStation && (
+                              <span 
+                                className="px-1.5 py-0.5 text-white text-[10px] font-bold rounded truncate max-w-[90%]"
+                                style={{ backgroundColor: currentStation.color || '#f59e0b' }}
+                              >
+                                {currentStation.name}
+                              </span>
+                            )}
+                            {isOrderPending && (
+                              <span className="px-1.5 py-0.5 bg-yellow-500 text-white text-[10px] font-bold rounded">
+                                AGUARDANDO
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Numero da mesa */}
                           <p className="text-3xl font-bold">{table.number}</p>
                           <p className="text-sm mt-2 font-medium">{statusLabels[table.status]}</p>
+                          
+                          {/* Indicadores inferiores */}
+                          <div className="absolute bottom-1 left-0 right-0 flex justify-center gap-1">
+                            {hasPartialPayment && (
+                              <span className="px-1.5 py-0.5 bg-amber-500 text-white text-[10px] font-bold rounded">
+                                PARCIAL
+                              </span>
+                            )}
+                            {order && table.status === 'occupied' && waitMinutes > 0 && (
+                              <span className={cn("text-[10px] font-medium", waitTimeColor)}>
+                                {waitMinutes}min
+                              </span>
+                            )}
+                          </div>
                         </CardContent>
                       </Card>
                     );
