@@ -1202,6 +1202,7 @@ export type Database = {
           order_type: Database["public"]["Enums"]["order_type"] | null
           party_size: number | null
           ready_at: string | null
+          served_at: string | null
           status: Database["public"]["Enums"]["order_status"] | null
           status_before_cancellation:
             | Database["public"]["Enums"]["order_status"]
@@ -1229,6 +1230,7 @@ export type Database = {
           order_type?: Database["public"]["Enums"]["order_type"] | null
           party_size?: number | null
           ready_at?: string | null
+          served_at?: string | null
           status?: Database["public"]["Enums"]["order_status"] | null
           status_before_cancellation?:
             | Database["public"]["Enums"]["order_status"]
@@ -1256,6 +1258,7 @@ export type Database = {
           order_type?: Database["public"]["Enums"]["order_type"] | null
           party_size?: number | null
           ready_at?: string | null
+          served_at?: string | null
           status?: Database["public"]["Enums"]["order_status"] | null
           status_before_cancellation?:
             | Database["public"]["Enums"]["order_status"]
