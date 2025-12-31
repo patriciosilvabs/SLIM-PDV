@@ -6,7 +6,7 @@ import { KdsItemBadges, getFlavorsFromExtras } from './KdsItemBadges';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { cn } from '@/lib/utils';
 import { CheckCircle, Circle, Layers, Flame, ChefHat, ArrowRight, Clock } from 'lucide-react';
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { differenceInMinutes } from 'date-fns';
 
 // Timer visual para tempo na estação
@@ -118,6 +118,40 @@ export function KdsStationCard({
   isProcessing,
   compact = false,
 }: KdsStationCardProps) {
+  // Estado para debounce de cliques por item
+  const [clickedItems, setClickedItems] = useState<Set<string>>(new Set());
+  const clickTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      clickTimeouts.current.forEach(timeout => clearTimeout(timeout));
+    };
+  }, []);
+
+  // Handler otimizado com debounce visual
+  const handleMoveToNext = useCallback((itemId: string) => {
+    // Ignora se já foi clicado recentemente
+    if (clickedItems.has(itemId)) return;
+    
+    // Marca como clicado imediatamente (feedback visual instantâneo)
+    setClickedItems(prev => new Set(prev).add(itemId));
+    
+    // Chama a ação
+    onMoveToNext(itemId);
+    
+    // Reset após 800ms (tempo suficiente para optimistic update)
+    const timeout = setTimeout(() => {
+      setClickedItems(prev => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
+      clickTimeouts.current.delete(itemId);
+    }, 800);
+    
+    clickTimeouts.current.set(itemId, timeout);
+  }, [clickedItems, onMoveToNext]);
   const { hasSpecialBorder, settings } = useKdsSettings();
   
   const StationIcon = STATION_ICONS[stationType as keyof typeof STATION_ICONS] || ChefHat;
@@ -289,11 +323,21 @@ export function KdsStationCard({
               
               <Button 
                 size={compact ? "sm" : "default"}
-                onClick={() => onMoveToNext(item.id)}
-                className={cn("w-full mt-3", compact && "h-8 text-xs mt-2")}
+                onClick={() => handleMoveToNext(item.id)}
+                disabled={clickedItems.has(item.id)}
+                className={cn(
+                  "w-full mt-3 transition-all duration-150", 
+                  compact && "h-8 text-xs mt-2",
+                  clickedItems.has(item.id) && "opacity-50 scale-95"
+                )}
                 style={{ backgroundColor: stationColor }}
               >
-                {isLastStation ? (
+                {clickedItems.has(item.id) ? (
+                  <>
+                    <CheckCircle className={cn("h-4 w-4 mr-2 animate-pulse", compact && "h-3 w-3 mr-1")} />
+                    Movendo...
+                  </>
+                ) : isLastStation ? (
                   <>
                     <CheckCircle className={cn("h-4 w-4 mr-2", compact && "h-3 w-3 mr-1")} />
                     Pronto
