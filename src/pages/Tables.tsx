@@ -594,7 +594,7 @@ export default function Tables() {
       await updateOrder.mutateAsync({ 
         id: orderId, 
         served_at: new Date().toISOString()
-      } as any);
+      });
       toast.success('Itens marcados como servidos!', {
         description: 'O cliente pode continuar pedindo ou fechar a conta.',
       });
@@ -1581,7 +1581,7 @@ export default function Tables() {
                       const isAtOrderStatus = selectedStation?.station_type === 'order_status';
                       
                       // Se está na estação de status (Item Pronto) e ainda não foi servido
-                      if (isAtOrderStatus && !(selectedOrder as any).served_at) {
+                      if (isAtOrderStatus && !selectedOrder.served_at) {
                         return (
                           <button 
                             onClick={() => handleMarkAsServed(selectedOrder.id)}
@@ -1603,7 +1603,7 @@ export default function Tables() {
                       }
                       
                       // Se já foi servido, mostrar banner de confirmação
-                      if ((selectedOrder as any).served_at) {
+                      if (selectedOrder.served_at) {
                         return (
                           <div className="bg-green-500/10 border border-green-500/30 text-green-700 dark:text-green-400 p-3 rounded-lg flex items-center gap-2">
                             <Check className="h-5 w-5" />

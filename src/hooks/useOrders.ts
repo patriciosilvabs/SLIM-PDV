@@ -70,6 +70,7 @@ export interface Order {
   created_at: string;
   updated_at: string;
   ready_at?: string | null;
+  served_at?: string | null;
   delivered_at?: string | null;
   cancelled_at?: string | null;
   cancelled_by?: string | null;
@@ -163,6 +164,7 @@ export function useOrders(status?: OrderStatus[]) {
           created_at: order.created_at ?? '',
           updated_at: order.updated_at ?? '',
           ready_at: order.ready_at,
+          served_at: order.served_at,
           delivered_at: order.delivered_at,
           cancelled_at: order.cancelled_at,
           cancelled_by: order.cancelled_by,
