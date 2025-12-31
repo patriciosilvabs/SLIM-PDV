@@ -74,6 +74,7 @@ interface Order {
   table?: { number: number } | null;
   order_type: string;
   notes: string | null;
+  party_size?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -127,13 +128,17 @@ export function KdsStationCard({
     return hasSpecialBorder(itemText);
   });
 
-  // Filtrar "X pessoas" das observações se a configuração estiver desativada
+  // Exibir observações do pedido + quantidade de pessoas se configurado
   const displayOrderNotes = useMemo(() => {
-    if (!order.notes) return null;
-    if (settings.showPartySize) return order.notes;
-    // Remover "X pessoas" ou "X pessoa" das observações
-    return order.notes.replace(/\d+\s*pessoas?/gi, '').trim() || null;
-  }, [order.notes, settings.showPartySize]);
+    const partySizeText = settings.showPartySize && order.party_size 
+      ? `${order.party_size} pessoas` 
+      : null;
+    
+    if (partySizeText && order.notes) {
+      return `${partySizeText} - ${order.notes}`;
+    }
+    return partySizeText || order.notes || null;
+  }, [order.notes, order.party_size, settings.showPartySize]);
 
   // Obter o primeiro garçom dos itens para exibir no cabeçalho
   const waiterName = items.find(i => i.added_by_profile?.name)?.added_by_profile?.name;
