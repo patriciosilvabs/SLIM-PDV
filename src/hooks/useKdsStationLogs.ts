@@ -171,13 +171,19 @@ export function useAllStationsMetrics() {
 
       if (logsError) throw logsError;
 
-      // Buscar itens em cada praça (fila atual) - filtrado por tenant
+      // Buscar itens em cada praça (fila atual) - filtrado por tenant e pedidos ativos
       const { data: itemsData, error: itemsError } = await supabase
         .from('order_items')
-        .select('current_station_id, station_status')
+        .select(`
+          current_station_id, 
+          station_status,
+          order:orders!inner(status, is_draft)
+        `)
         .eq('tenant_id', tenantId)
         .not('current_station_id', 'is', null)
-        .neq('station_status', 'done');
+        .neq('station_status', 'done')
+        .not('order.status', 'in', '("delivered","cancelled")')
+        .eq('order.is_draft', false);
 
       if (itemsError) throw itemsError;
 
