@@ -23,7 +23,7 @@ export const STATION_TYPE_LABELS: Record<StationType, string> = {
   item_assembly: 'Item em montagem',
   assembly: 'Em Produção',
   oven_expedite: 'Item em Finalização',
-  order_status: 'Status do Pedido',
+  order_status: 'Item Pronto',
   custom: 'Personalizada',
 };
 

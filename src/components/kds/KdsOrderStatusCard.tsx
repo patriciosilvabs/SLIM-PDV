@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { CheckCircle, Clock, MapPin, Truck, User, UtensilsCrossed } from 'lucide-react';
+import { CheckCircle2, Clock, MapPin, Truck, User, UtensilsCrossed, Package } from 'lucide-react';
 import { formatDistanceToNow, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
@@ -85,8 +85,9 @@ export function KdsOrderStatusCard({
   return (
     <Card 
       className={cn(
-        "overflow-hidden border-2 transition-all duration-300",
-        compact ? "text-sm" : ""
+        "overflow-hidden border-2 transition-all duration-300 opacity-90",
+        compact ? "text-sm" : "",
+        "bg-muted/30"
       )}
       style={{ borderColor: stationColor + '40' }}
     >
@@ -95,11 +96,11 @@ export function KdsOrderStatusCard({
           "py-3 px-4 flex flex-row items-center justify-between space-y-0",
           compact && "py-2 px-3"
         )}
-        style={{ backgroundColor: stationColor + '10' }}
+        style={{ backgroundColor: stationColor + '15' }}
       >
         <div className="flex items-center gap-2">
-          <CheckCircle 
-            className={cn("h-5 w-5", compact && "h-4 w-4")} 
+          <CheckCircle2 
+            className={cn("h-5 w-5 fill-current", compact && "h-4 w-4")} 
             style={{ color: stationColor }} 
           />
           <div className="flex items-center gap-2">
@@ -109,12 +110,20 @@ export function KdsOrderStatusCard({
             </span>
           </div>
         </div>
-        <Badge 
-          variant="outline" 
-          className={cn("font-mono", compact && "text-xs")}
-        >
-          #{order.id.slice(-4).toUpperCase()}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge 
+            className={cn("text-xs font-semibold", compact && "text-[10px] px-1.5")}
+            style={{ backgroundColor: stationColor, color: 'white' }}
+          >
+            PRONTO
+          </Badge>
+          <Badge 
+            variant="outline" 
+            className={cn("font-mono", compact && "text-xs")}
+          >
+            #{order.id.slice(-4).toUpperCase()}
+          </Badge>
+        </div>
       </CardHeader>
 
       <CardContent className={cn("p-4 space-y-4", compact && "p-3 space-y-3")}>
@@ -125,27 +134,28 @@ export function KdsOrderStatusCard({
               "flex items-center justify-center gap-2 py-3 rounded-lg",
               compact && "py-2"
             )}
-            style={{ backgroundColor: stationColor + '15' }}
+            style={{ backgroundColor: stationColor + '20' }}
           >
             <Clock className={cn("h-5 w-5", compact && "h-4 w-4")} style={{ color: stationColor }} />
             <span className={cn("font-bold text-lg", compact && "text-base")} style={{ color: stationColor }}>
               {prepTimeMinutes} min
             </span>
             <span className={cn("text-muted-foreground text-sm", compact && "text-xs")}>
-              tempo total
+              tempo de preparo
             </span>
           </div>
         )}
 
         {/* Tempo desde que ficou pronto */}
         {order.ready_at && (
-          <div className="text-center text-sm text-muted-foreground">
-            Pronto há {formatDistanceToNow(new Date(order.ready_at), { locale: ptBR })}
+          <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
+            <CheckCircle2 className="h-3.5 w-3.5" style={{ color: stationColor }} />
+            <span>Pronto há {formatDistanceToNow(new Date(order.ready_at), { locale: ptBR })}</span>
           </div>
         )}
 
         {/* Resumo dos itens */}
-        <div className={cn("border-t pt-3", compact && "pt-2")}>
+        <div className={cn("border-t border-border/50 pt-3", compact && "pt-2")}>
           <div className={cn("space-y-1", compact && "space-y-0.5")}>
             {Object.entries(itemSummary).map(([productName, qty]) => (
               <div 
@@ -174,7 +184,7 @@ export function KdsOrderStatusCard({
           </div>
         )}
 
-        {/* Botão finalizar */}
+        {/* Botão despachar */}
         <Button
           size={compact ? "sm" : "default"}
           onClick={() => onFinalize(order.id)}
@@ -182,8 +192,8 @@ export function KdsOrderStatusCard({
           className={cn("w-full", compact && "h-8 text-xs")}
           style={{ backgroundColor: stationColor }}
         >
-          <CheckCircle className={cn("h-4 w-4 mr-2", compact && "h-3 w-3 mr-1")} />
-          Finalizar
+          <Package className={cn("h-4 w-4 mr-2", compact && "h-3 w-3 mr-1")} />
+          Despachar
         </Button>
       </CardContent>
     </Card>
