@@ -2340,10 +2340,13 @@ export default function Tables() {
           const openedTable = { ...tableToOpen, status: 'occupied' as const };
           setSelectedTable(openedTable);
           
-          // Abrir OrderDrawer imediatamente no mobile
+          // Abrir modal de pedido imediatamente após abrir mesa
           if (isMobile) {
             setIsAddingMode(true);
             setIsOrderDrawerOpen(true);
+          } else {
+            // Desktop: abrir modal grande de adicionar pedido
+            setIsAddOrderModalOpen(true);
           }
           
           // Reset all closing states
