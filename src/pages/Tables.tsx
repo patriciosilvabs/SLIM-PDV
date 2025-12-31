@@ -300,6 +300,16 @@ export default function Tables() {
     setMobileDevice(isMobile);
   }, [isMobile]);
 
+  // Reset adding mode when table status changes from occupied
+  useEffect(() => {
+    if (selectedTable && selectedTable.status !== 'occupied') {
+      setIsAddingMode(false);
+      setPendingCartItems([]);
+      setIsOrderDrawerOpen(false);
+      setIsCartReviewOpen(false);
+    }
+  }, [selectedTable?.status]);
+
   // Realtime subscription for orders
   useEffect(() => {
     const channel = supabase
@@ -1555,7 +1565,7 @@ export default function Tables() {
             </div>
 
             {/* Desktop Adding Mode: ProductSelector + PendingCartPanel */}
-            {!isMobile && isAddingMode && selectedTable && (
+            {!isMobile && isAddingMode && selectedTable && selectedTable.status === 'occupied' && (
               <>
                 {/* Product Selector - Centro */}
                 <div className="flex-1 h-full border rounded-lg overflow-hidden">
