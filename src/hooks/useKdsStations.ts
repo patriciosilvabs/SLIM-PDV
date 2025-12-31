@@ -146,6 +146,28 @@ export function useKdsStations() {
     return currentIndex === productionStations.length - 1;
   };
 
+  const reorderStations = useMutation({
+    mutationFn: async (orderedIds: string[]) => {
+      const updates = orderedIds.map((id, index) =>
+        supabase
+          .from('kds_stations')
+          .update({ sort_order: index })
+          .eq('id', id)
+      );
+
+      const results = await Promise.all(updates);
+      const error = results.find((r) => r.error)?.error;
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kds-stations'] });
+      toast({ title: 'Ordem das praças atualizada' });
+    },
+    onError: (error) => {
+      toast({ title: 'Erro ao reordenar praças', description: error.message, variant: 'destructive' });
+    },
+  });
+
   return {
     stations,
     activeStations,
@@ -157,6 +179,7 @@ export function useKdsStations() {
     updateStation,
     deleteStation,
     toggleStationActive,
+    reorderStations,
     getStationByType,
     getNextStation,
     isLastProductionStation,
