@@ -1420,11 +1420,7 @@ export default function Tables() {
         <TabsContent value="tables" className="flex-1 m-0">
           <div className="flex h-full gap-4">
             {/* Tables Grid - Layout fixo */}
-            <div className={cn(
-              "flex flex-col flex-1",
-              // Modo normal com mesa selecionada
-              selectedTable && "lg:w-2/3"
-            )}>
+            <div className="flex flex-col flex-1 lg:w-2/3">
               {/* Legenda */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex flex-wrap gap-4">
@@ -1484,10 +1480,11 @@ export default function Tables() {
               )}
             </div>
 
-            {/* Side Panel - Table Details */}
-            {selectedTable && (
-              <div className="hidden lg:block w-1/3 min-w-[320px]">
-                <Card className="h-full flex flex-col">
+            {/* Side Panel - Table Details - Sempre visível */}
+            <div className="hidden lg:block w-1/3 min-w-[320px]">
+              <Card className="h-full flex flex-col">
+                {selectedTable ? (
+                  <>
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -2207,9 +2204,16 @@ export default function Tables() {
                       </>
                     )}
                   </CardContent>
-                </Card>
-              </div>
-            )}
+                  </>
+                ) : (
+                  <CardContent className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
+                    <Users className="h-12 w-12 mb-4 opacity-50" />
+                    <p className="text-lg font-medium">Nenhuma mesa selecionada</p>
+                    <p className="text-sm text-center">Clique em uma mesa para ver os detalhes</p>
+                  </CardContent>
+                )}
+              </Card>
+            </div>
           </div>
         </TabsContent>
 
