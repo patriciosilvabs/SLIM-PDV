@@ -6,10 +6,10 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { supabase } from '@/integrations/supabase/client';
 import { Plus, Minus, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PizzaUnitCard, SubItemData, SubItemSelection } from './PizzaUnitCard';
+import { useProductComplements, GroupWithOptions } from '@/hooks/useProductComplements';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -48,7 +48,7 @@ interface ComplementOption {
   price_override?: number | null;
 }
 
-interface GroupWithOptions extends ComplementGroup {
+interface LocalGroupWithOptions extends ComplementGroup {
   options: ComplementOption[];
 }
 
@@ -85,35 +85,64 @@ interface ProductDetailDialogProps {
 }
 
 export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplicateItems, channel }: ProductDetailDialogProps) {
-  const [groups, setGroups] = useState<GroupWithOptions[]>([]);
   const [selections, setSelections] = useState<Record<string, SelectedComplement[]>>({});
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
-  const [loading, setLoading] = useState(false);
   
   // State for per-unit configuration (pizzas individuais)
   const [subItems, setSubItems] = useState<SubItemData[]>([]);
 
+  // Usar o novo hook otimizado com React Query (cache + consultas paralelas)
+  const { data: groups = [], isLoading: loading } = useProductComplements(
+    open ? product?.id : undefined,
+    channel
+  );
+
+  // Converter para o formato local com sort_order
+  const localGroups: LocalGroupWithOptions[] = useMemo(() => {
+    return groups.map((g, index) => ({
+      id: g.id,
+      name: g.name,
+      description: g.description,
+      selection_type: g.selection_type as 'single' | 'multiple' | 'multiple_repeat',
+      is_required: g.is_required,
+      min_selections: g.min_selections,
+      max_selections: g.max_selections,
+      sort_order: index,
+      price_calculation_type: g.price_calculation_type as 'sum' | 'average' | 'highest' | 'lowest',
+      applies_per_unit: g.applies_per_unit,
+      unit_count: g.unit_count,
+      options: g.options.map(opt => ({
+        id: opt.id,
+        name: opt.name,
+        description: opt.description,
+        price: opt.price,
+        image_url: opt.image_url,
+        price_override: opt.price_override,
+      })),
+    }));
+  }, [groups]);
+
   // Determine if this product has per-unit groups
   const hasPerUnitGroups = useMemo(() => {
-    return groups.some(g => g.applies_per_unit === true);
-  }, [groups]);
+    return localGroups.some(g => g.applies_per_unit === true);
+  }, [localGroups]);
 
   // Get the number of units from the first per-unit group
   const unitCount = useMemo(() => {
-    const perUnitGroup = groups.find(g => g.applies_per_unit === true);
+    const perUnitGroup = localGroups.find(g => g.applies_per_unit === true);
     return perUnitGroup?.unit_count ?? 1;
-  }, [groups]);
+  }, [localGroups]);
 
   // Groups that apply per unit (for each pizza)
   const perUnitGroups = useMemo(() => {
-    return groups.filter(g => g.applies_per_unit === true);
-  }, [groups]);
+    return localGroups.filter(g => g.applies_per_unit === true);
+  }, [localGroups]);
 
   // Groups that apply to the whole item (shared)
   const sharedGroups = useMemo(() => {
-    return groups.filter(g => !g.applies_per_unit);
-  }, [groups]);
+    return localGroups.filter(g => !g.applies_per_unit);
+  }, [localGroups]);
 
   // Initialize sub-items when unitCount changes
   useEffect(() => {
@@ -129,153 +158,17 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
     }
   }, [hasPerUnitGroups, unitCount]);
 
-  // Fetch complement groups and options for this product
+  // Reset state when product changes
   useEffect(() => {
-    if (!product || !open) return;
+    if (open && product) {
+      setSelections({});
+      setQuantity(1);
+      setNotes('');
+      setSubItems([]);
+    }
+  }, [product?.id, open]);
 
-    const fetchGroups = async () => {
-      setLoading(true);
-      try {
-        // Get groups linked to this product
-        const { data: productGroups } = await supabase
-          .from('product_complement_groups')
-          .select('group_id, sort_order')
-          .eq('product_id', product.id)
-          .order('sort_order');
-
-        if (!productGroups || productGroups.length === 0) {
-          setGroups([]);
-          setLoading(false);
-          return;
-        }
-
-        const groupIds = productGroups.map(pg => pg.group_id);
-
-        // Get group details - filter by channel if provided
-        let groupsQuery = supabase
-          .from('complement_groups')
-          .select('*')
-          .in('id', groupIds)
-          .eq('is_active', true);
-
-        if (channel) {
-          groupsQuery = groupsQuery.contains('channels', [channel]);
-        }
-
-        const { data: groupsData } = await groupsQuery;
-
-        if (!groupsData) {
-          setGroups([]);
-          setLoading(false);
-          return;
-        }
-
-        // Step 1: Get all complement_group_options links
-        const { data: groupOptionLinks, error: linksError } = await supabase
-          .from('complement_group_options')
-          .select('id, group_id, option_id, price_override, sort_order')
-          .in('group_id', groupIds)
-          .order('sort_order');
-
-        console.log('[ProductDetailDialog] groupIds:', groupIds);
-        console.log('[ProductDetailDialog] groupOptionLinks:', groupOptionLinks);
-        console.log('[ProductDetailDialog] linksError:', linksError);
-
-        if (!groupOptionLinks || groupOptionLinks.length === 0) {
-          // No options linked to these groups
-          const groupsWithoutOptions: GroupWithOptions[] = groupsData.map(group => ({
-            id: group.id,
-            name: group.name,
-            description: group.description,
-            selection_type: group.selection_type as 'single' | 'multiple' | 'multiple_repeat',
-            is_required: group.is_required ?? false,
-            min_selections: group.min_selections ?? 0,
-            max_selections: group.max_selections ?? 1,
-            sort_order: productGroups.find(pg => pg.group_id === group.id)?.sort_order ?? 0,
-            price_calculation_type: (group.price_calculation_type as 'sum' | 'average' | 'highest' | 'lowest') ?? 'sum',
-            applies_per_unit: group.applies_per_unit ?? false,
-            unit_count: group.unit_count ?? 1,
-            options: [],
-          })).sort((a, b) => a.sort_order - b.sort_order);
-          setGroups(groupsWithoutOptions);
-          setLoading(false);
-          return;
-        }
-
-        // Step 2: Get all complement_options by their IDs
-        const optionIds = [...new Set(groupOptionLinks.map(go => go.option_id))];
-        const { data: optionsData, error: optionsError } = await supabase
-          .from('complement_options')
-          .select('*')
-          .in('id', optionIds);
-
-        console.log('[ProductDetailDialog] optionIds:', optionIds);
-        console.log('[ProductDetailDialog] optionsData:', optionsData);
-        console.log('[ProductDetailDialog] optionsError:', optionsError);
-
-        // Step 3: Build a map of options for quick lookup
-        const optionsMap = new Map(optionsData?.map(opt => [opt.id, opt]) || []);
-
-        // Build groups with options - filter active options only
-        const groupsWithOptions: GroupWithOptions[] = groupsData.map(group => {
-          const groupLinks = groupOptionLinks.filter(go => go.group_id === group.id);
-          console.log(`[ProductDetailDialog] Group ${group.name} - links:`, groupLinks);
-          
-          const options = groupLinks
-            .map(link => {
-              const opt = optionsMap.get(link.option_id);
-              if (!opt) return null;
-              // Treat null, undefined, or true as active
-              if (opt.is_active !== true && opt.is_active !== null && opt.is_active !== undefined) {
-                return null;
-              }
-              return {
-                ...opt,
-                price_override: link.price_override,
-              };
-            })
-            .filter((opt): opt is NonNullable<typeof opt> => opt !== null)
-            .sort((a, b) => {
-              const aLink = groupLinks.find(l => l.option_id === a.id);
-              const bLink = groupLinks.find(l => l.option_id === b.id);
-              return (aLink?.sort_order || 0) - (bLink?.sort_order || 0);
-            });
-          
-          console.log(`[ProductDetailDialog] Group ${group.name} - final options:`, options);
-
-          return {
-            id: group.id,
-            name: group.name,
-            description: group.description,
-            selection_type: group.selection_type as 'single' | 'multiple' | 'multiple_repeat',
-            is_required: group.is_required ?? false,
-            min_selections: group.min_selections ?? 0,
-            max_selections: group.max_selections ?? 1,
-            sort_order: productGroups.find(pg => pg.group_id === group.id)?.sort_order ?? 0,
-            price_calculation_type: (group.price_calculation_type as 'sum' | 'average' | 'highest' | 'lowest') ?? 'sum',
-            applies_per_unit: group.applies_per_unit ?? false,
-            unit_count: group.unit_count ?? 1,
-            options,
-          };
-        }).sort((a, b) => a.sort_order - b.sort_order);
-
-        setGroups(groupsWithOptions);
-      } catch (error) {
-        console.error('Error fetching complement groups:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchGroups();
-    // Reset state when product changes
-    setSelections({});
-    setQuantity(1);
-    setNotes('');
-    setSubItems([]);
-  }, [product, open, channel]);
-
-  const handleSingleSelect = (group: GroupWithOptions, option: ComplementOption) => {
+  const handleSingleSelect = (group: LocalGroupWithOptions, option: ComplementOption) => {
     const price = option.price_override ?? option.price;
     setSelections(prev => ({
       ...prev,
@@ -291,7 +184,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
     }));
   };
 
-  const handleMultipleSelect = (group: GroupWithOptions, option: ComplementOption, checked: boolean) => {
+  const handleMultipleSelect = (group: LocalGroupWithOptions, option: ComplementOption, checked: boolean) => {
     const price = option.price_override ?? option.price;
     setSelections(prev => {
       const current = prev[group.id] || [];
@@ -307,7 +200,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
             option_name: option.name,
             price,
             quantity: 1,
-            price_calculation_type: group.price_calculation_type,
+            price_calculation_type: group.price_calculation_type as 'sum' | 'average' | 'highest' | 'lowest',
           }],
         };
       } else {
@@ -319,7 +212,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
     });
   };
 
-  const handleRepeatQuantity = (group: GroupWithOptions, option: ComplementOption, delta: number) => {
+  const handleRepeatQuantity = (group: LocalGroupWithOptions, option: ComplementOption, delta: number) => {
     const price = option.price_override ?? option.price;
     setSelections(prev => {
       const current = prev[group.id] || [];
@@ -356,7 +249,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
             option_name: option.name,
             price,
             quantity: 1,
-            price_calculation_type: group.price_calculation_type,
+            price_calculation_type: group.price_calculation_type as 'sum' | 'average' | 'highest' | 'lowest',
           }],
         };
       }
