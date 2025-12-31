@@ -1562,6 +1562,30 @@ export default function Tables() {
                     {/* Preparing Banner - In production */}
                     {selectedOrder?.status === 'preparing' && !isClosingBill && (() => {
                       const selectedStation = getOrderCurrentStation(selectedOrder);
+                      const isAtOrderStatus = selectedStation?.station_type === 'order_status';
+                      
+                      // Se está na estação de status (Item Pronto), mostrar botão de entregar
+                      if (isAtOrderStatus) {
+                        return (
+                          <button 
+                            onClick={() => handleMarkAsDelivered(selectedOrder.id)}
+                            className="w-full bg-green-500 hover:bg-green-600 text-white p-3 rounded-lg flex items-center justify-between gap-2 transition-colors cursor-pointer group"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Bell className="h-5 w-5 animate-pulse group-hover:animate-none" />
+                              <div className="text-left">
+                                <p className="font-bold">Item Pronto!</p>
+                                <p className="text-xs opacity-90">Pronto para ser servido na mesa</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-lg">
+                              <Check className="h-4 w-4" />
+                              <span className="font-medium text-sm">Marcar Servido</span>
+                            </div>
+                          </button>
+                        );
+                      }
+                      
                       return (
                         <div 
                           className="p-3 rounded-lg flex items-center gap-2 animate-pulse border"
