@@ -490,9 +490,10 @@ export default function KDS() {
     }
 
     // Sound + visual for new orders (pending or preparing depending on settings)
+    // Exclude drafts - they're not real orders yet
     const targetStatus = kdsSettings.showPendingColumn ? 'pending' : 'preparing';
     const newOrders = orders.filter(
-      o => o.status === targetStatus && !notifiedOrdersRef.current.has(o.id)
+      o => o.status === targetStatus && !o.is_draft && !notifiedOrdersRef.current.has(o.id)
     );
 
     if (newOrders.length > 0) {

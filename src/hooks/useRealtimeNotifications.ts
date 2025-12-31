@@ -22,10 +22,14 @@ export function useRealtimeNotifications() {
           table: 'orders',
         },
         (payload) => {
+          const newOrder = payload.new as any;
+          // Ignore drafts - they're not real orders yet
+          if (newOrder.is_draft) return;
+          
           console.log('New order:', payload);
           playNewOrderSound();
           toast.success('Novo Pedido!', {
-            description: `Pedido #${(payload.new as any).id?.slice(0, 8)} recebido.`,
+            description: `Pedido #${newOrder.id?.slice(0, 8)} recebido.`,
           });
         }
       )
