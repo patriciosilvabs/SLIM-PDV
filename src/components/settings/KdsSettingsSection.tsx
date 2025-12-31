@@ -357,7 +357,7 @@ export function KdsSettingsSection() {
                 <p className="text-sm text-muted-foreground mb-4">
                   Personalize os nomes das colunas para adaptar à terminologia da sua região
                 </p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-2">
                     <Label className="text-sm">Coluna "Pendente"</Label>
                     <Input
@@ -380,6 +380,14 @@ export function KdsSettingsSection() {
                       value={settings.columnNameReady}
                       onChange={(e) => updateSettings({ columnNameReady: e.target.value.toUpperCase() })}
                       placeholder="Ex: FINALIZADO"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Coluna "Entregues Hoje"</Label>
+                    <Input
+                      value={settings.columnNameDelivered}
+                      onChange={(e) => updateSettings({ columnNameDelivered: e.target.value.toUpperCase() })}
+                      placeholder="Ex: FINALIZADOS"
                     />
                   </div>
                 </div>

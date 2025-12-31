@@ -585,7 +585,7 @@ export function KdsProductionLineReadOnly({
             <div className="h-6 w-6 rounded-full flex items-center justify-center bg-green-500/30">
               <CheckCheck className="h-3 w-3 text-green-600" />
             </div>
-            <span className="font-semibold text-sm">Entregues Hoje</span>
+            <span className="font-semibold text-sm">{settings.columnNameDelivered}</span>
             <Badge variant="secondary" className="ml-auto text-xs">
               {deliveredOrdersToday.length}
             </Badge>

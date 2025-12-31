@@ -670,6 +670,7 @@ export type Database = {
           bottleneck_settings: Json
           cancellation_alert_interval: number
           cancellation_alerts_enabled: boolean
+          column_name_delivered: string
           column_name_pending: string
           column_name_preparing: string
           column_name_ready: string
@@ -701,6 +702,7 @@ export type Database = {
           bottleneck_settings?: Json
           cancellation_alert_interval?: number
           cancellation_alerts_enabled?: boolean
+          column_name_delivered?: string
           column_name_pending?: string
           column_name_preparing?: string
           column_name_ready?: string
@@ -732,6 +734,7 @@ export type Database = {
           bottleneck_settings?: Json
           cancellation_alert_interval?: number
           cancellation_alerts_enabled?: boolean
+          column_name_delivered?: string
           column_name_pending?: string
           column_name_preparing?: string
           column_name_ready?: string
