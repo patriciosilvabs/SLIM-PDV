@@ -1419,38 +1419,28 @@ export default function Tables() {
 
         <TabsContent value="tables" className="flex-1 m-0">
           <div className="flex h-full gap-4">
-            {/* Tables Grid - Compacto quando em modo de adição desktop */}
+            {/* Tables Grid - Layout fixo */}
             <div className={cn(
-              "flex flex-col",
-              // Modo de adição desktop: coluna estreita à esquerda
-              !isMobile && isAddingMode && selectedTable ? "w-48 flex-shrink-0" : "flex-1",
+              "flex flex-col flex-1",
               // Modo normal com mesa selecionada
-              !isAddingMode && selectedTable && "lg:w-2/3"
+              selectedTable && "lg:w-2/3"
             )}>
-              {/* Legenda - ocultar em modo de adição para economizar espaço */}
-              {!isAddingMode && (
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex flex-wrap gap-4">
-                    {Object.entries(statusLabels).map(([status, label]) => (
-                      <div key={status} className="flex items-center gap-2">
-                        <div className={cn('w-4 h-4 rounded', statusColors[status as TableStatus])} />
-                        <span className="text-sm text-muted-foreground">{label}</span>
-                      </div>
-                    ))}
-                  </div>
+              {/* Legenda */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-wrap gap-4">
+                  {Object.entries(statusLabels).map(([status, label]) => (
+                    <div key={status} className="flex items-center gap-2">
+                      <div className={cn('w-4 h-4 rounded', statusColors[status as TableStatus])} />
+                      <span className="text-sm text-muted-foreground">{label}</span>
+                    </div>
+                  ))}
                 </div>
-              )}
+              </div>
 
               {isLoading ? (
                 <div className="text-center py-12 text-muted-foreground">Carregando...</div>
               ) : (
-                <div className={cn(
-                  "grid gap-4",
-                  // Grid compacto no modo de adição desktop
-                  !isMobile && isAddingMode && selectedTable 
-                    ? "grid-cols-2 gap-2" 
-                    : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
-                )}>
+                <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                   {tables?.map((table) => {
                     const order = getTableOrder(table.id);
                     const reservation = getTableReservation(table.id);
@@ -1494,33 +1484,8 @@ export default function Tables() {
               )}
             </div>
 
-            {/* Desktop Adding Mode: ProductSelector + PendingCartPanel */}
-            {!isMobile && isAddingMode && selectedTable && selectedTable.status === 'occupied' && (
-              <>
-                {/* Product Selector - Centro */}
-                <div className="flex-1 h-full border rounded-lg overflow-hidden">
-                  <ProductSelector onAddItem={addToPendingCart} />
-                </div>
-
-                {/* Pending Cart Panel - Direita */}
-                <div className="w-80 flex-shrink-0 h-full border rounded-lg overflow-hidden">
-                  <PendingCartPanel
-                    items={pendingCartItems}
-                    tableNumber={selectedTable.number}
-                    onRemoveItem={removeFromPendingCart}
-                    onUpdateQuantity={updatePendingCartQuantity}
-                    onDuplicateItem={duplicatePendingCartItem}
-                    onConfirm={handleSendPendingCartToKitchen}
-                    onCancel={clearPendingCart}
-                    isSubmitting={isAddingItems}
-                    duplicateItems={duplicateItems}
-                  />
-                </div>
-              </>
-            )}
-
-            {/* Side Panel - Table Details (quando NÃO está em modo de adição) */}
-            {selectedTable && !isAddingMode && (
+            {/* Side Panel - Table Details */}
+            {selectedTable && (
               <div className="hidden lg:block w-1/3 min-w-[320px]">
                 <Card className="h-full flex flex-col">
                   <CardHeader className="pb-3">
@@ -1796,10 +1761,8 @@ export default function Tables() {
                             <>
                               <Button 
                                 className="w-full" 
-                                onClick={() => {
-                                  setIsAddingMode(true);
-                                }}
-                                disabled={isAddingItems || isAddingMode}
+                                onClick={() => setIsAddOrderModalOpen(true)}
+                                disabled={isAddingItems}
                               >
                                 <Plus className="h-4 w-4 mr-2" />
                                 {isAddingItems ? 'Adicionando...' : 'Adicionar Pedido'}
@@ -3093,6 +3056,41 @@ export default function Tables() {
         orderInfo={selectedTable && selectedOrder ? `Mesa ${selectedTable.number} - Pedido #${selectedOrder.id.slice(0, 8)}` : undefined}
         isLoading={isCancellingOrder}
       />
+
+      {/* Add Order Modal - Desktop */}
+      <Dialog open={isAddOrderModalOpen} onOpenChange={setIsAddOrderModalOpen}>
+        <DialogContent className="max-w-[95vw] h-[90vh] p-0 flex flex-col">
+          <DialogHeader className="px-6 pt-6 pb-2 flex-shrink-0">
+            <DialogTitle className="text-xl">Adicionar Pedido - Mesa {selectedTable?.number}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 flex overflow-hidden px-6 pb-6 gap-4">
+            {/* Product Selector - 70% */}
+            <div className="flex-1 border rounded-lg overflow-hidden">
+              <ProductSelector onAddItem={addToPendingCart} />
+            </div>
+            {/* Pending Cart Panel - 30% */}
+            <div className="w-80 flex-shrink-0 border rounded-lg overflow-hidden">
+              <PendingCartPanel
+                items={pendingCartItems}
+                tableNumber={selectedTable?.number || 0}
+                onRemoveItem={removeFromPendingCart}
+                onUpdateQuantity={updatePendingCartQuantity}
+                onDuplicateItem={duplicatePendingCartItem}
+                onConfirm={async () => {
+                  await handleSendPendingCartToKitchen();
+                  setIsAddOrderModalOpen(false);
+                }}
+                onCancel={() => {
+                  clearPendingCart();
+                  setIsAddOrderModalOpen(false);
+                }}
+                isSubmitting={isAddingItems}
+                duplicateItems={duplicateItems}
+              />
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Mobile Order Flow Components */}
       {isMobile && (
