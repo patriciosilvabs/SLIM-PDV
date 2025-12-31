@@ -21,13 +21,13 @@ export const OpenTableDialog = memo(function OpenTableDialog({
   isPending,
 }: OpenTableDialogProps) {
   // Local state for inputs - prevents parent re-renders on every keystroke
-  const [people, setPeople] = useState(2);
+  const [people, setPeople] = useState(0);
   const [identification, setIdentification] = useState('');
 
   // Reset local state when dialog opens with new table
   useEffect(() => {
     if (open && table) {
-      setPeople(table.capacity || 2);
+      setPeople(0);
       setIdentification('');
     }
   }, [open, table?.id]);
@@ -49,7 +49,7 @@ export const OpenTableDialog = memo(function OpenTableDialog({
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => setPeople(p => Math.max(1, p - 1))}
+                onClick={() => setPeople(p => Math.max(0, p - 1))}
               >
                 <span className="text-lg">-</span>
               </Button>
@@ -76,7 +76,7 @@ export const OpenTableDialog = memo(function OpenTableDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Voltar
           </Button>
-          <Button onClick={handleConfirm} disabled={isPending}>
+          <Button onClick={handleConfirm} disabled={isPending || people === 0}>
             Abrir Mesa
           </Button>
         </DialogFooter>
