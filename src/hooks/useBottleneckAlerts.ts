@@ -130,10 +130,22 @@ export function useBottleneckAlerts(enabled: boolean = true, soundEnabled: boole
       alertedBottlenecksRef.current.forEach((_, stationId) => {
         toast.dismiss(`bottleneck-${stationId}`);
       });
+      alertedBottlenecksRef.current.clear();
+      persistAlerts(alertedBottlenecksRef.current);
       return;
     }
     
     if (!bottlenecks) return;
+    
+    // Se não há gargalos, limpar todos os toasts e alertas
+    if (bottlenecks.length === 0) {
+      alertedBottlenecksRef.current.forEach((_, stationId) => {
+        toast.dismiss(`bottleneck-${stationId}`);
+      });
+      alertedBottlenecksRef.current.clear();
+      persistAlerts(alertedBottlenecksRef.current);
+      return;
+    }
 
     // Set de gargalos significativos atuais (critical ou high)
     const currentSignificantIds = new Set(
