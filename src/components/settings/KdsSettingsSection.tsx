@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { useKdsSettings, KdsOperationMode, OrderManagementViewMode, KanbanColumn } from '@/hooks/useKdsSettings';
 import { useKdsStations } from '@/hooks/useKdsStations';
 import { useKdsDevice } from '@/hooks/useKdsDevice';
-import { ChefHat, Printer, Monitor, Factory, Clock, Circle, X, Plus, AlertTriangle, ChevronDown, Layers, User, Eye, Palette, ClipboardList, CheckCircle, Package } from 'lucide-react';
+import { ChefHat, Printer, Monitor, Factory, Clock, Circle, X, Plus, AlertTriangle, ChevronDown, Layers, User, Eye, Palette, ClipboardList, CheckCircle, Package, Columns } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { BADGE_COLOR_OPTIONS, getBadgeColorClasses } from '@/lib/badgeColors';
@@ -346,6 +346,43 @@ export function KdsSettingsSection() {
                     </button>
                   );
                 })}
+              </div>
+
+              {/* Nomes das Colunas */}
+              <div className="mt-6 pt-4 border-t">
+                <Label className="font-medium text-base mb-3 block flex items-center gap-2">
+                  <Columns className="h-4 w-4" />
+                  Nomes das Colunas
+                </Label>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Personalize os nomes das colunas para adaptar à terminologia da sua região
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm">Coluna "Pendente"</Label>
+                    <Input
+                      value={settings.columnNamePending}
+                      onChange={(e) => updateSettings({ columnNamePending: e.target.value.toUpperCase() })}
+                      placeholder="Ex: AGUARDANDO"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Coluna "Em Preparo"</Label>
+                    <Input
+                      value={settings.columnNamePreparing}
+                      onChange={(e) => updateSettings({ columnNamePreparing: e.target.value.toUpperCase() })}
+                      placeholder="Ex: PREPARANDO"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Coluna "Pronto"</Label>
+                    <Input
+                      value={settings.columnNameReady}
+                      onChange={(e) => updateSettings({ columnNameReady: e.target.value.toUpperCase() })}
+                      placeholder="Ex: FINALIZADO"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}

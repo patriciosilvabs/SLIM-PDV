@@ -1347,7 +1347,7 @@ export default function KDS() {
         <div className="flex gap-4 overflow-x-auto pb-4">
           {kdsSettings.showPendingColumn && (
             <KanbanColumn 
-              title="PENDENTE" 
+              title={kdsSettings.columnNamePending} 
               orders={pendingOrders} 
               icon={Clock}
               headerColor="bg-yellow-500/20 text-yellow-700 dark:text-yellow-400"
@@ -1355,7 +1355,7 @@ export default function KDS() {
             />
           )}
           <KanbanColumn 
-            title="EM PREPARO" 
+            title={kdsSettings.columnNamePreparing} 
             orders={preparingOrders} 
             icon={ChefHat}
             headerColor="bg-blue-500/20 text-blue-700 dark:text-blue-400"
@@ -1363,7 +1363,7 @@ export default function KDS() {
             showStartButton={!kdsSettings.showPendingColumn}
           />
           <KanbanColumn 
-            title="PRONTO" 
+            title={kdsSettings.columnNameReady} 
             orders={readyOrders} 
             icon={CheckCircle}
             headerColor="bg-green-500/20 text-green-700 dark:text-green-400"

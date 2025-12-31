@@ -47,6 +47,10 @@ export interface KdsGlobalSettings {
   // Badge color settings
   borderBadgeColor: string;
   notesBadgeColor: string;
+  // Column name settings
+  columnNamePending: string;
+  columnNamePreparing: string;
+  columnNameReady: string;
 }
 
 // Device-specific settings (stored in localStorage)
@@ -101,6 +105,9 @@ const defaultGlobalSettings: KdsGlobalSettings = {
   showWaiterName: true,
   borderBadgeColor: 'amber',
   notesBadgeColor: 'orange',
+  columnNamePending: 'PENDENTE',
+  columnNamePreparing: 'EM PREPARO',
+  columnNameReady: 'PRONTO',
 };
 
 const getDeviceSettings = (): KdsDeviceSettings => {
@@ -221,6 +228,9 @@ export function useKdsSettings() {
       showWaiterName: getVal('show_waiter_name', defaultGlobalSettings.showWaiterName),
       borderBadgeColor: getVal('border_badge_color', defaultGlobalSettings.borderBadgeColor),
       notesBadgeColor: getVal('notes_badge_color', defaultGlobalSettings.notesBadgeColor),
+      columnNamePending: getVal('column_name_pending', defaultGlobalSettings.columnNamePending),
+      columnNamePreparing: getVal('column_name_preparing', defaultGlobalSettings.columnNamePreparing),
+      columnNameReady: getVal('column_name_ready', defaultGlobalSettings.columnNameReady),
     };
   }, [dbSettings]);
 
@@ -260,6 +270,9 @@ export function useKdsSettings() {
       if (updates.notesBlinkAllStations !== undefined) dbUpdates.notes_blink_all_stations = updates.notesBlinkAllStations;
       if (updates.showWaiterName !== undefined) dbUpdates.show_waiter_name = updates.showWaiterName;
       if (updates.borderBadgeColor !== undefined) dbUpdates.border_badge_color = updates.borderBadgeColor;
+      if (updates.columnNamePending !== undefined) dbUpdates.column_name_pending = updates.columnNamePending;
+      if (updates.columnNamePreparing !== undefined) dbUpdates.column_name_preparing = updates.columnNamePreparing;
+      if (updates.columnNameReady !== undefined) dbUpdates.column_name_ready = updates.columnNameReady;
       if (updates.notesBadgeColor !== undefined) dbUpdates.notes_badge_color = updates.notesBadgeColor;
 
       // Check if record exists for this tenant
@@ -297,6 +310,9 @@ export function useKdsSettings() {
           notes_blink_all_stations: updates.notesBlinkAllStations ?? defaultGlobalSettings.notesBlinkAllStations,
           show_waiter_name: updates.showWaiterName ?? defaultGlobalSettings.showWaiterName,
           border_badge_color: updates.borderBadgeColor ?? defaultGlobalSettings.borderBadgeColor,
+          column_name_pending: updates.columnNamePending ?? defaultGlobalSettings.columnNamePending,
+          column_name_preparing: updates.columnNamePreparing ?? defaultGlobalSettings.columnNamePreparing,
+          column_name_ready: updates.columnNameReady ?? defaultGlobalSettings.columnNameReady,
           notes_badge_color: updates.notesBadgeColor ?? defaultGlobalSettings.notesBadgeColor,
         };
 
@@ -342,6 +358,9 @@ export function useKdsSettings() {
     if (updates.notesBlinkAllStations !== undefined) globalUpdates.notesBlinkAllStations = updates.notesBlinkAllStations;
     if (updates.showWaiterName !== undefined) globalUpdates.showWaiterName = updates.showWaiterName;
     if (updates.borderBadgeColor !== undefined) globalUpdates.borderBadgeColor = updates.borderBadgeColor;
+    if (updates.columnNamePending !== undefined) globalUpdates.columnNamePending = updates.columnNamePending;
+    if (updates.columnNamePreparing !== undefined) globalUpdates.columnNamePreparing = updates.columnNamePreparing;
+    if (updates.columnNameReady !== undefined) globalUpdates.columnNameReady = updates.columnNameReady;
     if (updates.notesBadgeColor !== undefined) globalUpdates.notesBadgeColor = updates.notesBadgeColor;
 
     // Update device settings locally
