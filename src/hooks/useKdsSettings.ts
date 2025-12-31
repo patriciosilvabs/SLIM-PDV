@@ -51,6 +51,7 @@ export interface KdsGlobalSettings {
   columnNamePending: string;
   columnNamePreparing: string;
   columnNameReady: string;
+  columnNameDelivered: string;
 }
 
 // Device-specific settings (stored in localStorage)
@@ -108,6 +109,7 @@ const defaultGlobalSettings: KdsGlobalSettings = {
   columnNamePending: 'PENDENTE',
   columnNamePreparing: 'EM PREPARO',
   columnNameReady: 'PRONTO',
+  columnNameDelivered: 'ENTREGUES HOJE',
 };
 
 const getDeviceSettings = (): KdsDeviceSettings => {
@@ -231,6 +233,7 @@ export function useKdsSettings() {
       columnNamePending: getVal('column_name_pending', defaultGlobalSettings.columnNamePending),
       columnNamePreparing: getVal('column_name_preparing', defaultGlobalSettings.columnNamePreparing),
       columnNameReady: getVal('column_name_ready', defaultGlobalSettings.columnNameReady),
+      columnNameDelivered: getVal('column_name_delivered', defaultGlobalSettings.columnNameDelivered),
     };
   }, [dbSettings]);
 
@@ -273,6 +276,7 @@ export function useKdsSettings() {
       if (updates.columnNamePending !== undefined) dbUpdates.column_name_pending = updates.columnNamePending;
       if (updates.columnNamePreparing !== undefined) dbUpdates.column_name_preparing = updates.columnNamePreparing;
       if (updates.columnNameReady !== undefined) dbUpdates.column_name_ready = updates.columnNameReady;
+      if (updates.columnNameDelivered !== undefined) dbUpdates.column_name_delivered = updates.columnNameDelivered;
       if (updates.notesBadgeColor !== undefined) dbUpdates.notes_badge_color = updates.notesBadgeColor;
 
       // Check if record exists for this tenant
@@ -313,6 +317,7 @@ export function useKdsSettings() {
           column_name_pending: updates.columnNamePending ?? defaultGlobalSettings.columnNamePending,
           column_name_preparing: updates.columnNamePreparing ?? defaultGlobalSettings.columnNamePreparing,
           column_name_ready: updates.columnNameReady ?? defaultGlobalSettings.columnNameReady,
+          column_name_delivered: updates.columnNameDelivered ?? defaultGlobalSettings.columnNameDelivered,
           notes_badge_color: updates.notesBadgeColor ?? defaultGlobalSettings.notesBadgeColor,
         };
 
@@ -361,6 +366,7 @@ export function useKdsSettings() {
     if (updates.columnNamePending !== undefined) globalUpdates.columnNamePending = updates.columnNamePending;
     if (updates.columnNamePreparing !== undefined) globalUpdates.columnNamePreparing = updates.columnNamePreparing;
     if (updates.columnNameReady !== undefined) globalUpdates.columnNameReady = updates.columnNameReady;
+    if (updates.columnNameDelivered !== undefined) globalUpdates.columnNameDelivered = updates.columnNameDelivered;
     if (updates.notesBadgeColor !== undefined) globalUpdates.notesBadgeColor = updates.notesBadgeColor;
 
     // Update device settings locally

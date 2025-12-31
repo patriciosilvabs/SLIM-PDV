@@ -313,7 +313,7 @@ export function KdsKanbanReadOnly({
     <div className={cn("grid gap-4 h-[calc(100vh-200px)]", gridCols)}>
       {showPending && (
         <KanbanColumn
-          title="Pendentes"
+          title={settings.columnNamePending}
           orders={pendingOrders}
           icon={Clock}
           headerColor="bg-yellow-500 text-yellow-950"
@@ -321,7 +321,7 @@ export function KdsKanbanReadOnly({
       )}
       {showPreparing && (
         <KanbanColumn
-          title={showPending ? "Em Preparo" : "Em Preparo"}
+          title={settings.columnNamePreparing}
           orders={preparingOrders}
           icon={ChefHat}
           headerColor="bg-blue-500 text-white"
@@ -329,7 +329,7 @@ export function KdsKanbanReadOnly({
       )}
       {showReady && (
         <KanbanColumn
-          title="Pronto"
+          title={settings.columnNameReady}
           orders={readyOrders}
           icon={CheckCircle}
           headerColor="bg-green-500 text-white"
@@ -338,7 +338,7 @@ export function KdsKanbanReadOnly({
       )}
       {showDeliveredToday && (
         <KanbanColumn
-          title="Entregues Hoje"
+          title={settings.columnNameDelivered}
           orders={deliveredOrdersToday}
           icon={Package}
           headerColor="bg-gray-500 text-white"
