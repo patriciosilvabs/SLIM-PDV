@@ -168,53 +168,83 @@ export function KdsSettingsSection() {
           </div>
 
           {settings.operationMode === 'production_line' && (
-            <div className="mt-4 p-4 bg-muted/50 rounded-lg space-y-4">
-              <div>
-                <Label className="font-medium">Nome deste dispositivo</Label>
-                <Input
-                  value={settings.deviceName}
-                  onChange={(e) => {
-                    updateDeviceSettings({ deviceName: e.target.value });
-                    renameDevice(e.target.value);
-                  }}
-                  placeholder="Ex: Tablet Cozinha 1"
-                  className="mt-1"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  ID: {settings.deviceId.slice(0, 8)}...
-                </p>
-              </div>
-
-              <div>
-                <Label className="font-medium">Praça atribuída</Label>
-                <Select
-                  value={settings.assignedStationId || 'none'}
-                  onValueChange={(value) => assignToStation(value === 'none' ? null : value)}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Selecione uma praça" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhuma (ver todas)</SelectItem>
-                    {activeStations.map((station) => (
-                      <SelectItem key={station.id} value={station.id}>
-                        <div className="flex items-center gap-2">
-                          <Circle 
-                            className="h-3 w-3" 
-                            style={{ color: station.color, fill: station.color }} 
-                          />
-                          {station.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Quando atribuído, este dispositivo mostrará apenas os itens desta praça.
-                </p>
-              </div>
+            <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+              <p className="text-sm text-muted-foreground">
+                <strong>Dica:</strong> No modo Linha de Produção, configure a praça atribuída na seção "Configuração do Dispositivo" abaixo.
+              </p>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Device Configuration - Always visible */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Monitor className="h-5 w-5" />
+            Configuração do Dispositivo
+          </CardTitle>
+          <CardDescription>
+            Configure este dispositivo para exibir uma praça específica
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label className="font-medium flex items-center gap-2">
+              <User className="h-4 w-4" />
+              Nome deste dispositivo
+            </Label>
+            <Input
+              value={settings.deviceName}
+              onChange={(e) => {
+                updateDeviceSettings({ deviceName: e.target.value });
+                renameDevice(e.target.value);
+              }}
+              placeholder="Ex: Tablet Cozinha 1"
+              className="mt-1"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              ID: {settings.deviceId.slice(0, 8)}...
+            </p>
+          </div>
+
+          <div>
+            <Label className="font-medium flex items-center gap-2">
+              <Layers className="h-4 w-4" />
+              Praça atribuída
+            </Label>
+            <Select
+              value={settings.assignedStationId || 'none'}
+              onValueChange={(value) => assignToStation(value === 'none' ? null : value)}
+            >
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="Selecione uma praça" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">
+                  <div className="flex items-center gap-2">
+                    <Circle className="h-3 w-3 text-muted-foreground" />
+                    Nenhuma (ver todas)
+                  </div>
+                </SelectItem>
+                {activeStations.map((station) => (
+                  <SelectItem key={station.id} value={station.id}>
+                    <div className="flex items-center gap-2">
+                      <Circle 
+                        className="h-3 w-3" 
+                        style={{ color: station.color, fill: station.color }} 
+                      />
+                      {station.name}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Quando atribuído, este dispositivo mostrará apenas os itens desta praça.
+              Funciona em ambos os modos (Kanban e Linha de Produção).
+            </p>
+          </div>
         </CardContent>
       </Card>
 
