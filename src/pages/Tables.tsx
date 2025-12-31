@@ -1528,10 +1528,13 @@ export default function Tables() {
                         )}
                         <CardContent className="p-4 text-center">
                           <p className="text-3xl font-bold mb-1">{table.number}</p>
-                          <div className="flex items-center justify-center gap-1 text-sm opacity-90">
-                            <Users className="h-4 w-4" />
-                            <span>{table.capacity}</span>
-                          </div>
+                          {/* Mostrar quantidade de pessoas APENAS para mesas ocupadas */}
+                          {order && (table.status === 'occupied' || table.status === 'bill_requested') && order.notes && (
+                            <div className="flex items-center justify-center gap-1 text-sm opacity-90">
+                              <Users className="h-4 w-4" />
+                              <span>{order.notes.replace(' pessoas', '')}</span>
+                            </div>
+                          )}
                           <p className="text-xs mt-2 font-medium">{statusLabels[table.status]}</p>
                           {order && table.status !== 'available' && (
                             <p className="text-xs mt-1 opacity-75">
