@@ -402,6 +402,10 @@ export default function Tables() {
         if (order.order_type !== 'dine_in') return;
         if (order.status === 'ready' || order.status === 'delivered' || order.status === 'cancelled') return;
         
+        // Verificar se a mesa ainda está ocupada - se não estiver, ignorar o pedido
+        const table = tables?.find(t => t.id === order.table_id);
+        if (!table || table.status !== 'occupied') return;
+        
         const orderTime = new Date(order.created_at!).getTime();
         const waitMinutes = Math.floor((now - orderTime) / 60000);
         
