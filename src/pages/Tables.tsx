@@ -1473,8 +1473,8 @@ export default function Tables() {
                         )}
                         onClick={() => handleTableClick(table)}
                       >
-                        <CardContent className="p-4 flex flex-col items-center justify-center aspect-square">
-                          <p className="text-4xl font-bold">{table.number}</p>
+                        <CardContent className="p-3 flex flex-col items-center justify-center aspect-square">
+                          <p className="text-3xl font-bold">{table.number}</p>
                           <p className="text-sm mt-2 font-medium">{statusLabels[table.status]}</p>
                         </CardContent>
                       </Card>
