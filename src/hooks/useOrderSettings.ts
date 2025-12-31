@@ -107,10 +107,15 @@ export function useOrderSettings() {
         return { settings: defaultSettings };
       }
 
-      const storedValue = record.value as Record<string, unknown>;
-      return {
-        settings: { ...defaultSettings, ...storedValue } as OrderSettings,
-      };
+      // Merge inteligente: usa 'in' operator para preservar valores explícitos
+      const dbValue = record.value as Record<string, unknown>;
+      const mergedSettings = { ...defaultSettings };
+      for (const key of Object.keys(defaultSettings) as (keyof OrderSettings)[]) {
+        if (key in dbValue) {
+          (mergedSettings as any)[key] = dbValue[key];
+        }
+      }
+      return { settings: mergedSettings };
     },
     enabled: !!tenantId,
     staleTime: 1000 * 60 * 5,
