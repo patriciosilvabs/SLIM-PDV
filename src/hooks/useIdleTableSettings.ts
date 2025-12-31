@@ -44,13 +44,16 @@ export function useIdleTableSettings() {
         return { settings: defaultSettings };
       }
 
+      // Merge inteligente: usa 'in' operator para preservar valores explícitos
       const storedValue = record.value as Record<string, unknown>;
       return {
         settings: {
-          enabled: typeof storedValue?.enabled === 'boolean' ? storedValue.enabled : defaultSettings.enabled,
-          thresholdMinutes: typeof storedValue?.thresholdMinutes === 'number' ? storedValue.thresholdMinutes : defaultSettings.thresholdMinutes,
-          autoClose: typeof storedValue?.autoClose === 'boolean' ? storedValue.autoClose : defaultSettings.autoClose,
-          includeDeliveredOrders: typeof storedValue?.includeDeliveredOrders === 'boolean' ? storedValue.includeDeliveredOrders : defaultSettings.includeDeliveredOrders,
+          enabled: 'enabled' in storedValue ? !!storedValue.enabled : defaultSettings.enabled,
+          thresholdMinutes: 'thresholdMinutes' in storedValue && typeof storedValue.thresholdMinutes === 'number' 
+            ? storedValue.thresholdMinutes : defaultSettings.thresholdMinutes,
+          autoClose: 'autoClose' in storedValue ? !!storedValue.autoClose : defaultSettings.autoClose,
+          includeDeliveredOrders: 'includeDeliveredOrders' in storedValue 
+            ? !!storedValue.includeDeliveredOrders : defaultSettings.includeDeliveredOrders,
         },
       };
     },

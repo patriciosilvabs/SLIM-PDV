@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { usePersistentSettings } from './usePersistentSettings';
 
 // QZ Tray connection status
 export type QzConnectionStatus = 'disconnected' | 'waiting_auth' | 'connecting' | 'connected';
@@ -88,22 +89,23 @@ const DEFAULT_CONFIG: PrinterConfig = {
   autoConnectOnLogin: true,
 };
 
-const STORAGE_KEY = 'pdv_printer_config';
-
 export function useQzTray() {
+  // Usar persistência no banco de dados para configurações de impressora
+  const { 
+    settings: config, 
+    updateSettings: updateConfigDb, 
+    isLoading: isLoadingConfig 
+  } = usePersistentSettings<PrinterConfig>({
+    settingsKey: 'printer_config',
+    defaults: DEFAULT_CONFIG,
+    localStorageKey: 'pdv_printer_config',
+  });
+
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [waitingForAuth, setWaitingForAuth] = useState(false);
   const [printers, setPrinters] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [config, setConfig] = useState<PrinterConfig>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : DEFAULT_CONFIG;
-    } catch {
-      return DEFAULT_CONFIG;
-    }
-  });
   
   const qzLoadedRef = useRef(false);
   const connectAttemptedRef = useRef(false);
@@ -156,10 +158,7 @@ export function useQzTray() {
     };
   }, []);
 
-  // Save config to localStorage
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-  }, [config]);
+  // Config já é sincronizado automaticamente pelo usePersistentSettings
 
   const connect = useCallback(async () => {
     if (!window.qz) {
@@ -374,8 +373,8 @@ export function useQzTray() {
   }, [print, config.cashierPrinter]);
 
   const updateConfig = useCallback((updates: Partial<PrinterConfig>) => {
-    setConfig(prev => ({ ...prev, ...updates }));
-  }, []);
+    updateConfigDb(updates);
+  }, [updateConfigDb]);
 
   const testPrint = useCallback(async (printerName: string) => {
     const testData = [

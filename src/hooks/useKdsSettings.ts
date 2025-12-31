@@ -189,33 +189,38 @@ export function useKdsSettings() {
     staleTime: 1000 * 60, // 1 minute
   });
 
-  // Parse global settings from database
+  // Parse global settings from database - usando 'in' operator para preservar valores explícitos
   const globalSettings: KdsGlobalSettings = useMemo(() => {
     if (!dbSettings) return defaultGlobalSettings;
 
+    // Helper para verificar se chave existe e pegar valor
+    const getVal = <T>(dbKey: string, defaultVal: T): T => {
+      return dbKey in dbSettings ? (dbSettings as any)[dbKey] : defaultVal;
+    };
+
     return {
-      operationMode: (dbSettings.operation_mode as KdsOperationMode) || defaultGlobalSettings.operationMode,
-      orderManagementViewMode: ((dbSettings as any).order_management_view_mode as OrderManagementViewMode) || defaultGlobalSettings.orderManagementViewMode,
-      kanbanVisibleColumns: ((dbSettings as any).kanban_visible_columns as KanbanColumn[]) ?? defaultGlobalSettings.kanbanVisibleColumns,
-      slaGreenMinutes: dbSettings.sla_green_minutes ?? defaultGlobalSettings.slaGreenMinutes,
-      slaYellowMinutes: dbSettings.sla_yellow_minutes ?? defaultGlobalSettings.slaYellowMinutes,
-      showPendingColumn: dbSettings.show_pending_column ?? defaultGlobalSettings.showPendingColumn,
-      cancellationAlertInterval: dbSettings.cancellation_alert_interval ?? defaultGlobalSettings.cancellationAlertInterval,
-      cancellationAlertsEnabled: dbSettings.cancellation_alerts_enabled ?? defaultGlobalSettings.cancellationAlertsEnabled,
-      autoPrintCancellations: dbSettings.auto_print_cancellations ?? defaultGlobalSettings.autoPrintCancellations,
-      highlightSpecialBorders: dbSettings.highlight_special_borders ?? defaultGlobalSettings.highlightSpecialBorders,
-      borderKeywords: dbSettings.border_keywords ?? defaultGlobalSettings.borderKeywords,
+      operationMode: getVal('operation_mode', defaultGlobalSettings.operationMode) as KdsOperationMode,
+      orderManagementViewMode: getVal('order_management_view_mode', defaultGlobalSettings.orderManagementViewMode) as OrderManagementViewMode,
+      kanbanVisibleColumns: getVal('kanban_visible_columns', defaultGlobalSettings.kanbanVisibleColumns) as KanbanColumn[],
+      slaGreenMinutes: getVal('sla_green_minutes', defaultGlobalSettings.slaGreenMinutes),
+      slaYellowMinutes: getVal('sla_yellow_minutes', defaultGlobalSettings.slaYellowMinutes),
+      showPendingColumn: getVal('show_pending_column', defaultGlobalSettings.showPendingColumn),
+      cancellationAlertInterval: getVal('cancellation_alert_interval', defaultGlobalSettings.cancellationAlertInterval),
+      cancellationAlertsEnabled: getVal('cancellation_alerts_enabled', defaultGlobalSettings.cancellationAlertsEnabled),
+      autoPrintCancellations: getVal('auto_print_cancellations', defaultGlobalSettings.autoPrintCancellations),
+      highlightSpecialBorders: getVal('highlight_special_borders', defaultGlobalSettings.highlightSpecialBorders),
+      borderKeywords: getVal('border_keywords', defaultGlobalSettings.borderKeywords),
       bottleneckSettings: parseBottleneckSettings(dbSettings.bottleneck_settings),
-      showPartySize: dbSettings.show_party_size ?? defaultGlobalSettings.showPartySize,
-      compactMode: dbSettings.compact_mode ?? defaultGlobalSettings.compactMode,
-      timerGreenMinutes: (dbSettings as any).timer_green_minutes ?? defaultGlobalSettings.timerGreenMinutes,
-      timerYellowMinutes: (dbSettings as any).timer_yellow_minutes ?? defaultGlobalSettings.timerYellowMinutes,
-      delayAlertEnabled: (dbSettings as any).delay_alert_enabled ?? defaultGlobalSettings.delayAlertEnabled,
-      delayAlertMinutes: (dbSettings as any).delay_alert_minutes ?? defaultGlobalSettings.delayAlertMinutes,
-      notesBlinkAllStations: (dbSettings as any).notes_blink_all_stations ?? defaultGlobalSettings.notesBlinkAllStations,
-      showWaiterName: (dbSettings as any).show_waiter_name ?? defaultGlobalSettings.showWaiterName,
-      borderBadgeColor: (dbSettings as any).border_badge_color ?? defaultGlobalSettings.borderBadgeColor,
-      notesBadgeColor: (dbSettings as any).notes_badge_color ?? defaultGlobalSettings.notesBadgeColor,
+      showPartySize: getVal('show_party_size', defaultGlobalSettings.showPartySize),
+      compactMode: getVal('compact_mode', defaultGlobalSettings.compactMode),
+      timerGreenMinutes: getVal('timer_green_minutes', defaultGlobalSettings.timerGreenMinutes),
+      timerYellowMinutes: getVal('timer_yellow_minutes', defaultGlobalSettings.timerYellowMinutes),
+      delayAlertEnabled: getVal('delay_alert_enabled', defaultGlobalSettings.delayAlertEnabled),
+      delayAlertMinutes: getVal('delay_alert_minutes', defaultGlobalSettings.delayAlertMinutes),
+      notesBlinkAllStations: getVal('notes_blink_all_stations', defaultGlobalSettings.notesBlinkAllStations),
+      showWaiterName: getVal('show_waiter_name', defaultGlobalSettings.showWaiterName),
+      borderBadgeColor: getVal('border_badge_color', defaultGlobalSettings.borderBadgeColor),
+      notesBadgeColor: getVal('notes_badge_color', defaultGlobalSettings.notesBadgeColor),
     };
   }, [dbSettings]);
 

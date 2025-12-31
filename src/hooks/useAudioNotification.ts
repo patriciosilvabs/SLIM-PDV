@@ -1,7 +1,6 @@
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { PREDEFINED_SOUNDS, SoundType } from './useCustomSounds';
-
-const STORAGE_KEY = 'pdv-notification-settings';
+import { usePersistentSettings } from './usePersistentSettings';
 
 interface NotificationSettings {
   enabled: boolean;
@@ -56,29 +55,16 @@ const defaultSettings: NotificationSettings = {
 };
 
 export function useAudioNotification() {
-  const [settings, setSettings] = useState<NotificationSettings>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        // Merge with defaults to handle new fields
-        return {
-          ...defaultSettings,
-          ...parsed,
-          enabledSounds: { ...defaultSettings.enabledSounds, ...parsed.enabledSounds },
-          selectedSounds: { ...defaultSettings.selectedSounds, ...parsed.selectedSounds },
-          customSoundUrls: { ...defaultSettings.customSoundUrls, ...parsed.customSoundUrls },
-        };
-      }
-      return defaultSettings;
-    } catch {
-      return defaultSettings;
-    }
+  // Usar persistência no banco de dados para configurações de áudio
+  const { 
+    settings, 
+    updateSettings: updateSettingsDb,
+    setSettings,
+  } = usePersistentSettings<NotificationSettings>({
+    settingsKey: 'notification_settings',
+    defaults: defaultSettings,
+    localStorageKey: 'pdv-notification-settings',
   });
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-  }, [settings]);
 
   const playSound = useCallback(async (type: SoundType) => {
     if (!settings.enabled || !settings.enabledSounds[type]) return;
@@ -106,32 +92,32 @@ export function useAudioNotification() {
   const playItemDelayAlertSound = useCallback(() => playSound('itemDelayAlert'), [playSound]);
 
   const updateSettings = useCallback((updates: Partial<NotificationSettings>) => {
-    setSettings(prev => ({ ...prev, ...updates }));
-  }, []);
+    updateSettingsDb(updates);
+  }, [updateSettingsDb]);
 
   const toggleSound = useCallback((type: SoundType) => {
-    setSettings(prev => ({
-      ...prev,
+    setSettings({
+      ...settings,
       enabledSounds: {
-        ...prev.enabledSounds,
-        [type]: !prev.enabledSounds[type],
+        ...settings.enabledSounds,
+        [type]: !settings.enabledSounds[type],
       },
-    }));
-  }, []);
+    });
+  }, [settings, setSettings]);
 
   const setSelectedSound = useCallback((type: SoundType, soundId: string, soundUrl: string) => {
-    setSettings(prev => ({
-      ...prev,
+    setSettings({
+      ...settings,
       selectedSounds: {
-        ...prev.selectedSounds,
+        ...settings.selectedSounds,
         [type]: soundId,
       },
       customSoundUrls: {
-        ...prev.customSoundUrls,
+        ...settings.customSoundUrls,
         [type]: soundUrl,
       },
-    }));
-  }, []);
+    });
+  }, [settings, setSettings]);
 
   const testSound = useCallback((type: SoundType) => {
     const soundUrl = settings.customSoundUrls[type] || PREDEFINED_SOUNDS.beepClassic.data;
