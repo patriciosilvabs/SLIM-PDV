@@ -158,6 +158,7 @@ export function useOrders(status?: OrderStatus[]) {
           discount: order.discount ?? 0,
           total: order.total ?? 0,
           notes: order.notes,
+          party_size: order.party_size,
           created_by: order.created_by,
           created_at: order.created_at ?? '',
           updated_at: order.updated_at ?? '',
