@@ -2435,46 +2435,55 @@ export default function Tables() {
           const tableNumber = tableToOpen.number;
           const tableId = tableToOpen.id;
           
-          // Fechar dialog imediatamente para feedback visual
+          // Fechar dialog e abrir OrderDrawer IMEDIATAMENTE para feedback visual instantâneo
           setIsOpenTableDialogOpen(false);
           setOpenTableData(data);
-          setIsOpeningTable(true);
           
+          // Definir mesa como ocupada ANTES das chamadas assíncronas
+          const openedTable = { ...tableToOpen, status: 'occupied' as const };
+          setSelectedTable(openedTable);
+          
+          // Abrir OrderDrawer imediatamente no mobile
+          if (isMobile) {
+            setIsAddingMode(true);
+            setIsOrderDrawerOpen(true);
+          }
+          
+          // Reset all closing states
+          setIsClosingBill(false);
+          setRegisteredPayments([]);
+          setDiscountType('percentage');
+          setDiscountValue(0);
+          setServiceChargeEnabled(false);
+          setServiceChargePercent(10);
+          setSplitBillEnabled(false);
+          setSplitCount(2);
+          setSplitMode('equal');
+          setCustomSplits([]);
+          
+          // Operações de banco em background (não bloqueia a UI)
+          setIsOpeningTable(true);
           try {
-            await updateTable.mutateAsync({ id: tableId, status: 'occupied' });
-            await createOrder.mutateAsync({
-              table_id: tableId,
-              order_type: 'dine_in',
-              status: getInitialOrderStatus(),
-              customer_name: data.identification || null,
-              notes: data.people ? `${data.people} pessoas` : null,
-              is_draft: true,
-            });
+            await Promise.all([
+              updateTable.mutateAsync({ id: tableId, status: 'occupied' }),
+              createOrder.mutateAsync({
+                table_id: tableId,
+                order_type: 'dine_in',
+                status: getInitialOrderStatus(),
+                customer_name: data.identification || null,
+                notes: data.people ? `${data.people} pessoas` : null,
+                is_draft: true,
+              })
+            ]);
             
-            // Reset all closing states to prevent data leak from previous table
-            setIsClosingBill(false);
-            setRegisteredPayments([]);
-            setDiscountType('percentage');
-            setDiscountValue(0);
-            setServiceChargeEnabled(false);
-            setServiceChargePercent(10);
-            setSplitBillEnabled(false);
-            setSplitCount(2);
-            setSplitMode('equal');
-            setCustomSplits([]);
-            
-            const openedTable = { ...tableToOpen, status: 'occupied' as const };
-            setSelectedTable(openedTable);
             toast.success(`Mesa ${tableNumber} aberta!`);
-            
-            // Abrir OrderDrawer automaticamente no mobile após abrir mesa
-            if (isMobile) {
-              setIsAddingMode(true);
-              setIsOrderDrawerOpen(true);
-            }
           } catch (error) {
             console.error('Error opening table:', error);
             toast.error('Erro ao abrir mesa');
+            // Reverter estado em caso de erro
+            setSelectedTable(null);
+            setIsAddingMode(false);
+            setIsOrderDrawerOpen(false);
           } finally {
             setIsOpeningTable(false);
             setTableToOpen(null);
