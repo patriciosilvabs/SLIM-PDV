@@ -98,10 +98,10 @@ const statusLabels: Record<TableStatus, string> = {
 };
 
 const statusColors: Record<TableStatus, string> = {
-  available: 'bg-accent hover:bg-accent/90 text-accent-foreground',
-  occupied: 'bg-destructive hover:bg-destructive/90 text-destructive-foreground',
-  reserved: 'bg-warning hover:bg-warning/90 text-warning-foreground',
-  bill_requested: 'bg-info hover:bg-info/90 text-info-foreground',
+  available: 'bg-emerald-500 hover:bg-emerald-600 text-white',
+  occupied: 'bg-red-500 hover:bg-red-600 text-white',
+  reserved: 'bg-amber-500 hover:bg-amber-600 text-white',
+  bill_requested: 'bg-sky-500 hover:bg-sky-600 text-white',
 };
 
 const reservationStatusLabels: Record<string, string> = {
@@ -1473,92 +1473,15 @@ export default function Tables() {
                       <Card
                         key={table.id}
                         className={cn(
-                          'cursor-pointer transition-all hover:scale-105 relative',
+                          'cursor-pointer transition-all hover:scale-105 relative rounded-lg border-0',
                           statusColors[table.status],
-                          isSelected && 'ring-2 ring-primary ring-offset-2',
-                          isOrderReady && 'ring-2 ring-green-500 ring-offset-2 animate-pulse',
-                          isOrderDelivered && !isOrderReady && 'ring-2 ring-blue-500 ring-offset-2',
-                          isOrderPreparing && !isOrderReady && !isOrderDelivered && 'ring-2 ring-amber-500 ring-offset-2',
-                          hasPartialPayment && !isOrderReady && !isOrderDelivered && !isOrderPreparing && 'ring-2 ring-orange-500 ring-offset-2'
+                          isSelected && 'ring-4 ring-sky-400 ring-offset-2'
                         )}
                         onClick={() => handleTableClick(table)}
                       >
-                        {/* Partial Payment Badge */}
-                        {hasPartialPayment && !isOrderReady && (
-                          <div className="absolute -top-2 -left-2 z-10">
-                            <Badge className="bg-orange-500 text-white shadow-lg text-[10px] px-1.5">
-                              <Wallet className="h-3 w-3 mr-0.5" />
-                              {formatCurrency(tablePaymentInfo.totalPaid)}
-                            </Badge>
-                          </div>
-                        )}
-                        {isOrderPending && !isOrderReady && !isOrderDelivered && (
-                          <div className="absolute -top-2 -right-2 z-10">
-                            <Badge className="bg-yellow-500 text-white shadow-lg text-[10px]">
-                              <Clock className="h-3 w-3 mr-1" />
-                              Aguardando
-                            </Badge>
-                          </div>
-                        )}
-                        {isOrderPreparing && !isOrderReady && !isOrderDelivered && (
-                          <div className="absolute -top-2 -right-2 z-10">
-                            <Badge 
-                              className="shadow-lg animate-pulse text-[10px] text-white"
-                              style={{ backgroundColor: currentStation?.color || '#f59e0b' }}
-                            >
-                              🍳 {currentStation?.name || 'Produzindo'}
-                            </Badge>
-                          </div>
-                        )}
-                        {isOrderReady && (
-                          <div className="absolute -top-2 -right-2 z-10">
-                            <Badge className="bg-green-500 text-white shadow-lg animate-bounce">
-                              <Bell className="h-3 w-3 mr-1" />
-                              Pronto!
-                            </Badge>
-                          </div>
-                        )}
-                        {isOrderDelivered && !isOrderReady && table.status !== 'available' && (
-                          <div className="absolute -top-2 -right-2 z-10">
-                            <Badge className="bg-blue-500 text-white shadow-lg">
-                              <Check className="h-3 w-3 mr-1" />
-                              Entregue
-                            </Badge>
-                          </div>
-                        )}
-                        <CardContent className="p-4 text-center">
-                          <p className="text-3xl font-bold mb-1">{table.number}</p>
-                          {/* Mostrar quantidade de pessoas APENAS para mesas ocupadas */}
-                          {order && (table.status === 'occupied' || table.status === 'bill_requested') && order.party_size && (
-                            <div className="flex items-center justify-center gap-1 text-sm opacity-90">
-                              <Users className="h-4 w-4" />
-                              <span>{order.party_size}</span>
-                            </div>
-                          )}
-                          <p className="text-xs mt-2 font-medium">{statusLabels[table.status]}</p>
-                          {order && table.status !== 'available' && (
-                            <p className="text-xs mt-1 opacity-75">
-                              {order.order_items?.length || 0} itens
-                            </p>
-                          )}
-                          {/* Wait time indicator for occupied tables */}
-                          {order && table.status === 'occupied' && order.status !== 'delivered' && waitMinutes > 0 && (
-                            <div className={cn("text-xs mt-1 font-medium flex items-center justify-center gap-1", waitTimeColor)}>
-                              <Clock className="h-3 w-3" />
-                              {waitMinutes >= 60 ? `${Math.floor(waitMinutes / 60)}h ${waitMinutes % 60}min` : `${waitMinutes}min`}
-                            </div>
-                          )}
-                          {/* Partial Payment Info */}
-                          {hasPartialPayment && (
-                            <div className="text-xs mt-1 text-orange-200 font-medium">
-                              Falta: {formatCurrency(tablePaymentInfo.orderTotal - tablePaymentInfo.totalPaid)}
-                            </div>
-                          )}
-                          {reservation && (
-                            <p className="text-xs mt-1 opacity-75">
-                              {reservation.reservation_time.slice(0, 5)} - {reservation.customer_name}
-                            </p>
-                          )}
+                        <CardContent className="p-4 flex flex-col items-center justify-center aspect-square">
+                          <p className="text-4xl font-bold">{table.number}</p>
+                          <p className="text-sm mt-2 font-medium">{statusLabels[table.status]}</p>
                         </CardContent>
                       </Card>
                     );
