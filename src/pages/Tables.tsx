@@ -1529,10 +1529,10 @@ export default function Tables() {
                         <CardContent className="p-4 text-center">
                           <p className="text-3xl font-bold mb-1">{table.number}</p>
                           {/* Mostrar quantidade de pessoas APENAS para mesas ocupadas */}
-                          {order && (table.status === 'occupied' || table.status === 'bill_requested') && order.notes && (
+                          {order && (table.status === 'occupied' || table.status === 'bill_requested') && order.party_size && (
                             <div className="flex items-center justify-center gap-1 text-sm opacity-90">
                               <Users className="h-4 w-4" />
-                              <span>{order.notes.replace(' pessoas', '')}</span>
+                              <span>{order.party_size}</span>
                             </div>
                           )}
                           <p className="text-xs mt-2 font-medium">{statusLabels[table.status]}</p>
@@ -2474,7 +2474,7 @@ export default function Tables() {
                 order_type: 'dine_in',
                 status: getInitialOrderStatus(),
                 customer_name: data.identification || null,
-                notes: data.people ? `${data.people} pessoas` : null,
+                party_size: data.people || null,
                 is_draft: true,
               })
             ]);

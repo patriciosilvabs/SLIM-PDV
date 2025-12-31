@@ -65,6 +65,7 @@ export interface Order {
   discount: number;
   total: number;
   notes: string | null;
+  party_size?: number | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
