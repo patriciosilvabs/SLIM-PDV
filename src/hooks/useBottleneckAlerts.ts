@@ -125,7 +125,22 @@ export function useBottleneckAlerts(enabled: boolean = true, soundEnabled: boole
   }, [soundEnabled, audioSettings.enabled, playBottleneckAlertSound]);
 
   useEffect(() => {
-    if (!enabled || !bottleneckSettings.enabled || !bottlenecks || bottlenecks.length === 0) return;
+    if (!enabled || !bottleneckSettings.enabled) {
+      // Limpa todos os toasts de gargalo se desabilitado
+      alertedBottlenecksRef.current.forEach((_, stationId) => {
+        toast.dismiss(`bottleneck-${stationId}`);
+      });
+      return;
+    }
+    
+    if (!bottlenecks) return;
+
+    // Set de gargalos significativos atuais (critical ou high)
+    const currentSignificantIds = new Set(
+      bottlenecks
+        .filter(b => b.severity === 'critical' || b.severity === 'high')
+        .map(b => b.stationId)
+    );
 
     // Processa gargalos críticos e altos
     const significantBottlenecks = bottlenecks.filter(
@@ -133,16 +148,27 @@ export function useBottleneckAlerts(enabled: boolean = true, soundEnabled: boole
     );
 
     significantBottlenecks.forEach(bottleneck => {
+      const existing = alertedBottlenecksRef.current.get(bottleneck.stationId);
+      
+      // Se severidade diminuiu, limpar toast antigo antes de mostrar novo
+      if (existing) {
+        const severityOrder = { low: 0, medium: 1, high: 2, critical: 3 };
+        if (severityOrder[bottleneck.severity] < severityOrder[existing.severity]) {
+          toast.dismiss(`bottleneck-${bottleneck.stationId}`);
+        }
+      }
+      
       if (shouldAlertBottleneck(bottleneck)) {
         triggerAlert(bottleneck);
       }
     });
 
-    // Limpa alertas antigos para praças que não são mais gargalos
-    const currentBottleneckIds = new Set(bottlenecks.map(b => b.stationId));
+    // Limpa alertas antigos para praças que não são mais gargalos significativos
     let hasChanges = false;
-    alertedBottlenecksRef.current.forEach((_, stationId) => {
-      if (!currentBottleneckIds.has(stationId)) {
+    alertedBottlenecksRef.current.forEach((alertedBottleneck, stationId) => {
+      if (!currentSignificantIds.has(stationId)) {
+        // Remove toast visualmente
+        toast.dismiss(`bottleneck-${stationId}`);
         alertedBottlenecksRef.current.delete(stationId);
         hasChanges = true;
       }
@@ -150,6 +176,13 @@ export function useBottleneckAlerts(enabled: boolean = true, soundEnabled: boole
     if (hasChanges) {
       persistAlerts(alertedBottlenecksRef.current);
     }
+    
+    // Cleanup ao desmontar
+    return () => {
+      alertedBottlenecksRef.current.forEach((_, stationId) => {
+        toast.dismiss(`bottleneck-${stationId}`);
+      });
+    };
   }, [enabled, bottleneckSettings.enabled, bottlenecks, shouldAlertBottleneck, triggerAlert]);
 
   return {

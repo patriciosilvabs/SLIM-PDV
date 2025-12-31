@@ -215,8 +215,8 @@ export function useAllStationsMetrics() {
       return metrics;
     },
     enabled: activeStations.length > 0,
-    staleTime: 1000 * 30, // 30 segundos
-    refetchInterval: 1000 * 60, // Atualiza a cada minuto
+    staleTime: 1000 * 10, // 10 segundos
+    refetchInterval: 1000 * 15, // Atualiza a cada 15 segundos para tempo real
   });
 }
 
@@ -371,6 +371,7 @@ export function useBottleneckAnalysis(customThresholds?: {
       return bottlenecks;
     },
     enabled: !!metrics && metrics.length > 0,
-    staleTime: 1000 * 30,
+    staleTime: 1000 * 5, // 5 segundos para reagir rápido
+    refetchInterval: 1000 * 10, // Atualiza a cada 10 segundos
   });
 }
