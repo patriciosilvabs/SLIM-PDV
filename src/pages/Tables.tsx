@@ -571,7 +571,7 @@ export default function Tables() {
     );
   };
 
-  // Mark order as delivered
+  // Mark order as delivered (closes the order)
   const handleMarkAsDelivered = async (orderId: string) => {
     try {
       await updateOrder.mutateAsync({ 
@@ -585,6 +585,22 @@ export default function Tables() {
     } catch (error) {
       console.error('Error marking order as delivered:', error);
       toast.error('Erro ao marcar pedido como entregue');
+    }
+  };
+
+  // Mark order as served (just visual marker, keeps order active)
+  const handleMarkAsServed = async (orderId: string) => {
+    try {
+      await updateOrder.mutateAsync({ 
+        id: orderId, 
+        served_at: new Date().toISOString()
+      } as any);
+      toast.success('Itens marcados como servidos!', {
+        description: 'O cliente pode continuar pedindo ou fechar a conta.',
+      });
+    } catch (error) {
+      console.error('Error marking order as served:', error);
+      toast.error('Erro ao marcar como servido');
     }
   };
 
@@ -1564,11 +1580,11 @@ export default function Tables() {
                       const selectedStation = getOrderCurrentStation(selectedOrder);
                       const isAtOrderStatus = selectedStation?.station_type === 'order_status';
                       
-                      // Se está na estação de status (Item Pronto), mostrar botão de entregar
-                      if (isAtOrderStatus) {
+                      // Se está na estação de status (Item Pronto) e ainda não foi servido
+                      if (isAtOrderStatus && !(selectedOrder as any).served_at) {
                         return (
                           <button 
-                            onClick={() => handleMarkAsDelivered(selectedOrder.id)}
+                            onClick={() => handleMarkAsServed(selectedOrder.id)}
                             className="w-full bg-green-500 hover:bg-green-600 text-white p-3 rounded-lg flex items-center justify-between gap-2 transition-colors cursor-pointer group"
                           >
                             <div className="flex items-center gap-2">
@@ -1583,6 +1599,19 @@ export default function Tables() {
                               <span className="font-medium text-sm">Marcar Servido</span>
                             </div>
                           </button>
+                        );
+                      }
+                      
+                      // Se já foi servido, mostrar banner de confirmação
+                      if ((selectedOrder as any).served_at) {
+                        return (
+                          <div className="bg-green-500/10 border border-green-500/30 text-green-700 dark:text-green-400 p-3 rounded-lg flex items-center gap-2">
+                            <Check className="h-5 w-5" />
+                            <div>
+                              <p className="font-medium">✓ Itens Servidos</p>
+                              <p className="text-xs opacity-80">Aguardando cliente pedir mais ou fechar conta</p>
+                            </div>
+                          </div>
                         );
                       }
                       
