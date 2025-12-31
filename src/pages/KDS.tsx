@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -6,18 +6,20 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useAuth } from '@/contexts/AuthContext';
 import { AccessDenied } from '@/components/auth/AccessDenied';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp, Ban, History, Trash2, CalendarDays, LogOut, Layers } from 'lucide-react';
+import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp, Ban, History, Trash2, CalendarDays, LogOut, Layers, Circle } from 'lucide-react';
 import logoSlim from '@/assets/logo-slim.png';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
+import { useKdsStations } from '@/hooks/useKdsStations';
 import { useScheduledAnnouncements } from '@/hooks/useScheduledAnnouncements';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import { KdsSlaIndicator } from '@/components/kds/KdsSlaIndicator';
@@ -98,8 +100,9 @@ export default function KDS() {
       return 'all';
     }
   });
-  const { playKdsNewOrderSound, playMaxWaitAlertSound, playOrderCancelledSound, settings } = useAudioNotification();
-  const { settings: kdsSettings, hasSpecialBorder, updateSettings: updateKdsSettings } = useKdsSettings();
+  const { playKdsNewOrderSound, playMaxWaitAlertSound, playOrderCancelledSound, playStationChangeSound, settings } = useAudioNotification();
+  const { settings: kdsSettings, hasSpecialBorder, updateSettings: updateKdsSettings, updateDeviceSettings } = useKdsSettings();
+  const { activeStations, productionStations } = useKdsStations();
   
   // Bottleneck alerts for production line mode
   const isProductionLineMode = kdsSettings.operationMode === 'production_line';
@@ -112,6 +115,8 @@ export default function KDS() {
   const notifiedOrdersRef = useRef<Set<string>>(new Set());
   const previousOrdersRef = useRef<Order[]>([]);
   const initialLoadRef = useRef(true);
+  const previousStationItemsRef = useRef<Set<string>>(new Set());
+  const stationItemsInitializedRef = useRef(false);
   
   // Unconfirmed cancellations tracking - persists until kitchen confirms (loaded from localStorage)
   const [unconfirmedCancellations, setUnconfirmedCancellations] = useState<Map<string, Order>>(() => {
@@ -355,12 +360,32 @@ export default function KDS() {
   const takeawayCount = allActiveOrders.filter(o => o.order_type === 'takeaway').length;
   const deliveryCount = allActiveOrders.filter(o => o.order_type === 'delivery').length;
 
-  const pendingOrders = activeOrders.filter(o => o.status === 'pending');
+  // Filter orders by assigned station (if set)
+  const ordersForDisplay = useMemo(() => {
+    if (!kdsSettings.assignedStationId) {
+      return activeOrders; // Show all if no station assigned
+    }
+    
+    // Filter orders that have items in this station
+    return activeOrders.filter(order => 
+      order.order_items?.some(item => 
+        item.current_station_id === kdsSettings.assignedStationId
+      )
+    ).map(order => ({
+      ...order,
+      // Also filter items within each order to show only those for this station
+      order_items: order.order_items?.filter(item => 
+        item.current_station_id === kdsSettings.assignedStationId
+      )
+    }));
+  }, [activeOrders, kdsSettings.assignedStationId]);
+
+  const pendingOrders = ordersForDisplay.filter(o => o.status === 'pending');
   // When showPendingColumn is false, merge pending into preparing
   const preparingOrders = kdsSettings.showPendingColumn 
-    ? activeOrders.filter(o => o.status === 'preparing')
-    : activeOrders.filter(o => o.status === 'pending' || o.status === 'preparing');
-  const readyOrders = activeOrders.filter(o => o.status === 'ready');
+    ? ordersForDisplay.filter(o => o.status === 'preparing')
+    : ordersForDisplay.filter(o => o.status === 'pending' || o.status === 'preparing');
+  const readyOrders = ordersForDisplay.filter(o => o.status === 'ready');
 
   // Real-time clock and metrics update
   useEffect(() => {
@@ -415,6 +440,39 @@ export default function KDS() {
       setTimeout(() => setMaxWaitAlertCooldown(false), MAX_WAIT_ALERT_COOLDOWN);
     }
   }, [orderCounts.maxWaitTimeMinutes, maxWaitAlertCooldown, soundEnabled, settings.enabled, activeOrdersList.length, playMaxWaitAlertSound]);
+
+  // Sound notification when new items arrive at assigned station
+  useEffect(() => {
+    if (!kdsSettings.assignedStationId || !soundEnabled || !settings.enabled) return;
+    
+    // Collect IDs of all items currently in the assigned station
+    const currentItemIds = new Set(
+      activeOrders.flatMap(order => 
+        order.order_items?.filter(item => 
+          item.current_station_id === kdsSettings.assignedStationId
+        ).map(item => item.id) ?? []
+      )
+    );
+    
+    // Check for new items
+    let hasNewItems = false;
+    currentItemIds.forEach(id => {
+      if (!previousStationItemsRef.current.has(id)) {
+        hasNewItems = true;
+      }
+    });
+    
+    // Play sound only if there are new items and it's not the initial load
+    if (hasNewItems && stationItemsInitializedRef.current) {
+      playStationChangeSound();
+      const stationName = activeStations.find(s => s.id === kdsSettings.assignedStationId)?.name;
+      toast.info(`Novo item chegou em ${stationName}!`, { duration: 3000 });
+    }
+    
+    // Mark as initialized and update reference
+    stationItemsInitializedRef.current = true;
+    previousStationItemsRef.current = currentItemIds;
+  }, [activeOrders, kdsSettings.assignedStationId, soundEnabled, settings.enabled, playStationChangeSound, activeStations]);
 
   // Setup realtime subscription
   useEffect(() => {
@@ -1203,6 +1261,61 @@ export default function KDS() {
               {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
               <span className="hidden sm:inline">{soundEnabled ? 'Som ON' : 'Som OFF'}</span>
             </Button>
+          )}
+          
+          {/* Quick Station Switcher */}
+          <div className="flex items-center gap-1.5">
+            <Select
+              value={kdsSettings.assignedStationId || 'all'}
+              onValueChange={(value) => {
+                updateDeviceSettings({ 
+                  assignedStationId: value === 'all' ? undefined : value 
+                });
+                // Reset station items tracking when changing stations
+                previousStationItemsRef.current = new Set();
+                stationItemsInitializedRef.current = false;
+              }}
+            >
+              <SelectTrigger className="w-[160px] h-8 text-sm">
+                <div className="flex items-center gap-2">
+                  <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                  <SelectValue placeholder="Todas praças" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  <span className="flex items-center gap-2">
+                    <Circle className="h-3 w-3 text-muted-foreground" />
+                    Todas as praças
+                  </span>
+                </SelectItem>
+                {productionStations.map(station => (
+                  <SelectItem key={station.id} value={station.id}>
+                    <span className="flex items-center gap-2">
+                      <Circle 
+                        className="h-3 w-3" 
+                        style={{ color: station.color, fill: station.color }}
+                      />
+                      {station.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {/* Station Badge (when assigned) */}
+          {kdsSettings.assignedStationId && (
+            <Badge 
+              variant="outline" 
+              className="hidden md:flex text-sm font-medium border-2"
+              style={{ 
+                borderColor: activeStations.find(s => s.id === kdsSettings.assignedStationId)?.color,
+                color: activeStations.find(s => s.id === kdsSettings.assignedStationId)?.color
+              }}
+            >
+              {activeStations.find(s => s.id === kdsSettings.assignedStationId)?.name}
+            </Badge>
           )}
           
           {/* Compact Mode Toggle */}
