@@ -441,30 +441,7 @@ export default function KDS() {
     previousStationItemsRef.current = currentItemIds;
   }, [activeOrders, kdsSettings.assignedStationId, soundEnabled, settings.enabled, playStationChangeSound, activeStations]);
 
-  // Setup realtime subscription
-  useEffect(() => {
-    const channel = supabase
-      .channel('kds-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders' },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['orders'] });
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'order_items' },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['orders'] });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
+  // Realtime subscription is now handled in useOrders.ts - removed duplicate here
 
   // Sound notification for new orders + visual sync notifications + cancellation alerts
   useEffect(() => {
@@ -527,6 +504,16 @@ export default function KDS() {
     }
 
     previousOrdersRef.current = [...orders];
+    
+    // Clean up notifiedOrdersRef: remove IDs of orders that no longer exist
+    const currentOrderIds = new Set(orders.map(o => o.id));
+    notifiedOrdersRef.current.forEach(id => {
+      // Remove both simple ID and status-prefixed IDs for orders that don't exist anymore
+      const baseId = id.includes('-') ? id.split('-')[0] : id;
+      if (!currentOrderIds.has(baseId) && !currentOrderIds.has(id)) {
+        notifiedOrdersRef.current.delete(id);
+      }
+    });
   }, [orders, soundEnabled, settings.enabled, playKdsNewOrderSound, kdsSettings.showPendingColumn, kdsSettings.cancellationAlertsEnabled]);
 
   // Detect recent cancellations on initial load and restore unconfirmed ones

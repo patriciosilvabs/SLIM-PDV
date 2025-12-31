@@ -153,26 +153,29 @@ export function useKdsStationLogs() {
 // Hook para métricas consolidadas de todas as praças
 export function useAllStationsMetrics() {
   const { activeStations } = useKdsStations();
+  const { tenantId } = useTenant();
 
   return useQuery({
-    queryKey: ['kds-all-stations-metrics', activeStations.map(s => s.id)],
+    queryKey: ['kds-all-stations-metrics', activeStations.map(s => s.id), tenantId],
     queryFn: async () => {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
 
-      // Buscar logs de completados
+      // Buscar logs de completados - filtrado por tenant
       const { data: logsData, error: logsError } = await supabase
         .from('kds_station_logs')
         .select('*')
+        .eq('tenant_id', tenantId)
         .eq('action', 'completed')
         .gte('created_at', yesterday.toISOString());
 
       if (logsError) throw logsError;
 
-      // Buscar itens em cada praça (fila atual)
+      // Buscar itens em cada praça (fila atual) - filtrado por tenant
       const { data: itemsData, error: itemsError } = await supabase
         .from('order_items')
         .select('current_station_id, station_status')
+        .eq('tenant_id', tenantId)
         .not('current_station_id', 'is', null)
         .neq('station_status', 'done');
 
@@ -214,7 +217,7 @@ export function useAllStationsMetrics() {
 
       return metrics;
     },
-    enabled: activeStations.length > 0,
+    enabled: activeStations.length > 0 && !!tenantId,
     staleTime: 1000 * 10, // 10 segundos
     refetchInterval: 1000 * 15, // Atualiza a cada 15 segundos para tempo real
   });
