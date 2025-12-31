@@ -58,15 +58,20 @@ export function PrintQueueListener() {
     };
   }, [isPrintServer, printer.isConnected]);
 
-  // Process pending jobs on mount and when printer connects
+  // Process pending jobs sequentially on mount and when printer connects
   useEffect(() => {
     if (!isPrintServer || !printer.isConnected || !pendingJobs) return;
 
-    pendingJobs.forEach(job => {
-      if (!processingRef.current.has(job.id)) {
-        processJob(job);
+    // Sequential processing to avoid "Printer is busy" errors
+    const processQueueSequentially = async () => {
+      for (const job of pendingJobs) {
+        if (!processingRef.current.has(job.id) && job.status === 'pending') {
+          await processJob(job);
+        }
       }
-    });
+    };
+
+    processQueueSequentially();
   }, [isPrintServer, printer.isConnected, pendingJobs]);
 
   const processJob = async (job: PrintJob) => {
