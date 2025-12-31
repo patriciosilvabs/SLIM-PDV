@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useEffect } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useTenant } from './useTenant';
 
 export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
@@ -181,21 +181,87 @@ export function useOrders(status?: OrderStatus[]) {
     },
   });
 
+  // Debounced invalidation to prevent multiple rapid refetches
+  const invalidationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const debouncedInvalidate = useCallback(() => {
+    if (invalidationTimeoutRef.current) {
+      clearTimeout(invalidationTimeoutRef.current);
+    }
+    invalidationTimeoutRef.current = setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    }, 500); // 500ms debounce
+  }, [queryClient]);
+
   useEffect(() => {
     const channel = supabase
       .channel('orders-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['orders'] });
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, () => {
+        debouncedInvalidate();
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['orders'] });
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'orders' }, () => {
+        debouncedInvalidate();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
+        // Direct cache update for order status changes
+        queryClient.setQueryData(['orders'], (old: Order[] | undefined) => {
+          if (!old) return old;
+          return old.map(order => 
+            order.id === payload.new.id 
+              ? { ...order, ...payload.new }
+              : order
+          );
+        });
+        queryClient.setQueryData(['orders', status], (old: Order[] | undefined) => {
+          if (!old) return old;
+          return old.map(order => 
+            order.id === payload.new.id 
+              ? { ...order, ...payload.new }
+              : order
+          );
+        });
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'order_items' }, () => {
+        debouncedInvalidate();
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'order_items' }, () => {
+        debouncedInvalidate();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'order_items' }, (payload) => {
+        // Direct cache update for item changes (most common operation in KDS)
+        const updatedItem = payload.new as { id: string; current_station_id?: string; station_status?: string; status?: string };
+        queryClient.setQueryData(['orders'], (old: Order[] | undefined) => {
+          if (!old) return old;
+          return old.map(order => ({
+            ...order,
+            order_items: order.order_items?.map((item: OrderItem) => 
+              item.id === updatedItem.id 
+                ? { ...item, ...updatedItem }
+                : item
+            )
+          }));
+        });
+        queryClient.setQueryData(['orders', status], (old: Order[] | undefined) => {
+          if (!old) return old;
+          return old.map(order => ({
+            ...order,
+            order_items: order.order_items?.map((item: OrderItem) => 
+              item.id === updatedItem.id 
+                ? { ...item, ...updatedItem }
+                : item
+            )
+          }));
+        });
       })
       .subscribe();
 
     return () => {
+      if (invalidationTimeoutRef.current) {
+        clearTimeout(invalidationTimeoutRef.current);
+      }
       supabase.removeChannel(channel);
     };
-  }, [queryClient]);
+  }, [queryClient, debouncedInvalidate, status]);
 
   return query;
 }

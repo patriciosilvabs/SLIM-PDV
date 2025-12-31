@@ -166,11 +166,8 @@ export function useKdsWorkflow() {
     },
     
     onSuccess: (result) => {
-      // Refetch suave em background após 2 segundos para garantir sincronização
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['orders'] });
-      }, 2000);
-      
+      // Optimistic update + realtime já garantem sincronização
+      // Removido timeout de 2s que causava lentidão
       if (result.isComplete) {
         toast.success('Item concluído!');
       }

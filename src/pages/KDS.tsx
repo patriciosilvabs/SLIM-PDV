@@ -76,15 +76,6 @@ export default function KDS() {
   const { isAdmin } = useUserRole();
   const isManager = isAdmin; // Admin/proprietário vê interface completa
   const { data: orders = [], isLoading, refetch } = useOrders(['pending', 'preparing', 'ready', 'delivered', 'cancelled']);
-  
-  // DEBUG: Log all orders received
-  console.log('[KDS] All orders received:', orders.map(o => ({
-    id: o.id.slice(-4),
-    status: o.status,
-    order_type: o.order_type,
-    itemsCount: o.order_items?.length ?? 0,
-    created_at: o.created_at
-  })));
   const { updateOrder, updateOrderItem } = useOrderMutations();
   const queryClient = useQueryClient();
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -308,47 +299,23 @@ export default function KDS() {
   };
 
   // Save filter preference
-
-  // Save filter preference
   useEffect(() => {
     localStorage.setItem(FILTER_STORAGE_KEY, orderTypeFilter);
   }, [orderTypeFilter]);
 
   // Filter active orders (pending, preparing, ready) - only orders with items and not drafts
-  const activeOrders = orders.filter(order => {
+  const activeOrders = useMemo(() => orders.filter(order => {
     const isActive = order.status === 'pending' || order.status === 'preparing' || order.status === 'ready';
-    if (!isActive) {
-      console.log('[KDS] Order filtered out (not active):', order.id.slice(-4), 'status:', order.status);
-      return false;
-    }
-    
-    // Don't show draft orders (waiter still adding items)
-    if (order.is_draft === true) {
-      console.log('[KDS] Order filtered out (draft):', order.id.slice(-4));
-      return false;
-    }
-    
-    // Don't show orders without items (table just opened)
-    if ((order.order_items?.length ?? 0) === 0) {
-      console.log('[KDS] Order filtered out (no items):', order.id.slice(-4));
-      return false;
-    }
+    if (!isActive) return false;
+    if (order.is_draft === true) return false;
+    if ((order.order_items?.length ?? 0) === 0) return false;
 
     if (orderTypeFilter === 'all') return true;
     if (orderTypeFilter === 'table') return order.order_type === 'dine_in';
     if (orderTypeFilter === 'takeaway') return order.order_type === 'takeaway';
     if (orderTypeFilter === 'delivery') return order.order_type === 'delivery';
     return true;
-  });
-  
-  // DEBUG: Log filtered orders
-  console.log('[KDS] Active orders after filter:', activeOrders.map(o => ({
-    id: o.id.slice(-4),
-    status: o.status,
-    order_type: o.order_type,
-    itemsCount: o.order_items?.length ?? 0
-  })));
-  console.log('[KDS] Current filter:', orderTypeFilter);
+  }), [orders, orderTypeFilter]);
 
   // Count by type (unfiltered) - only orders with items and not drafts
   const allActiveOrders = orders.filter(
