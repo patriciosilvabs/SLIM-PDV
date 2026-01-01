@@ -3602,12 +3602,34 @@ export default function Tables() {
           if (!itemToCancel || !user) return;
           setIsCancellingItem(true);
           try {
-            await cancelOrderItem.mutateAsync({
+            const result = await cancelOrderItem.mutateAsync({
               itemId: itemToCancel.id,
               orderId: itemToCancel.orderId,
               reason,
               cancelledBy: user.id
             });
+            
+            // Imprimir ticket de cancelamento se o item estava em produção e a impressão está habilitada
+            if (result.wasInProduction && kdsSettings.autoPrintCancellations && centralPrinting.canPrintToKitchen) {
+              const cancellationData: CancellationTicketData = {
+                orderNumber: itemToCancel.orderId,
+                orderType: (result.orderData?.orderType as 'dine_in' | 'takeaway' | 'delivery') || 'dine_in',
+                tableNumber: result.orderData?.tableNumber || undefined,
+                customerName: result.orderData?.customerName,
+                cancellationReason: reason,
+                cancelledBy: profile?.name || 'Usuário',
+                items: [{
+                  quantity: result.itemData?.quantity || itemToCancel.quantity,
+                  productName: result.itemData?.productName || itemToCancel.name,
+                  variation: result.itemData?.variationName,
+                  notes: result.itemData?.notes
+                }],
+                cancelledAt: new Date().toISOString()
+              };
+              
+              await centralPrinting.printCancellationTicket(cancellationData);
+            }
+            
             setCancelItemDialogOpen(false);
             setItemToCancel(null);
           } catch (error) {

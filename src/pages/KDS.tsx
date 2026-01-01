@@ -13,7 +13,7 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { useAuth } from '@/contexts/AuthContext';
 import { AccessDenied } from '@/components/auth/AccessDenied';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp, Ban, History, Trash2, CalendarDays, LogOut, Layers, Circle } from 'lucide-react';
+import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp, Ban, History, Trash2, CalendarDays, LogOut, Layers, Circle, Check } from 'lucide-react';
 import logoSlim from '@/assets/logo-slim.png';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -50,10 +50,22 @@ interface CancellationHistoryItem {
   customerName?: string;
 }
 
+interface ItemCancellationAlert {
+  itemId: string;
+  orderId: string;
+  productName: string;
+  variationName?: string | null;
+  quantity: number;
+  reason: string;
+  cancelledAt: Date;
+  origin: string;
+}
+
 const FILTER_STORAGE_KEY = 'kds-order-type-filter';
 const CANCELLATION_HISTORY_KEY = 'kds-cancellation-history';
 const UNCONFIRMED_CANCELLATIONS_KEY = 'kds-unconfirmed-cancellations';
 const CONFIRMED_CANCELLATIONS_KEY = 'kds-confirmed-cancellations';
+const UNCONFIRMED_ITEM_CANCELLATIONS_KEY = 'kds-unconfirmed-item-cancellations';
 const MAX_WAIT_ALERT_THRESHOLD = 25; // minutes
 const MAX_WAIT_ALERT_COOLDOWN = 300000; // 5 minutes in ms
 const RECENT_CANCELLATION_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
@@ -146,6 +158,21 @@ export default function KDS() {
   });
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [historyPeriodFilter, setHistoryPeriodFilter] = useState<HistoryPeriodFilter>('today');
+  
+  // Unconfirmed item cancellations tracking
+  const [unconfirmedItemCancellations, setUnconfirmedItemCancellations] = useState<Map<string, ItemCancellationAlert>>(() => {
+    try {
+      const stored = localStorage.getItem(UNCONFIRMED_ITEM_CANCELLATIONS_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return new Map(parsed.map((item: any) => [item.itemId, { ...item, cancelledAt: new Date(item.cancelledAt) }]));
+      }
+    } catch (e) {
+      console.error('Error loading unconfirmed item cancellations:', e);
+    }
+    return new Map();
+  });
+  const itemCancelledSoundIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const canChangeStatus = hasPermission('kds_change_status');
   const lastMetricUpdateRef = useRef<string>('');
@@ -611,12 +638,108 @@ export default function KDS() {
     }
   }, [unconfirmedCancellations]);
 
-  // Sound loop for unconfirmed cancellations
+  // Persist unconfirmed item cancellations to localStorage
   useEffect(() => {
+    try {
+      if (unconfirmedItemCancellations.size > 0) {
+        const items = Array.from(unconfirmedItemCancellations.values());
+        localStorage.setItem(UNCONFIRMED_ITEM_CANCELLATIONS_KEY, JSON.stringify(items));
+      } else {
+        localStorage.removeItem(UNCONFIRMED_ITEM_CANCELLATIONS_KEY);
+      }
+    } catch (e) {
+      console.error('Error persisting unconfirmed item cancellations:', e);
+    }
+  }, [unconfirmedItemCancellations]);
+
+  // Realtime subscription for item cancellations
+  useEffect(() => {
+    if (kdsSettings.cancellationAlertsEnabled === false) return;
+    
+    const channel = supabase
+      .channel('kds-item-cancellations')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'order_items',
+      }, async (payload) => {
+        const newData = payload.new as any;
+        const oldData = payload.old as any;
+        
+        // Detectar cancelamento: cancelled_at mudou de null para um valor
+        if (!oldData?.cancelled_at && newData?.cancelled_at) {
+          console.log('[KDS] Item cancelado detectado:', newData.id);
+          
+          // Buscar dados completos do item cancelado
+          const { data: itemData } = await supabase
+            .from('order_items')
+            .select(`
+              id,
+              order_id,
+              quantity,
+              cancellation_reason,
+              product:products(name),
+              variation:product_variations(name),
+              order:orders(order_type, table_id, customer_name, table:tables(number))
+            `)
+            .eq('id', newData.id)
+            .single();
+          
+          if (itemData) {
+            const order = itemData.order as any;
+            const origin = order?.order_type === 'delivery' 
+              ? 'DELIVERY' 
+              : order?.order_type === 'takeaway' 
+                ? 'BALCÃO' 
+                : `MESA ${order?.table?.number || '?'}`;
+            
+            const alert: ItemCancellationAlert = {
+              itemId: newData.id,
+              orderId: itemData.order_id,
+              productName: (itemData.product as any)?.name || 'Produto',
+              variationName: (itemData.variation as any)?.name,
+              quantity: itemData.quantity,
+              reason: itemData.cancellation_reason || 'Não informado',
+              cancelledAt: new Date(newData.cancelled_at),
+              origin
+            };
+            
+            // Adicionar ao mapa de não confirmados
+            setUnconfirmedItemCancellations(prev => {
+              const newMap = new Map(prev);
+              newMap.set(newData.id, alert);
+              return newMap;
+            });
+            
+            // Tocar som de alerta
+            if (soundEnabled && settings.enabled) {
+              playOrderCancelledSound();
+            }
+            
+            // Toast persistente
+            toast.error(`🚫 ITEM CANCELADO!`, { 
+              description: `${alert.quantity}x ${alert.productName}${alert.variationName ? ` (${alert.variationName})` : ''} - ${alert.origin}`,
+              duration: Infinity,
+              id: `item-cancel-${newData.id}`,
+            });
+          }
+        }
+      })
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [kdsSettings.cancellationAlertsEnabled, soundEnabled, settings.enabled, playOrderCancelledSound]);
+
+  // Sound loop for unconfirmed cancellations (orders + items)
+  useEffect(() => {
+    const totalUnconfirmed = unconfirmedCancellations.size + unconfirmedItemCancellations.size;
+    
     // If there are unconfirmed cancellations, alerts are enabled, and sound is enabled
     if (
       kdsSettings.cancellationAlertsEnabled !== false &&
-      unconfirmedCancellations.size > 0 && 
+      totalUnconfirmed > 0 && 
       soundEnabled && 
       settings.enabled
     ) {
@@ -628,7 +751,8 @@ export default function KDS() {
       
       // Start loop
       cancelledSoundIntervalRef.current = setInterval(() => {
-        if (unconfirmedCancellations.size > 0) {
+        const currentTotal = unconfirmedCancellations.size + unconfirmedItemCancellations.size;
+        if (currentTotal > 0) {
           playOrderCancelledSound();
         }
       }, intervalMs);
@@ -641,7 +765,7 @@ export default function KDS() {
         cancelledSoundIntervalRef.current = null;
       }
     };
-  }, [unconfirmedCancellations.size, soundEnabled, settings.enabled, playOrderCancelledSound, kdsSettings.cancellationAlertInterval, kdsSettings.cancellationAlertsEnabled]);
+  }, [unconfirmedCancellations.size, unconfirmedItemCancellations.size, soundEnabled, settings.enabled, playOrderCancelledSound, kdsSettings.cancellationAlertInterval, kdsSettings.cancellationAlertsEnabled]);
 
   // Permission check AFTER all hooks
   if (!permissionsLoading && !hasPermission('kds_view')) {
@@ -710,6 +834,48 @@ export default function KDS() {
     // Dismiss the corresponding toast
     toast.dismiss(`cancel-${orderId}`);
     toast.success('Cancelamento confirmado', { duration: 2000 });
+  };
+
+  // Handler to confirm item cancellation was acknowledged
+  const handleConfirmItemCancellation = (itemId: string) => {
+    const item = unconfirmedItemCancellations.get(itemId);
+    
+    // Save to history before removing
+    if (item) {
+      const historyItem: CancellationHistoryItem = {
+        orderId: item.orderId,
+        orderNumber: item.orderId.slice(-4).toUpperCase(),
+        reason: item.reason,
+        cancelledAt: item.cancelledAt,
+        confirmedAt: new Date(),
+        items: [{
+          name: item.productName,
+          quantity: item.quantity,
+          variation: item.variationName || undefined
+        }],
+        origin: item.origin,
+      };
+      
+      setCancellationHistory(prev => {
+        const updated = [historyItem, ...prev].slice(0, 100);
+        try {
+          localStorage.setItem(CANCELLATION_HISTORY_KEY, JSON.stringify(updated));
+        } catch (e) {
+          console.error('Error saving cancellation history:', e);
+        }
+        return updated;
+      });
+    }
+    
+    setUnconfirmedItemCancellations(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(itemId);
+      return newMap;
+    });
+    
+    // Dismiss the corresponding toast
+    toast.dismiss(`item-cancel-${itemId}`);
+    toast.success('Cancelamento de item confirmado', { duration: 2000 });
   };
 
   // Cancellation History Panel Component with filters
@@ -1400,6 +1566,61 @@ export default function KDS() {
                   onConfirm={() => handleConfirmCancellation(order.id)}
                 />
               ))}
+          </div>
+        </div>
+      )}
+
+      {/* Unconfirmed Item Cancellations Alert */}
+      {unconfirmedItemCancellations.size > 0 && (
+        <div className="mb-4 p-3 bg-orange-500/10 border-2 border-orange-500 rounded-lg animate-pulse">
+          <div className="flex items-center gap-2 mb-3">
+            <Ban className="h-6 w-6 text-orange-500 animate-bounce" />
+            <h2 className="text-lg font-bold text-orange-600 dark:text-orange-400">
+              ⚠️ ITEM(NS) CANCELADO(S) - CONFIRME!
+            </h2>
+            <Badge className="ml-auto text-base bg-orange-500 hover:bg-orange-600">
+              {unconfirmedItemCancellations.size}
+            </Badge>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {Array.from(unconfirmedItemCancellations.values()).map(item => (
+              <Card key={item.itemId} className="bg-orange-50 dark:bg-orange-950/30 border-orange-300 dark:border-orange-700">
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant="outline" className="text-xs">
+                          {item.origin}
+                        </Badge>
+                      </div>
+                      <p className="font-bold text-lg">
+                        {item.quantity}x {item.productName}
+                        {item.variationName && (
+                          <span className="text-sm font-normal text-muted-foreground ml-1">
+                            ({item.variationName})
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        <span className="font-medium">Motivo:</span> {item.reason}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Cancelado às {item.cancelledAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                    <Button 
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 border-orange-500 text-orange-600 hover:bg-orange-100 dark:hover:bg-orange-900"
+                      onClick={() => handleConfirmItemCancellation(item.itemId)}
+                    >
+                      <Check className="h-4 w-4 mr-1" />
+                      OK
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </div>
       )}
