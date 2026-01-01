@@ -685,10 +685,10 @@ export default function Tables() {
     if (!selectedTable) return;
     
     // Buscar pedido da mesa incluindo drafts vazios (mesa recém-aberta)
+    // Permite adicionar itens a pedidos ready/delivered - o trigger cuidará de voltar para preparing
     const order = orders?.find(o => 
       o.table_id === selectedTable.id && 
-      o.status !== 'cancelled' &&
-      o.status !== 'delivered'
+      o.status !== 'cancelled'
     );
     if (!order) return;
 
