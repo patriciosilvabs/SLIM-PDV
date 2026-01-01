@@ -186,6 +186,7 @@ export default function Tables() {
   const [isAddOrderModalOpen, setIsAddOrderModalOpen] = useState(false);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [tableViewMode, setTableViewMode] = useState<'consumo' | 'resumo'>('consumo');
+  const [isServingItem, setIsServingItem] = useState<string | null>(null);
   const [tableToOpen, setTableToOpen] = useState<Table | null>(null);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [openTableData, setOpenTableData] = useState({ people: 2, identification: '' });
@@ -310,6 +311,30 @@ export default function Tables() {
       setIsCartReviewOpen(false);
     }
   }, [selectedTable?.status]);
+
+  // Reset tableViewMode to 'consumo' when changing tables
+  useEffect(() => {
+    setTableViewMode('consumo');
+  }, [selectedTable?.id]);
+
+  // Handle serving individual order item
+  const handleServeOrderItem = async (itemId: string) => {
+    try {
+      setIsServingItem(itemId);
+      const { error } = await supabase
+        .from('order_items')
+        .update({ served_at: new Date().toISOString() })
+        .eq('id', itemId);
+      
+      if (error) throw error;
+      toast.success('Item marcado como servido');
+    } catch (error) {
+      console.error('Error serving item:', error);
+      toast.error('Erro ao marcar item como servido');
+    } finally {
+      setIsServingItem(null);
+    }
+  };
 
   // Realtime subscription for orders
   useEffect(() => {
@@ -1598,16 +1623,19 @@ export default function Tables() {
                   </CardHeader>
 
                   <CardContent className="flex-1 flex flex-col space-y-4 overflow-hidden">
-                    {/* Pending Banner - Awaiting production */}
-                    {selectedOrder?.status === 'pending' && !isClosingBill && (
-                      <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-700 dark:text-yellow-400 p-3 rounded-lg flex items-center gap-2">
-                        <Clock className="h-5 w-5" />
-                        <div>
-                          <p className="font-medium">Aguardando Produção</p>
-                          <p className="text-xs opacity-80">O pedido ainda não entrou na cozinha</p>
-                        </div>
-                      </div>
-                    )}
+                    {/* ===== ABA CONSUMO ===== */}
+                    {tableViewMode === 'consumo' && (
+                      <>
+                        {/* Pending Banner - Awaiting production */}
+                        {selectedOrder?.status === 'pending' && !isClosingBill && (
+                          <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-700 dark:text-yellow-400 p-3 rounded-lg flex items-center gap-2">
+                            <Clock className="h-5 w-5" />
+                            <div>
+                              <p className="font-medium">Aguardando Produção</p>
+                              <p className="text-xs opacity-80">O pedido ainda não entrou na cozinha</p>
+                            </div>
+                          </div>
+                        )}
                     
                     {/* Preparing Banner - In production */}
                     {selectedOrder?.status === 'preparing' && !isClosingBill && (() => {
@@ -1830,10 +1858,34 @@ export default function Tables() {
                                         </p>
                                       )}
                                     </div>
-                                    <div className="flex items-center gap-1 ml-2">
+                                    <div className="flex items-center gap-2 ml-2">
                                       <span className="text-sm font-medium">
                                         {formatCurrency(item.total_price)}
                                       </span>
+                                      {/* Botão Servir Item */}
+                                      {item.served_at ? (
+                                        <div className="flex items-center gap-1 text-green-600 text-xs bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded">
+                                          <Check className="h-3 w-3" />
+                                          <span>Servido</span>
+                                        </div>
+                                      ) : (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="text-xs h-7"
+                                          onClick={() => handleServeOrderItem(item.id)}
+                                          disabled={isServingItem === item.id}
+                                        >
+                                          {isServingItem === item.id ? (
+                                            <span className="animate-pulse">...</span>
+                                          ) : (
+                                            <>
+                                              <Check className="h-3 w-3 mr-1" />
+                                              Servir
+                                            </>
+                                          )}
+                                        </Button>
+                                      )}
                                       {canDeleteItems && (
                                         <Button 
                                           variant="ghost" 
@@ -1987,6 +2039,87 @@ export default function Tables() {
                               </div>
                             );
                           })()}
+                        </div>
+                      </>
+                    )}
+                      </>
+                    )}
+
+                    {/* ===== ABA RESUMO ===== */}
+                    {tableViewMode === 'resumo' && selectedOrder && (
+                      <>
+                        {/* Lista de itens compacta */}
+                        <div className="flex-1 flex flex-col min-h-0">
+                          <h4 className="text-sm font-medium mb-2">Resumo do Pedido</h4>
+                          <ScrollArea className="flex-1">
+                            <div className="space-y-1 pr-2">
+                              {selectedOrder.order_items?.map((item: any) => (
+                                <div key={item.id} className="flex justify-between py-1.5 text-sm border-b border-border/50">
+                                  <span className="truncate flex-1">
+                                    {item.quantity}x {item.product?.name || 'Produto'}
+                                    {item.variation?.name && (
+                                      <span className="text-muted-foreground"> - {item.variation.name}</span>
+                                    )}
+                                  </span>
+                                  <span className="font-medium ml-2">{formatCurrency(item.total_price)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </ScrollArea>
+                          
+                          {/* Subtotal e Total */}
+                          <div className="border-t pt-3 mt-3 space-y-2">
+                            <div className="flex justify-between text-sm text-muted-foreground">
+                              <span>Subtotal</span>
+                              <span>{formatCurrency(subtotal)}</span>
+                            </div>
+                            <div className="flex justify-between text-lg font-bold">
+                              <span>Total</span>
+                              <span className="text-primary">{formatCurrency(selectedOrder.total || 0)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Botões de ação para o resumo */}
+                        <div className="space-y-2 pt-2">
+                          {selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
+                            <Button 
+                              variant="outline" 
+                              className="w-full"
+                              onClick={async () => {
+                                if (!selectedOrder || !selectedTable) return;
+                                const receiptData = propsToReceiptData({
+                                  order: selectedOrder,
+                                  payments: [],
+                                  discount: discountAmount > 0 ? { type: discountType, value: discountValue, amount: discountAmount } : undefined,
+                                  serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
+                                  splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
+                                  tableNumber: selectedTable.number,
+                                  receiptType: 'summary',
+                                });
+                                const success = await centralPrinting.printCustomerReceipt(receiptData);
+                                if (success) {
+                                  toast.success('Resumo da conta enviado para impressão');
+                                } else {
+                                  toast.error('Falha ao enviar para impressão');
+                                }
+                              }}
+                            >
+                              <Receipt className="h-4 w-4 mr-2" />
+                              Imprimir Resumo
+                            </Button>
+                          )}
+                          {/* Fechar Conta */}
+                          {canCloseBill && selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
+                            <Button 
+                              className="w-full" 
+                              onClick={handleStartClosing}
+                              disabled={!['ready', 'delivered'].includes(selectedOrder.status)}
+                            >
+                              <Receipt className="h-4 w-4 mr-2" />
+                              {['ready', 'delivered'].includes(selectedOrder.status) ? 'Fechar Conta' : 'Aguardando Preparo...'}
+                            </Button>
+                          )}
                         </div>
                       </>
                     )}
@@ -2560,58 +2693,61 @@ export default function Tables() {
           {/* MOBILE: Regular View */}
           {!isClosingBill && (
             <div className="space-y-4 pt-4">
-              {/* Ready Alert Banner - Mobile */}
-              {selectedOrder?.status === 'ready' && (
-                <button 
-                  onClick={() => handleMarkAsDelivered(selectedOrder.id)}
-                  className="w-full bg-green-500 hover:bg-green-600 text-white p-3 rounded-lg flex items-center justify-between gap-2 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <Bell className="h-5 w-5 animate-pulse" />
-                    <div className="text-left">
-                      <p className="font-bold text-sm">Pedido Pronto!</p>
-                      <p className="text-xs opacity-90">Clique para marcar como entregue</p>
+              {/* ===== ABA CONSUMO - MOBILE ===== */}
+              {tableViewMode === 'consumo' && (
+                <>
+                  {/* Ready Alert Banner - Mobile */}
+                  {selectedOrder?.status === 'ready' && (
+                    <button 
+                      onClick={() => handleMarkAsDelivered(selectedOrder.id)}
+                      className="w-full bg-green-500 hover:bg-green-600 text-white p-3 rounded-lg flex items-center justify-between gap-2 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Bell className="h-5 w-5 animate-pulse" />
+                        <div className="text-left">
+                          <p className="font-bold text-sm">Pedido Pronto!</p>
+                          <p className="text-xs opacity-90">Clique para marcar como entregue</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 bg-white/20 px-2 py-1 rounded">
+                        <Check className="h-4 w-4" />
+                      </div>
+                    </button>
+                  )}
+                  
+                  {/* Delivered Banner - Mobile */}
+                  {selectedOrder?.status === 'delivered' && (
+                    <div className="bg-blue-500/10 border border-blue-500/30 text-blue-700 dark:text-blue-400 p-4 rounded-lg space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Check className="h-5 w-5" />
+                        <p className="font-medium text-sm">Pedido Entregue</p>
+                      </div>
+                      <p className="text-xs opacity-80">Aguardando fechamento da conta</p>
+                      
+                      {/* Waiter and time info - Mobile */}
+                      <div className="mt-2 pt-2 border-t border-blue-500/20 space-y-1 text-xs">
+                        {selectedOrder.created_by_profile?.name && (
+                          <div className="flex items-center justify-between">
+                            <span className="opacity-70">Garçom:</span>
+                            <span className="font-medium">{selectedOrder.created_by_profile.name}</span>
+                          </div>
+                        )}
+                        {selectedOrder.created_at && (
+                          <div className="flex items-center justify-between">
+                            <span className="opacity-70">Lançado às:</span>
+                            <span>{format(new Date(selectedOrder.created_at), 'HH:mm', { locale: ptBR })}</span>
+                          </div>
+                        )}
+                        {selectedOrder.ready_at && (
+                          <div className="flex items-center justify-between">
+                            <span className="opacity-70">Pronto às:</span>
+                            <span>{format(new Date(selectedOrder.ready_at), 'HH:mm', { locale: ptBR })}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1 bg-white/20 px-2 py-1 rounded">
-                    <Check className="h-4 w-4" />
-                  </div>
-                </button>
-              )}
-              
-                              {/* Delivered Banner - Mobile */}
-                              {selectedOrder?.status === 'delivered' && (
-                                <div className="bg-blue-500/10 border border-blue-500/30 text-blue-700 dark:text-blue-400 p-4 rounded-lg space-y-2">
-                                  <div className="flex items-center gap-2">
-                                    <Check className="h-5 w-5" />
-                                    <p className="font-medium text-sm">Pedido Entregue</p>
-                                  </div>
-                                  <p className="text-xs opacity-80">Aguardando fechamento da conta</p>
-                                  
-                                  {/* Waiter and time info - Mobile */}
-                                  <div className="mt-2 pt-2 border-t border-blue-500/20 space-y-1 text-xs">
-                                    {selectedOrder.created_by_profile?.name && (
-                                      <div className="flex items-center justify-between">
-                                        <span className="opacity-70">Garçom:</span>
-                                        <span className="font-medium">{selectedOrder.created_by_profile.name}</span>
-                                      </div>
-                                    )}
-                                    {selectedOrder.created_at && (
-                                      <div className="flex items-center justify-between">
-                                        <span className="opacity-70">Lançado às:</span>
-                                        <span>{format(new Date(selectedOrder.created_at), 'HH:mm', { locale: ptBR })}</span>
-                                      </div>
-                                    )}
-                                    {selectedOrder.ready_at && (
-                                      <div className="flex items-center justify-between">
-                                        <span className="opacity-70">Pronto às:</span>
-                                        <span>{format(new Date(selectedOrder.ready_at), 'HH:mm', { locale: ptBR })}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-              {selectedOrder && selectedOrder.order_items && selectedOrder.order_items.length > 0 ? (
+                  )}
+                  {selectedOrder && selectedOrder.order_items && selectedOrder.order_items.length > 0 ? (
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium">Itens do Pedido</h4>
                   <div className="max-h-[180px] overflow-y-auto space-y-2">
@@ -2669,7 +2805,33 @@ export default function Tables() {
                               </p>
                             )}
                           </div>
-                          <span className="font-medium ml-2">{formatCurrency(item.total_price)}</span>
+                          <div className="flex flex-col items-end gap-1 ml-2">
+                            <span className="font-medium">{formatCurrency(item.total_price)}</span>
+                            {/* Botão Servir Item - Mobile */}
+                            {item.served_at ? (
+                              <div className="flex items-center gap-1 text-green-600 text-xs bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded">
+                                <Check className="h-3 w-3" />
+                                <span>Servido</span>
+                              </div>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-xs h-6 px-2"
+                                onClick={() => handleServeOrderItem(item.id)}
+                                disabled={isServingItem === item.id}
+                              >
+                                {isServingItem === item.id ? (
+                                  <span className="animate-pulse">...</span>
+                                ) : (
+                                  <>
+                                    <Check className="h-3 w-3 mr-1" />
+                                    Servir
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -2737,6 +2899,85 @@ export default function Tables() {
                 <Button variant="destructive" className="w-full" onClick={handleCloseTable}>
                   Liberar Mesa
                 </Button>
+              )}
+                </>
+              )}
+
+              {/* ===== ABA RESUMO - MOBILE ===== */}
+              {tableViewMode === 'resumo' && selectedOrder && (
+                <>
+                  {/* Lista de itens compacta */}
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium">Resumo do Pedido</h4>
+                    <div className="max-h-[200px] overflow-y-auto space-y-1">
+                      {selectedOrder.order_items?.map((item: any) => (
+                        <div key={item.id} className="flex justify-between py-1.5 text-sm border-b border-border/50">
+                          <span className="truncate flex-1">
+                            {item.quantity}x {item.product?.name || 'Produto'}
+                            {item.variation?.name && (
+                              <span className="text-muted-foreground"> - {item.variation.name}</span>
+                            )}
+                          </span>
+                          <span className="font-medium ml-2">{formatCurrency(item.total_price)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Subtotal e Total */}
+                    <div className="border-t pt-3 mt-3 space-y-2">
+                      <div className="flex justify-between text-sm text-muted-foreground">
+                        <span>Subtotal</span>
+                        <span>{formatCurrency(subtotal)}</span>
+                      </div>
+                      <div className="flex justify-between text-lg font-bold">
+                        <span>Total</span>
+                        <span className="text-primary">{formatCurrency(selectedOrder.total || 0)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Botões de ação para o resumo - Mobile */}
+                  <div className="space-y-2 pt-2">
+                    {selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
+                      <Button 
+                        variant="outline" 
+                        className="w-full"
+                        onClick={async () => {
+                          if (!selectedOrder || !selectedTable) return;
+                          const receiptData = propsToReceiptData({
+                            order: selectedOrder,
+                            payments: [],
+                            discount: discountAmount > 0 ? { type: discountType, value: discountValue, amount: discountAmount } : undefined,
+                            serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
+                            splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
+                            tableNumber: selectedTable.number,
+                            receiptType: 'summary',
+                          });
+                          const success = await centralPrinting.printCustomerReceipt(receiptData);
+                          if (success) {
+                            toast.success('Resumo da conta enviado para impressão');
+                          } else {
+                            toast.error('Falha ao enviar para impressão');
+                          }
+                        }}
+                      >
+                        <Receipt className="h-4 w-4 mr-2" />
+                        Imprimir Resumo
+                      </Button>
+                    )}
+                    {/* Fechar Conta - Mobile */}
+                    {canCloseBill && selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
+                      <Button 
+                        className="w-full" 
+                        onClick={handleStartClosing}
+                        disabled={!['ready', 'delivered'].includes(selectedOrder.status)}
+                      >
+                        <Receipt className="h-4 w-4 mr-2" />
+                        {['ready', 'delivered'].includes(selectedOrder.status) ? 'Fechar Conta' : 'Aguardando Preparo...'}
+                      </Button>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           )}
