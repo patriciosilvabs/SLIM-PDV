@@ -1757,124 +1757,158 @@ export default function Tables() {
                     {/* REGULAR VIEW - When NOT closing */}
                     {!isClosingBill && (
                       <>
-                        {/* Order Items - Consumo tab shows only items with Servir button */}
-                        {selectedOrder && selectedOrder.order_items && selectedOrder.order_items.length > 0 ? (
-                          <div className="flex-1 flex flex-col min-h-0">
-                            <h4 className="text-sm font-medium mb-2">Itens do Pedido</h4>
-                            <ScrollArea className="flex-1">
-                              <div className="space-y-2 pr-2">
-                                {selectedOrder.order_items.map((item: any) => (
-                                  <div 
-                                    key={item.id} 
-                                    className="flex items-start justify-between p-2 bg-muted/50 rounded group"
-                                  >
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium">
-                                        {item.quantity}x {item.product?.name || 'Produto'}
-                                        {item.variation?.name && (
-                                          <span className="text-muted-foreground font-normal"> - {item.variation.name}</span>
-                                        )}
-                                      </p>
-                                      {/* Sub-items (pizzas individuais) */}
-                                      {item.sub_items && item.sub_items.length > 0 ? (
-                                        <div className="text-xs text-muted-foreground mt-1 space-y-1.5">
-                                          {item.sub_items
-                                            .sort((a: any, b: any) => a.sub_item_index - b.sub_item_index)
-                                            .map((subItem: any) => (
-                                            <div key={subItem.id} className="pl-2 border-l-2 border-primary/30">
-                                              <p className="font-medium text-foreground">🍕 Pizza {subItem.sub_item_index + 1}:</p>
-                                              {subItem.sub_extras && subItem.sub_extras.length > 0 && (
-                                                <div className="pl-2 space-y-0.5">
-                                                  {subItem.sub_extras.map((extra: any, idx: number) => (
-                                                    <p key={idx}>• {extra.option_name}</p>
-                                                  ))}
+                        {/* Order Items - Consumo tab shows only READY items (station_status done/completed or no station) */}
+                        {(() => {
+                          const isItemReadyToServe = (item: any) => {
+                            // Item já passou por todas as estações
+                            if (item.station_status === 'done' || item.station_status === 'completed') {
+                              return true;
+                            }
+                            // Item está na estação de order_status (expedição)
+                            if (item.current_station?.station_type === 'order_status') {
+                              return true;
+                            }
+                            // Item não tem estação atribuída (produto sem KDS ou já concluído)
+                            if (!item.current_station_id && !selectedOrder?.is_draft) {
+                              return true;
+                            }
+                            return false;
+                          };
+                          
+                          const readyItems = selectedOrder?.order_items?.filter(isItemReadyToServe) || [];
+                          const hasAnyItems = selectedOrder?.order_items?.length > 0;
+                          
+                          if (readyItems.length > 0) {
+                            return (
+                              <div className="flex-1 flex flex-col min-h-0">
+                                <h4 className="text-sm font-medium mb-2">Itens Prontos para Servir</h4>
+                                <ScrollArea className="flex-1">
+                                  <div className="space-y-2 pr-2">
+                                    {readyItems.map((item: any) => (
+                                      <div 
+                                        key={item.id} 
+                                        className="flex items-start justify-between p-2 bg-muted/50 rounded group"
+                                      >
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm font-medium">
+                                            {item.quantity}x {item.product?.name || 'Produto'}
+                                            {item.variation?.name && (
+                                              <span className="text-muted-foreground font-normal"> - {item.variation.name}</span>
+                                            )}
+                                          </p>
+                                          {/* Sub-items (pizzas individuais) */}
+                                          {item.sub_items && item.sub_items.length > 0 ? (
+                                            <div className="text-xs text-muted-foreground mt-1 space-y-1.5">
+                                              {item.sub_items
+                                                .sort((a: any, b: any) => a.sub_item_index - b.sub_item_index)
+                                                .map((subItem: any) => (
+                                                <div key={subItem.id} className="pl-2 border-l-2 border-primary/30">
+                                                  <p className="font-medium text-foreground">🍕 Pizza {subItem.sub_item_index + 1}:</p>
+                                                  {subItem.sub_extras && subItem.sub_extras.length > 0 && (
+                                                    <div className="pl-2 space-y-0.5">
+                                                      {subItem.sub_extras.map((extra: any, idx: number) => (
+                                                        <p key={idx}>• {extra.option_name}</p>
+                                                      ))}
+                                                    </div>
+                                                  )}
+                                                  {subItem.notes && (
+                                                    <p className="pl-2 italic text-amber-600">📝 {subItem.notes}</p>
+                                                  )}
                                                 </div>
-                                              )}
-                                              {subItem.notes && (
-                                                <p className="pl-2 italic text-amber-600">📝 {subItem.notes}</p>
-                                              )}
+                                              ))}
                                             </div>
-                                          ))}
-                                        </div>
-                                      ) : (
-                                        /* Sabores/Complementos tradicionais */
-                                        item.extras && item.extras.length > 0 && (
-                                          <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                                            {item.extras.map((extra: any, idx: number) => (
-                                              <p key={idx} className="pl-2">
-                                                • {extra.extra_name.split(': ').slice(1).join(': ')}
-                                              </p>
-                                            ))}
-                                          </div>
-                                        )
-                                      )}
-                                      {/* Observações */}
-                                      {item.notes && (
-                                        <p className="text-xs text-amber-600 mt-1 pl-2 italic">
-                                          📝 {item.notes}
-                                        </p>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2 ml-2">
-                                      {/* Botão Servir Item */}
-                                      {item.served_at ? (
-                                        <div className="flex items-center gap-1 text-green-600 text-xs bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded">
-                                          <Check className="h-3 w-3" />
-                                          <span>Servido</span>
-                                        </div>
-                                      ) : (
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          className="text-xs h-7"
-                                          onClick={() => handleServeOrderItem(item.id)}
-                                          disabled={isServingItem === item.id}
-                                        >
-                                          {isServingItem === item.id ? (
-                                            <span className="animate-pulse">...</span>
                                           ) : (
-                                            <>
-                                              <Check className="h-3 w-3 mr-1" />
-                                              Servir
-                                            </>
+                                            /* Sabores/Complementos tradicionais */
+                                            item.extras && item.extras.length > 0 && (
+                                              <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                                                {item.extras.map((extra: any, idx: number) => (
+                                                  <p key={idx} className="pl-2">
+                                                    • {extra.extra_name.split(': ').slice(1).join(': ')}
+                                                  </p>
+                                                ))}
+                                              </div>
+                                            )
                                           )}
-                                        </Button>
-                                      )}
-                                      {canDeleteItems && (
-                                        <Button 
-                                          variant="ghost" 
-                                          size="icon" 
-                                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                                          onClick={() => handleDeleteOrderItem(item.id, item.order_id)}
-                                        >
-                                          <Trash2 className="h-3 w-3 text-destructive" />
-                                        </Button>
-                                      )}
-                                    </div>
+                                          {/* Observações */}
+                                          {item.notes && (
+                                            <p className="text-xs text-amber-600 mt-1 pl-2 italic">
+                                              📝 {item.notes}
+                                            </p>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-2 ml-2">
+                                          {/* Botão Servir Item */}
+                                          {item.served_at ? (
+                                            <div className="flex items-center gap-1 text-green-600 text-xs bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded">
+                                              <Check className="h-3 w-3" />
+                                              <span>Servido</span>
+                                            </div>
+                                          ) : (
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="text-xs h-7"
+                                              onClick={() => handleServeOrderItem(item.id)}
+                                              disabled={isServingItem === item.id}
+                                            >
+                                              {isServingItem === item.id ? (
+                                                <span className="animate-pulse">...</span>
+                                              ) : (
+                                                <>
+                                                  <Check className="h-3 w-3 mr-1" />
+                                                  Servir
+                                                </>
+                                              )}
+                                            </Button>
+                                          )}
+                                          {canDeleteItems && (
+                                            <Button 
+                                              variant="ghost" 
+                                              size="icon" 
+                                              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                              onClick={() => handleDeleteOrderItem(item.id, item.order_id)}
+                                            >
+                                              <Trash2 className="h-3 w-3 text-destructive" />
+                                            </Button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
                                   </div>
-                                ))}
+                                </ScrollArea>
                               </div>
-                            </ScrollArea>
-
-                          </div>
-                        ) : selectedTable.status === 'occupied' ? (
-                          <div className="flex-1 flex flex-col items-center justify-center">
-                            <div className="text-center text-muted-foreground mb-4">
-                              <ShoppingBag className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                              <p className="text-sm">Nenhum item no pedido</p>
-                            </div>
-                            {/* Close empty table button */}
-                            <Button 
-                              variant="destructive" 
-                              size="sm"
-                              onClick={handleCloseEmptyTable}
-                              disabled={isClosingEmptyTable}
-                            >
-                              <XCircle className="h-4 w-4 mr-2" />
-                              {isClosingEmptyTable ? 'Fechando...' : 'Fechar Mesa (Sem Consumo)'}
-                            </Button>
-                          </div>
-                        ) : null}
+                            );
+                          } else if (hasAnyItems) {
+                            // Há itens mas nenhum está pronto ainda
+                            return (
+                              <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground">
+                                <Clock className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                                <p className="text-sm font-medium">Nenhum item pronto ainda</p>
+                                <p className="text-xs mt-1">Os itens aparecerão aqui quando saírem da produção</p>
+                              </div>
+                            );
+                          } else if (selectedTable.status === 'occupied') {
+                            return (
+                              <div className="flex-1 flex flex-col items-center justify-center">
+                                <div className="text-center text-muted-foreground mb-4">
+                                  <ShoppingBag className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                                  <p className="text-sm">Nenhum item no pedido</p>
+                                </div>
+                                {/* Close empty table button */}
+                                <Button 
+                                  variant="destructive" 
+                                  size="sm"
+                                  onClick={handleCloseEmptyTable}
+                                  disabled={isClosingEmptyTable}
+                                >
+                                  <XCircle className="h-4 w-4 mr-2" />
+                                  {isClosingEmptyTable ? 'Fechando...' : 'Fechar Mesa (Sem Consumo)'}
+                                </Button>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
 
                       </>
                     )}
@@ -2728,90 +2762,122 @@ export default function Tables() {
                       </div>
                     </div>
                   )}
-                  {selectedOrder && selectedOrder.order_items && selectedOrder.order_items.length > 0 ? (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium">Itens do Pedido</h4>
-                  <div className="max-h-[180px] overflow-y-auto space-y-2">
-                    {selectedOrder.order_items.map((item: any) => (
-                      <div 
-                        key={item.id} 
-                        className="p-2 bg-muted/50 rounded text-sm"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <span className="font-medium">
-                              {item.quantity}x {item.product?.name || 'Produto'}
-                              {item.variation?.name && (
-                                <span className="text-muted-foreground font-normal"> - {item.variation.name}</span>
-                              )}
-                            </span>
-                            {/* Sub-items (pizzas individuais) */}
-                            {item.sub_items && item.sub_items.length > 0 ? (
-                              <div className="text-xs text-muted-foreground mt-1 space-y-1.5">
-                                {item.sub_items
-                                  .sort((a: any, b: any) => a.sub_item_index - b.sub_item_index)
-                                  .map((subItem: any) => (
-                                  <div key={subItem.id} className="pl-2 border-l-2 border-primary/30">
-                                    <p className="font-medium text-foreground">🍕 Pizza {subItem.sub_item_index + 1}:</p>
-                                    {subItem.sub_extras && subItem.sub_extras.length > 0 && (
-                                      <div className="pl-2 space-y-0.5">
-                                        {subItem.sub_extras.map((extra: any, idx: number) => (
-                                          <p key={idx}>• {extra.option_name}</p>
+                  {/* Mobile - Consumo tab shows only READY items */}
+                  {(() => {
+                    const isItemReadyToServe = (item: any) => {
+                      if (item.station_status === 'done' || item.station_status === 'completed') {
+                        return true;
+                      }
+                      if (item.current_station?.station_type === 'order_status') {
+                        return true;
+                      }
+                      if (!item.current_station_id && !selectedOrder?.is_draft) {
+                        return true;
+                      }
+                      return false;
+                    };
+                    
+                    const readyItems = selectedOrder?.order_items?.filter(isItemReadyToServe) || [];
+                    const hasAnyItems = selectedOrder?.order_items?.length > 0;
+                    
+                    if (readyItems.length > 0) {
+                      return (
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-medium">Itens Prontos para Servir</h4>
+                          <div className="max-h-[180px] overflow-y-auto space-y-2">
+                            {readyItems.map((item: any) => (
+                              <div 
+                                key={item.id} 
+                                className="p-2 bg-muted/50 rounded text-sm"
+                              >
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <span className="font-medium">
+                                      {item.quantity}x {item.product?.name || 'Produto'}
+                                      {item.variation?.name && (
+                                        <span className="text-muted-foreground font-normal"> - {item.variation.name}</span>
+                                      )}
+                                    </span>
+                                    {/* Sub-items (pizzas individuais) */}
+                                    {item.sub_items && item.sub_items.length > 0 ? (
+                                      <div className="text-xs text-muted-foreground mt-1 space-y-1.5">
+                                        {item.sub_items
+                                          .sort((a: any, b: any) => a.sub_item_index - b.sub_item_index)
+                                          .map((subItem: any) => (
+                                          <div key={subItem.id} className="pl-2 border-l-2 border-primary/30">
+                                            <p className="font-medium text-foreground">🍕 Pizza {subItem.sub_item_index + 1}:</p>
+                                            {subItem.sub_extras && subItem.sub_extras.length > 0 && (
+                                              <div className="pl-2 space-y-0.5">
+                                                {subItem.sub_extras.map((extra: any, idx: number) => (
+                                                  <p key={idx}>• {extra.option_name}</p>
+                                                ))}
+                                              </div>
+                                            )}
+                                            {subItem.notes && (
+                                              <p className="pl-2 italic text-amber-600">📝 {subItem.notes}</p>
+                                            )}
+                                          </div>
                                         ))}
                                       </div>
+                                    ) : (
+                                      /* Sabores/Complementos tradicionais */
+                                      item.extras && item.extras.length > 0 && (
+                                        <div className="text-xs text-muted-foreground mt-1">
+                                          {item.extras.map((extra: any, idx: number) => (
+                                            <p key={idx} className="pl-2">• {extra.extra_name.split(': ').slice(1).join(': ')}</p>
+                                          ))}
+                                        </div>
+                                      )
                                     )}
-                                    {subItem.notes && (
-                                      <p className="pl-2 italic text-amber-600">📝 {subItem.notes}</p>
+                                    {item.notes && (
+                                      <p className="text-xs text-amber-600 mt-1 italic">📝 {item.notes}</p>
                                     )}
                                   </div>
-                                ))}
-                              </div>
-                            ) : (
-                              /* Sabores/Complementos tradicionais */
-                              item.extras && item.extras.length > 0 && (
-                                <div className="text-xs text-muted-foreground mt-1">
-                                  {item.extras.map((extra: any, idx: number) => (
-                                    <p key={idx} className="pl-2">• {extra.extra_name.split(': ').slice(1).join(': ')}</p>
-                                  ))}
+                                  <div className="flex flex-col items-end gap-1 ml-2">
+                                    {/* Botão Servir Item - Mobile */}
+                                    {item.served_at ? (
+                                      <div className="flex items-center gap-1 text-green-600 text-xs bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded">
+                                        <Check className="h-3 w-3" />
+                                        <span>Servido</span>
+                                      </div>
+                                    ) : (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="text-xs h-6 px-2"
+                                        onClick={() => handleServeOrderItem(item.id)}
+                                        disabled={isServingItem === item.id}
+                                      >
+                                        {isServingItem === item.id ? (
+                                          <span className="animate-pulse">...</span>
+                                        ) : (
+                                          <>
+                                            <Check className="h-3 w-3 mr-1" />
+                                            Servir
+                                          </>
+                                        )}
+                                      </Button>
+                                    )}
+                                  </div>
                                 </div>
-                              )
-                            )}
-                            {item.notes && (
-                              <p className="text-xs text-amber-600 mt-1 italic">📝 {item.notes}</p>
-                            )}
-                          </div>
-                          <div className="flex flex-col items-end gap-1 ml-2">
-                            {/* Botão Servir Item - Mobile */}
-                            {item.served_at ? (
-                              <div className="flex items-center gap-1 text-green-600 text-xs bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded">
-                                <Check className="h-3 w-3" />
-                                <span>Servido</span>
                               </div>
-                            ) : (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="text-xs h-6 px-2"
-                                onClick={() => handleServeOrderItem(item.id)}
-                                disabled={isServingItem === item.id}
-                              >
-                                {isServingItem === item.id ? (
-                                  <span className="animate-pulse">...</span>
-                                ) : (
-                                  <>
-                                    <Check className="h-3 w-3 mr-1" />
-                                    Servir
-                                  </>
-                                )}
-                              </Button>
-                            )}
+                            ))}
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : selectedOrder && (!selectedOrder.order_items || selectedOrder.order_items.length === 0) ? (
+                      );
+                    } else if (hasAnyItems) {
+                      // Há itens mas nenhum está pronto ainda
+                      return (
+                        <div className="text-center py-4 text-muted-foreground">
+                          <Clock className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm font-medium">Nenhum item pronto ainda</p>
+                          <p className="text-xs mt-1">Os itens aparecerão aqui quando saírem da produção</p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                  {selectedOrder && (!selectedOrder.order_items || selectedOrder.order_items.length === 0) ? (
                 <div className="text-center py-4 space-y-3">
                   <div className="text-muted-foreground">
                     <ShoppingBag className="h-10 w-10 mx-auto mb-2 opacity-50" />
