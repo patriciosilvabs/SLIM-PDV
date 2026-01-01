@@ -24,9 +24,12 @@ interface OrderData {
 
 export function useKdsWorkflow() {
   const queryClient = useQueryClient();
-  const { activeStations, getNextStation, orderStatusStation, isLastProductionStation } = useKdsStations();
+  const { activeStations, getNextStation, orderStatusStation, orderStatusStations, isLastProductionStation } = useKdsStations();
   const { logAction } = useKdsStationLogs();
   const { user } = useAuth();
+  
+  // IDs de todas as estações order_status para verificações
+  const orderStatusStationIds = orderStatusStations?.map(s => s.id) || [];
 
   // Mover item diretamente para a próxima estação (clique único) - OTIMIZADO
   const moveItemToNextStation = useMutation({
@@ -104,9 +107,9 @@ export function useKdsWorkflow() {
                 .from('order_items')
                 .select('id, current_station_id, station_status')
                 .eq('order_id', itemData.order_id)
-                .then(({ data: allItems }) => {
+              .then(({ data: allItems }) => {
                   const allItemsReady = allItems?.every(item => 
-                    (orderStatusStation && item.current_station_id === orderStatusStation.id) ||
+                    (item.current_station_id && orderStatusStationIds.includes(item.current_station_id)) ||
                     item.station_status === 'done'
                   );
                   if (allItemsReady) {
@@ -309,7 +312,7 @@ export function useKdsWorkflow() {
 
           // Todos estão na estação order_status ou já finalizados
           const allItemsReady = allItems?.every(item => 
-            (orderStatusStation && item.current_station_id === orderStatusStation.id) ||
+            (item.current_station_id && orderStatusStationIds.includes(item.current_station_id)) ||
             item.station_status === 'done'
           );
 
@@ -395,7 +398,7 @@ export function useKdsWorkflow() {
 
       // Marcar todos os itens como done
       for (const item of items || []) {
-        if (item.current_station_id && orderStatusStation?.id === item.current_station_id) {
+        if (item.current_station_id && orderStatusStationIds.includes(item.current_station_id)) {
           // Log de conclusão
           await logAction.mutateAsync({
             orderItemId: item.id,
