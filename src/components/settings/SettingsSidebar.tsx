@@ -14,6 +14,7 @@ import {
   X,
   Factory,
   Mail,
+  Wallet,
   LucideIcon
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -24,6 +25,7 @@ export type SettingsSection =
   | 'kds-stations'
   | 'orders' 
   | 'printers' 
+  | 'cash-register'
   | 'notifications' 
   | 'announcements' 
   | 'push' 
@@ -38,6 +40,7 @@ export const SECTION_INFO: Record<SettingsSection, { label: string; icon: Lucide
   'kds-stations': { label: 'Praças', icon: Factory },
   orders: { label: 'Pedidos', icon: ShoppingCart },
   printers: { label: 'Impressoras', icon: Printer },
+  'cash-register': { label: 'Caixa', icon: Wallet },
   notifications: { label: 'Sons', icon: Bell },
   announcements: { label: 'Avisos Agendados', icon: Megaphone },
   push: { label: 'Push', icon: Smartphone },
@@ -60,6 +63,7 @@ const sections = [
       { id: 'kds-stations' as const, label: 'Praças', icon: Factory },
       { id: 'orders' as const, label: 'Pedidos', icon: ShoppingCart },
       { id: 'printers' as const, label: 'Impressoras', icon: Printer },
+      { id: 'cash-register' as const, label: 'Caixa', icon: Wallet },
     ],
   },
   {

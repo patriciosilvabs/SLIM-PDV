@@ -51,6 +51,7 @@ export type PermissionCode =
   | 'cash_close'
   | 'cash_withdraw'
   | 'cash_supply'
+  | 'cash_view_difference'
   // Menu
   | 'menu_view'
   | 'menu_manage'
@@ -170,6 +171,7 @@ export const PERMISSION_GROUPS = {
       { code: 'cash_close' as PermissionCode, label: 'Fechar caixa' },
       { code: 'cash_withdraw' as PermissionCode, label: 'Fazer sangrias' },
       { code: 'cash_supply' as PermissionCode, label: 'Fazer suprimentos' },
+      { code: 'cash_view_difference' as PermissionCode, label: 'Ver diferença de caixa' },
     ],
   },
   menu: {
