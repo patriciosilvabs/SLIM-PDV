@@ -185,6 +185,7 @@ export default function Tables() {
   const [isOpenTableDialogOpen, setIsOpenTableDialogOpen] = useState(false);
   const [isAddOrderModalOpen, setIsAddOrderModalOpen] = useState(false);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
+  const [tableViewMode, setTableViewMode] = useState<'consumo' | 'resumo'>('consumo');
   const [tableToOpen, setTableToOpen] = useState<Table | null>(null);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [openTableData, setOpenTableData] = useState({ people: 2, identification: '' });
@@ -1552,6 +1553,26 @@ export default function Tables() {
                 {selectedTable ? (
                   <>
                   <CardHeader className="pb-3">
+                    {/* Tabs Consumo/Resumo centralizadas no topo */}
+                    <div className="flex justify-center mb-3">
+                      <div className="flex gap-1 p-1 bg-muted rounded-lg">
+                        <Button
+                          variant={tableViewMode === 'consumo' ? 'default' : 'ghost'}
+                          size="sm"
+                          onClick={() => setTableViewMode('consumo')}
+                        >
+                          Consumo
+                        </Button>
+                        <Button
+                          variant={tableViewMode === 'resumo' ? 'default' : 'ghost'}
+                          size="sm"
+                          onClick={() => setTableViewMode('resumo')}
+                        >
+                          Resumo
+                        </Button>
+                      </div>
+                    </div>
+                    
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <Button 
@@ -2506,6 +2527,26 @@ export default function Tables() {
         <Dialog open={!!selectedTable} onOpenChange={() => setSelectedTable(null)}>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
+            {/* Tabs Consumo/Resumo centralizadas no topo */}
+            <div className="flex justify-center mb-3">
+              <div className="flex gap-1 p-1 bg-muted rounded-lg">
+                <Button
+                  variant={tableViewMode === 'consumo' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setTableViewMode('consumo')}
+                >
+                  Consumo
+                </Button>
+                <Button
+                  variant={tableViewMode === 'resumo' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setTableViewMode('resumo')}
+                >
+                  Resumo
+                </Button>
+              </div>
+            </div>
+            
             <DialogTitle className="flex items-center gap-2">
               Mesa {selectedTable?.number}
               {selectedTable && (
