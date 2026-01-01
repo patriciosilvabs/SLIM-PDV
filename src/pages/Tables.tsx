@@ -1814,23 +1814,8 @@ export default function Tables() {
                                           📝 {item.notes}
                                         </p>
                                       )}
-                                      {/* Data/Hora de criação do item */}
-                                      {item.created_at && (
-                                        <p className="text-xs text-muted-foreground mt-1 pl-2">
-                                          📅 {format(new Date(item.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                                        </p>
-                                      )}
-                                      {/* Nome do garçom que adicionou */}
-                                      {item.added_by_profile?.name && (
-                                        <p className="text-xs text-blue-600 mt-0.5 pl-2">
-                                          👤 {item.added_by_profile.name}
-                                        </p>
-                                      )}
                                     </div>
                                     <div className="flex items-center gap-2 ml-2">
-                                      <span className="text-sm font-medium">
-                                        {formatCurrency(item.total_price)}
-                                      </span>
                                       {/* Botão Servir Item */}
                                       {item.served_at ? (
                                         <div className="flex items-center gap-1 text-green-600 text-xs bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded">
@@ -1871,12 +1856,6 @@ export default function Tables() {
                               </div>
                             </ScrollArea>
 
-                            <div className="border-t pt-3 mt-3">
-                              <div className="flex items-center justify-between text-lg font-bold">
-                                <span>Total</span>
-                                <span className="text-primary">{formatCurrency(selectedOrder.total || 0)}</span>
-                              </div>
-                            </div>
                           </div>
                         ) : selectedTable.status === 'occupied' ? (
                           <div className="flex-1 flex flex-col items-center justify-center">
@@ -1933,6 +1912,75 @@ export default function Tables() {
                             />
                           </div>
                         </div>
+
+                        {/* Lista de Itens Completa */}
+                        {selectedOrder.order_items && selectedOrder.order_items.length > 0 && (
+                          <div className="flex-1 flex flex-col min-h-0 border-t pt-3 mt-3">
+                            <h4 className="text-sm font-medium mb-2">Itens do Pedido</h4>
+                            <ScrollArea className="flex-1">
+                              <div className="space-y-2 pr-2">
+                                {selectedOrder.order_items.map((item: any) => (
+                                  <div key={item.id} className="p-2 bg-muted/50 rounded">
+                                    <div className="flex justify-between items-start">
+                                      <p className="text-sm font-medium">
+                                        {item.quantity}x {item.product?.name || 'Produto'}
+                                        {item.variation?.name && (
+                                          <span className="text-muted-foreground font-normal"> - {item.variation.name}</span>
+                                        )}
+                                      </p>
+                                      <span className="text-sm font-medium ml-2">
+                                        {formatCurrency(item.total_price)}
+                                      </span>
+                                    </div>
+                                    {/* Sub-items (pizzas individuais) */}
+                                    {item.sub_items && item.sub_items.length > 0 && (
+                                      <div className="text-xs text-muted-foreground mt-1 space-y-1.5">
+                                        {item.sub_items
+                                          .sort((a: any, b: any) => a.sub_item_index - b.sub_item_index)
+                                          .map((subItem: any) => (
+                                          <div key={subItem.id} className="pl-2 border-l-2 border-primary/30">
+                                            <p className="font-medium text-foreground">🍕 Pizza {subItem.sub_item_index + 1}:</p>
+                                            {subItem.sub_extras && subItem.sub_extras.length > 0 && (
+                                              <div className="pl-2 space-y-0.5">
+                                                {subItem.sub_extras.map((extra: any, idx: number) => (
+                                                  <p key={idx}>• {extra.option_name}</p>
+                                                ))}
+                                              </div>
+                                            )}
+                                            {subItem.notes && (
+                                              <p className="pl-2 italic text-amber-600">📝 {subItem.notes}</p>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {/* Extras tradicionais */}
+                                    {!item.sub_items?.length && item.extras && item.extras.length > 0 && (
+                                      <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                                        {item.extras.map((extra: any, idx: number) => (
+                                          <p key={idx} className="pl-2">• {extra.extra_name.split(': ').slice(1).join(': ')}</p>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {/* Observações */}
+                                    {item.notes && (
+                                      <p className="text-xs text-amber-600 mt-1 pl-2 italic">📝 {item.notes}</p>
+                                    )}
+                                    {/* Data/hora e garçom */}
+                                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1 pl-2">
+                                      {item.created_at && (
+                                        <span>📅 {format(new Date(item.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</span>
+                                      )}
+                                      {item.added_by_profile?.name && (
+                                        <span className="text-blue-600">• 👤 {item.added_by_profile.name}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </ScrollArea>
+                          </div>
+                        )}
 
                         {/* Total */}
                         <div className="border-t pt-3 mt-3">
@@ -2731,15 +2779,8 @@ export default function Tables() {
                             {item.notes && (
                               <p className="text-xs text-amber-600 mt-1 italic">📝 {item.notes}</p>
                             )}
-                            {/* Data/Hora de criação do item */}
-                            {item.created_at && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                📅 {format(new Date(item.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                              </p>
-                            )}
                           </div>
                           <div className="flex flex-col items-end gap-1 ml-2">
-                            <span className="font-medium">{formatCurrency(item.total_price)}</span>
                             {/* Botão Servir Item - Mobile */}
                             {item.served_at ? (
                               <div className="flex items-center gap-1 text-green-600 text-xs bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded">
@@ -2768,10 +2809,6 @@ export default function Tables() {
                         </div>
                       </div>
                     ))}
-                  </div>
-                  <div className="flex justify-between font-bold pt-2 border-t">
-                    <span>Total</span>
-                    <span className="text-primary">{formatCurrency(selectedOrder.total || 0)}</span>
                   </div>
                 </div>
               ) : selectedOrder && (!selectedOrder.order_items || selectedOrder.order_items.length === 0) ? (
@@ -2826,6 +2863,73 @@ export default function Tables() {
                       />
                     </div>
                   </div>
+
+                  {/* Lista de Itens Completa - Mobile */}
+                  {selectedOrder.order_items && selectedOrder.order_items.length > 0 && (
+                    <div className="border-t pt-3 mt-3 space-y-2">
+                      <h4 className="text-sm font-medium">Itens do Pedido</h4>
+                      <div className="max-h-[180px] overflow-y-auto space-y-2">
+                        {selectedOrder.order_items.map((item: any) => (
+                          <div key={item.id} className="p-2 bg-muted/50 rounded text-sm">
+                            <div className="flex justify-between items-start">
+                              <span className="font-medium">
+                                {item.quantity}x {item.product?.name || 'Produto'}
+                                {item.variation?.name && (
+                                  <span className="text-muted-foreground font-normal"> - {item.variation.name}</span>
+                                )}
+                              </span>
+                              <span className="font-medium ml-2">
+                                {formatCurrency(item.total_price)}
+                              </span>
+                            </div>
+                            {/* Sub-items (pizzas individuais) */}
+                            {item.sub_items && item.sub_items.length > 0 && (
+                              <div className="text-xs text-muted-foreground mt-1 space-y-1.5">
+                                {item.sub_items
+                                  .sort((a: any, b: any) => a.sub_item_index - b.sub_item_index)
+                                  .map((subItem: any) => (
+                                  <div key={subItem.id} className="pl-2 border-l-2 border-primary/30">
+                                    <p className="font-medium text-foreground">🍕 Pizza {subItem.sub_item_index + 1}:</p>
+                                    {subItem.sub_extras && subItem.sub_extras.length > 0 && (
+                                      <div className="pl-2 space-y-0.5">
+                                        {subItem.sub_extras.map((extra: any, idx: number) => (
+                                          <p key={idx}>• {extra.option_name}</p>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {subItem.notes && (
+                                      <p className="pl-2 italic text-amber-600">📝 {subItem.notes}</p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {/* Extras tradicionais */}
+                            {!item.sub_items?.length && item.extras && item.extras.length > 0 && (
+                              <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                                {item.extras.map((extra: any, idx: number) => (
+                                  <p key={idx} className="pl-2">• {extra.extra_name.split(': ').slice(1).join(': ')}</p>
+                                ))}
+                              </div>
+                            )}
+                            {/* Observações */}
+                            {item.notes && (
+                              <p className="text-xs text-amber-600 mt-1 pl-2 italic">📝 {item.notes}</p>
+                            )}
+                            {/* Data/hora e garçom */}
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1 pl-2">
+                              {item.created_at && (
+                                <span>📅 {format(new Date(item.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</span>
+                              )}
+                              {item.added_by_profile?.name && (
+                                <span className="text-blue-600">• 👤 {item.added_by_profile.name}</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Total */}
                   <div className="border-t pt-3 mt-3">
