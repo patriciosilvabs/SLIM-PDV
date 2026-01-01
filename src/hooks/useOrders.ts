@@ -564,7 +564,7 @@ export function useOrderMutations() {
     }) => {
       if (!tenantId) throw new Error('Tenant não encontrado');
 
-      // 1. Buscar dados completos do item para auditoria
+      // 1. Buscar dados completos do item para auditoria (incluindo status para verificar se estava em produção)
       const { data: item, error: itemError } = await supabase
         .from('order_items')
         .select(`
@@ -572,6 +572,10 @@ export function useOrderMutations() {
           quantity,
           unit_price,
           total_price,
+          station_status,
+          served_at,
+          current_station_id,
+          notes,
           product:products(name),
           variation:product_variations(name)
         `)
@@ -651,7 +655,24 @@ export function useOrderMutations() {
           .eq('id', params.orderId);
       }
 
-      return { success: true };
+      // Determinar se o item estava em produção (não estava pronto/servido)
+      const wasInProduction = item?.station_status !== 'done' && !item?.served_at;
+
+      return { 
+        success: true, 
+        wasInProduction,
+        itemData: {
+          productName: (item?.product as any)?.name || 'Produto',
+          variationName: (item?.variation as any)?.name || null,
+          quantity: item?.quantity || 1,
+          notes: item?.notes || null
+        },
+        orderData: {
+          orderType: order?.order_type || 'dine_in',
+          tableNumber: (order?.table as any)?.number || null,
+          customerName: order?.customer_name || null
+        }
+      };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
