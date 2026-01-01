@@ -25,6 +25,7 @@ import { useAudioNotification } from '@/hooks/useAudioNotification';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
 import { CancelOrderDialog } from '@/components/order/CancelOrderDialog';
+import { CancelItemDialog } from '@/components/order/CancelItemDialog';
 import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, UserPlus, Minus, ArrowRightLeft, XCircle, Printer, RotateCcw, Ban, ArrowRight, Wallet } from 'lucide-react';
 import { printKitchenOrderTicket } from '@/components/kitchen/KitchenOrderTicket';
 import { printCustomerReceipt, printPartialPaymentReceipt, propsToReceiptData } from '@/components/receipt/CustomerReceipt';
@@ -165,7 +166,7 @@ export default function Tables() {
   const { data: orders } = useOrders(['pending', 'preparing', 'ready', 'delivered']);
   const { data: allOrders } = useOrders(['pending', 'preparing', 'ready', 'delivered', 'cancelled']);
   const { createTable, updateTable } = useTableMutations();
-  const { createOrder, updateOrder, addOrderItem, addOrderItemExtras, addOrderItemSubItems } = useOrderMutations();
+  const { createOrder, updateOrder, addOrderItem, addOrderItemExtras, addOrderItemSubItems, cancelOrderItem } = useOrderMutations();
   
   // Cash register hooks
   const { data: openCashRegister } = useOpenCashRegister();
@@ -228,6 +229,11 @@ export default function Tables() {
   const [isCancelOrderDialogOpen, setIsCancelOrderDialogOpen] = useState(false);
   const [isCancellingOrder, setIsCancellingOrder] = useState(false);
   const MIN_REASON_LENGTH = 10;
+
+  // Cancel item states
+  const [cancelItemDialogOpen, setCancelItemDialogOpen] = useState(false);
+  const [itemToCancel, setItemToCancel] = useState<{ id: string; orderId: string; name: string; quantity: number; price: number } | null>(null);
+  const [isCancellingItem, setIsCancellingItem] = useState(false);
 
   // Loading states for better UX feedback
   const [isClosingEmptyTable, setIsClosingEmptyTable] = useState(false);
@@ -1869,18 +1875,65 @@ export default function Tables() {
                             <ScrollArea className="flex-1">
                               <div className="space-y-2 pr-2">
                                 {selectedOrder.order_items.map((item: any) => (
-                                  <div key={item.id} className="p-2 bg-muted/50 rounded">
+                                  <div 
+                                    key={item.id} 
+                                    className={cn(
+                                      "p-2 rounded",
+                                      item.cancelled_at 
+                                        ? "bg-destructive/10 border border-destructive/20" 
+                                        : "bg-muted/50"
+                                    )}
+                                  >
                                     <div className="flex justify-between items-start">
-                                      <p className="text-sm font-medium">
+                                      <p className={cn(
+                                        "text-sm font-medium",
+                                        item.cancelled_at && "line-through text-muted-foreground"
+                                      )}>
                                         {item.quantity}x {item.product?.name || 'Produto'}
                                         {item.variation?.name && (
                                           <span className="text-muted-foreground font-normal"> - {item.variation.name}</span>
                                         )}
                                       </p>
-                                      <span className="text-sm font-medium ml-2">
-                                        {formatCurrency(item.total_price)}
-                                      </span>
+                                      <div className="flex items-center gap-2">
+                                        <span className={cn(
+                                          "text-sm font-medium",
+                                          item.cancelled_at && "line-through text-muted-foreground"
+                                        )}>
+                                          {formatCurrency(item.total_price)}
+                                        </span>
+                                        {/* Botão cancelar - apenas para itens servidos e não cancelados */}
+                                        {item.served_at && !item.cancelled_at && canDeleteItems && (
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+                                            onClick={() => {
+                                              setItemToCancel({
+                                                id: item.id,
+                                                orderId: selectedOrder.id,
+                                                name: `${item.product?.name || 'Produto'}${item.variation?.name ? ` - ${item.variation.name}` : ''}`,
+                                                quantity: item.quantity,
+                                                price: item.total_price
+                                              });
+                                              setCancelItemDialogOpen(true);
+                                            }}
+                                          >
+                                            <XCircle className="h-4 w-4" />
+                                          </Button>
+                                        )}
+                                      </div>
                                     </div>
+                                    {/* Badge cancelado */}
+                                    {item.cancelled_at && (
+                                      <div className="mt-1 space-y-1">
+                                        <Badge variant="destructive" className="text-xs">CANCELADO</Badge>
+                                        {item.cancellation_reason && (
+                                          <p className="text-xs text-muted-foreground italic">
+                                            Motivo: {item.cancellation_reason}
+                                          </p>
+                                        )}
+                                      </div>
+                                    )}
                                     {/* Sub-items (pizzas individuais) */}
                                     {item.sub_items && item.sub_items.length > 0 && (
                                       <div className="text-xs text-muted-foreground mt-1 space-y-1.5">
@@ -2859,18 +2912,65 @@ export default function Tables() {
                       <h4 className="text-sm font-medium">Itens do Pedido</h4>
                       <div className="max-h-[180px] overflow-y-auto space-y-2">
                         {selectedOrder.order_items.map((item: any) => (
-                          <div key={item.id} className="p-2 bg-muted/50 rounded text-sm">
+                          <div 
+                            key={item.id} 
+                            className={cn(
+                              "p-2 rounded text-sm",
+                              item.cancelled_at 
+                                ? "bg-destructive/10 border border-destructive/20" 
+                                : "bg-muted/50"
+                            )}
+                          >
                             <div className="flex justify-between items-start">
-                              <span className="font-medium">
+                              <span className={cn(
+                                "font-medium",
+                                item.cancelled_at && "line-through text-muted-foreground"
+                              )}>
                                 {item.quantity}x {item.product?.name || 'Produto'}
                                 {item.variation?.name && (
                                   <span className="text-muted-foreground font-normal"> - {item.variation.name}</span>
                                 )}
                               </span>
-                              <span className="font-medium ml-2">
-                                {formatCurrency(item.total_price)}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className={cn(
+                                  "font-medium",
+                                  item.cancelled_at && "line-through text-muted-foreground"
+                                )}>
+                                  {formatCurrency(item.total_price)}
+                                </span>
+                                {/* Botão cancelar - apenas para itens servidos e não cancelados */}
+                                {item.served_at && !item.cancelled_at && canDeleteItems && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+                                    onClick={() => {
+                                      setItemToCancel({
+                                        id: item.id,
+                                        orderId: selectedOrder.id,
+                                        name: `${item.product?.name || 'Produto'}${item.variation?.name ? ` - ${item.variation.name}` : ''}`,
+                                        quantity: item.quantity,
+                                        price: item.total_price
+                                      });
+                                      setCancelItemDialogOpen(true);
+                                    }}
+                                  >
+                                    <XCircle className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
                             </div>
+                            {/* Badge cancelado */}
+                            {item.cancelled_at && (
+                              <div className="mt-1 space-y-1">
+                                <Badge variant="destructive" className="text-xs">CANCELADO</Badge>
+                                {item.cancellation_reason && (
+                                  <p className="text-xs text-muted-foreground italic">
+                                    Motivo: {item.cancellation_reason}
+                                  </p>
+                                )}
+                              </div>
+                            )}
                             {/* Sub-items (pizzas individuais) */}
                             {item.sub_items && item.sub_items.length > 0 && (
                               <div className="text-xs text-muted-foreground mt-1 space-y-1.5">
@@ -3499,6 +3599,34 @@ export default function Tables() {
         onConfirm={handleCancelOrder}
         orderInfo={selectedTable && selectedOrder ? `Mesa ${selectedTable.number} - Pedido #${selectedOrder.id.slice(0, 8)}` : undefined}
         isLoading={isCancellingOrder}
+      />
+
+      {/* Cancel Item Dialog */}
+      <CancelItemDialog
+        open={cancelItemDialogOpen}
+        onOpenChange={setCancelItemDialogOpen}
+        onConfirm={async (reason) => {
+          if (!itemToCancel || !user) return;
+          setIsCancellingItem(true);
+          try {
+            await cancelOrderItem.mutateAsync({
+              itemId: itemToCancel.id,
+              orderId: itemToCancel.orderId,
+              reason,
+              cancelledBy: user.id
+            });
+            setCancelItemDialogOpen(false);
+            setItemToCancel(null);
+          } catch (error) {
+            console.error('Erro ao cancelar item:', error);
+          } finally {
+            setIsCancellingItem(false);
+          }
+        }}
+        itemName={itemToCancel?.name || ''}
+        quantity={itemToCancel?.quantity || 0}
+        price={itemToCancel?.price || 0}
+        isLoading={isCancellingItem}
       />
 
       {/* Add Order Modal - Desktop */}
