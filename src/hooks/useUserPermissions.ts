@@ -311,12 +311,12 @@ export function useUserPermissionMutations() {
     mutationFn: async ({ userId, permission, granted }: { userId: string; permission: PermissionCode; granted: boolean }) => {
       if (granted) {
         const tenantId = await getTenantId();
-        // Upsert permission
+        // Upsert permission - using 'as any' to handle enum type mismatch until types are regenerated
         const { error } = await supabase
           .from('user_permissions')
           .upsert({
             user_id: userId,
-            permission,
+            permission: permission as any,
             granted: true,
             granted_by: user?.id,
             tenant_id: tenantId,
@@ -329,7 +329,7 @@ export function useUserPermissionMutations() {
           .from('user_permissions')
           .delete()
           .eq('user_id', userId)
-          .eq('permission', permission);
+          .eq('permission', permission as any);
         
         if (error) throw error;
       }
@@ -347,7 +347,7 @@ export function useUserPermissionMutations() {
         .delete()
         .eq('user_id', userId);
 
-      // Insert only granted permissions
+      // Insert only granted permissions - using 'as any' to handle enum type mismatch until types are regenerated
       const grantedPermissions = permissions.filter(p => p.granted);
       if (grantedPermissions.length > 0) {
         const tenantId = await getTenantId();
@@ -355,7 +355,7 @@ export function useUserPermissionMutations() {
           .from('user_permissions')
           .insert(grantedPermissions.map(p => ({
             user_id: userId,
-            permission: p.permission,
+            permission: p.permission as any,
             granted: true,
             granted_by: user?.id,
             tenant_id: tenantId,

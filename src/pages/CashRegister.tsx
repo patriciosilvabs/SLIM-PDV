@@ -4,14 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useOpenCashRegister, useCashRegisterMutations, PaymentMethod } from '@/hooks/useCashRegister';
 import { useCashMovements } from '@/hooks/useReports';
 import { useOrders, Order } from '@/hooks/useOrders';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
+import { useGlobalSettings } from '@/hooks/useGlobalSettings';
 import { AccessDenied } from '@/components/auth/AccessDenied';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -45,6 +45,7 @@ function formatCurrency(value: number) {
 export default function CashRegister() {
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
+  const { getSetting, isLoading: settingsLoading } = useGlobalSettings();
   
   // Granular permission checks
   const canOpenCash = hasPermission('cash_open');
@@ -52,6 +53,12 @@ export default function CashRegister() {
   const canWithdraw = hasPermission('cash_withdraw');
   const canSupply = hasPermission('cash_supply');
   const canManage = hasPermission('cash_register_manage');
+  const canViewDifference = hasPermission('cash_view_difference');
+  
+  // Blind cash register setting
+  const blindCashRegister = getSetting('blind_cash_register') === true;
+  // User can see difference if: not blind mode OR has permission OR is manager
+  const showDifference = !blindCashRegister || canViewDifference || canManage;
 
   // State hooks
   const [isOpenDialogOpen, setIsOpenDialogOpen] = useState(false);
@@ -289,10 +296,12 @@ export default function CashRegister() {
                         {totals.movements >= 0 ? '+' : ''}{formatCurrency(totals.movements)}
                       </span>
                     </div>
-                    <div className="flex justify-between border-t pt-2">
-                      <span className="font-semibold">Valor Esperado:</span>
-                      <span className="font-bold text-primary">{formatCurrency(totals.expected)}</span>
-                    </div>
+                    {showDifference && (
+                      <div className="flex justify-between border-t pt-2">
+                        <span className="font-semibold">Valor Esperado:</span>
+                        <span className="font-bold text-primary">{formatCurrency(totals.expected)}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>Valor Contado</Label>
@@ -303,7 +312,7 @@ export default function CashRegister() {
                       onChange={(e) => setClosingAmount(e.target.value)}
                     />
                   </div>
-                  {closingAmount && (
+                  {closingAmount && showDifference && (
                     <div className={cn(
                       "p-3 rounded-lg text-center",
                       parseFloat(closingAmount.replace(',', '.')) === totals.expected 
@@ -360,19 +369,21 @@ export default function CashRegister() {
                     </div>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-accent/10 rounded-lg">
-                        <CheckCircle className="h-5 w-5 text-accent" />
+                {showDifference && (
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-accent/10 rounded-lg">
+                          <CheckCircle className="h-5 w-5 text-accent" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Esperado</p>
+                          <p className="text-xl font-bold text-accent">{formatCurrency(totals.expected)}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Esperado</p>
-                        <p className="text-xl font-bold text-accent">{formatCurrency(totals.expected)}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
 
               {/* Orders Ready for Payment */}
