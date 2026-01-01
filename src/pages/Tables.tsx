@@ -1757,38 +1757,7 @@ export default function Tables() {
                     {/* REGULAR VIEW - When NOT closing */}
                     {!isClosingBill && (
                       <>
-                        {/* Order Info */}
-                        {selectedOrder && (
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-muted-foreground">Pedido</span>
-                              <span className="font-mono">#{selectedOrder.id.slice(0, 8)}</span>
-                            </div>
-                            {selectedOrder.created_at && (
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="text-muted-foreground">Aberto há</span>
-                                <span>{formatDistanceToNow(new Date(selectedOrder.created_at), { locale: ptBR })}</span>
-                              </div>
-                            )}
-                            {/* Waiter who created the order */}
-                            {selectedOrder.created_by_profile?.name && (
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="text-muted-foreground">Garçom</span>
-                                <span>{selectedOrder.created_by_profile.name}</span>
-                              </div>
-                            )}
-                            {/* Editable Customer Name - using optimized component */}
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-muted-foreground">Cliente</span>
-                              <CustomerNameInput
-                                initialValue={selectedOrder.customer_name}
-                                onSave={handleSaveCustomerName}
-                              />
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Order Items */}
+                        {/* Order Items - Consumo tab shows only items with Servir button */}
                         {selectedOrder && selectedOrder.order_items && selectedOrder.order_items.length > 0 ? (
                           <div className="flex-1 flex flex-col min-h-0">
                             <h4 className="text-sm font-medium mb-2">Itens do Pedido</h4>
@@ -1928,7 +1897,52 @@ export default function Tables() {
                           </div>
                         ) : null}
 
-                        {/* Regular Actions */}
+                      </>
+                    )}
+                      </>
+                    )}
+
+                    {/* ===== ABA RESUMO ===== */}
+                    {tableViewMode === 'resumo' && selectedOrder && !isClosingBill && (
+                      <>
+                        {/* Informações do Pedido */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Pedido</span>
+                            <span className="font-mono">#{selectedOrder.id.slice(0, 8)}</span>
+                          </div>
+                          {selectedOrder.created_at && (
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground">Aberto há</span>
+                              <span>{formatDistanceToNow(new Date(selectedOrder.created_at), { locale: ptBR })}</span>
+                            </div>
+                          )}
+                          {/* Garçom que criou o pedido */}
+                          {selectedOrder.created_by_profile?.name && (
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground">Garçom</span>
+                              <span>{selectedOrder.created_by_profile.name}</span>
+                            </div>
+                          )}
+                          {/* Nome do Cliente editável */}
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Cliente</span>
+                            <CustomerNameInput
+                              initialValue={selectedOrder.customer_name}
+                              onSave={handleSaveCustomerName}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Total */}
+                        <div className="border-t pt-3 mt-3">
+                          <div className="flex justify-between text-lg font-bold">
+                            <span>Total</span>
+                            <span className="text-primary">{formatCurrency(selectedOrder.total || 0)}</span>
+                          </div>
+                        </div>
+                        
+                        {/* Botões de ação */}
                         <div className="space-y-2 pt-2">
                           {selectedTable.status === 'occupied' && (
                             <>
@@ -1941,7 +1955,7 @@ export default function Tables() {
                                 {isAddingItems ? 'Adicionando...' : 'Adicionar Pedido'}
                               </Button>
                               {selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
-                              <Button 
+                                <Button 
                                   variant="outline" 
                                   className="w-full"
                                   onClick={async () => {
@@ -1977,7 +1991,7 @@ export default function Tables() {
                                   Trocar Mesa
                                 </Button>
                               )}
-                              {/* Only show Fechar Conta if there are items and permission */}
+                              {/* Fechar Conta */}
                               {canCloseBill && selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
                                 <Button 
                                   variant="outline" 
@@ -1990,7 +2004,7 @@ export default function Tables() {
                                   {['ready', 'delivered'].includes(selectedOrder.status) ? 'Fechar Conta' : 'Aguardando Preparo...'}
                                 </Button>
                               )}
-                              {/* Cancel Order button - only show when order has items */}
+                              {/* Cancelar Pedido */}
                               {canCancelOrder && selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
                                 <Button 
                                   variant="outline" 
@@ -2010,7 +2024,7 @@ export default function Tables() {
                             </Button>
                           )}
 
-                          {/* Reopen button for available tables with closed orders */}
+                          {/* Reabrir pedidos fechados */}
                           {selectedTable.status === 'available' && canReopenTable && (() => {
                             const closedOrders = getClosedTableOrders(selectedTable.id);
                             if (closedOrders.length === 0) return null;
@@ -2039,87 +2053,6 @@ export default function Tables() {
                               </div>
                             );
                           })()}
-                        </div>
-                      </>
-                    )}
-                      </>
-                    )}
-
-                    {/* ===== ABA RESUMO ===== */}
-                    {tableViewMode === 'resumo' && selectedOrder && (
-                      <>
-                        {/* Lista de itens compacta */}
-                        <div className="flex-1 flex flex-col min-h-0">
-                          <h4 className="text-sm font-medium mb-2">Resumo do Pedido</h4>
-                          <ScrollArea className="flex-1">
-                            <div className="space-y-1 pr-2">
-                              {selectedOrder.order_items?.map((item: any) => (
-                                <div key={item.id} className="flex justify-between py-1.5 text-sm border-b border-border/50">
-                                  <span className="truncate flex-1">
-                                    {item.quantity}x {item.product?.name || 'Produto'}
-                                    {item.variation?.name && (
-                                      <span className="text-muted-foreground"> - {item.variation.name}</span>
-                                    )}
-                                  </span>
-                                  <span className="font-medium ml-2">{formatCurrency(item.total_price)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </ScrollArea>
-                          
-                          {/* Subtotal e Total */}
-                          <div className="border-t pt-3 mt-3 space-y-2">
-                            <div className="flex justify-between text-sm text-muted-foreground">
-                              <span>Subtotal</span>
-                              <span>{formatCurrency(subtotal)}</span>
-                            </div>
-                            <div className="flex justify-between text-lg font-bold">
-                              <span>Total</span>
-                              <span className="text-primary">{formatCurrency(selectedOrder.total || 0)}</span>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Botões de ação para o resumo */}
-                        <div className="space-y-2 pt-2">
-                          {selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
-                            <Button 
-                              variant="outline" 
-                              className="w-full"
-                              onClick={async () => {
-                                if (!selectedOrder || !selectedTable) return;
-                                const receiptData = propsToReceiptData({
-                                  order: selectedOrder,
-                                  payments: [],
-                                  discount: discountAmount > 0 ? { type: discountType, value: discountValue, amount: discountAmount } : undefined,
-                                  serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
-                                  splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
-                                  tableNumber: selectedTable.number,
-                                  receiptType: 'summary',
-                                });
-                                const success = await centralPrinting.printCustomerReceipt(receiptData);
-                                if (success) {
-                                  toast.success('Resumo da conta enviado para impressão');
-                                } else {
-                                  toast.error('Falha ao enviar para impressão');
-                                }
-                              }}
-                            >
-                              <Receipt className="h-4 w-4 mr-2" />
-                              Imprimir Resumo
-                            </Button>
-                          )}
-                          {/* Fechar Conta */}
-                          {canCloseBill && selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
-                            <Button 
-                              className="w-full" 
-                              onClick={handleStartClosing}
-                              disabled={!['ready', 'delivered'].includes(selectedOrder.status)}
-                            >
-                              <Receipt className="h-4 w-4 mr-2" />
-                              {['ready', 'delivered'].includes(selectedOrder.status) ? 'Fechar Conta' : 'Aguardando Preparo...'}
-                            </Button>
-                          )}
                         </div>
                       </>
                     )}
@@ -2859,121 +2792,135 @@ export default function Tables() {
                 </div>
               ) : null}
 
-              {selectedTable?.status === 'occupied' && (
-                <>
-                  <Button 
-                    className="w-full" 
-                    onClick={() => {
-                      // Guarda referência da mesa antes de fechar o dialog
-                      const currentTable = selectedTable;
-                      // Fecha o dialog primeiro para evitar sobreposição
-                      setSelectedTable(null);
-                      // Pequeno delay para animação de fechamento do dialog
-                      setTimeout(() => {
-                        setSelectedTable(currentTable);
-                        setIsAddingMode(true);
-                        setIsOrderDrawerOpen(true);
-                      }, 100);
-                    }} 
-                    disabled={isAddingItems}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    {isAddingItems ? 'Adicionando...' : 'Adicionar Pedido'}
-                  </Button>
-                  {canCloseBill && selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
-                    <Button 
-                      variant="outline" 
-                      className="w-full" 
-                      onClick={handleStartClosing}
-                      disabled={!['ready', 'delivered'].includes(selectedOrder.status)}
-                      title={!['ready', 'delivered'].includes(selectedOrder.status) ? 'Aguardando pedido ficar pronto' : undefined}
-                    >
-                      <Receipt className="h-4 w-4 mr-2" />
-                      {['ready', 'delivered'].includes(selectedOrder.status) ? 'Fechar Conta' : 'Aguardando Preparo...'}
-                    </Button>
-                  )}
-                </>
-              )}
-
-              {selectedTable?.status === 'reserved' && (
-                <Button variant="destructive" className="w-full" onClick={handleCloseTable}>
-                  Liberar Mesa
-                </Button>
-              )}
                 </>
               )}
 
               {/* ===== ABA RESUMO - MOBILE ===== */}
               {tableViewMode === 'resumo' && selectedOrder && (
                 <>
-                  {/* Lista de itens compacta */}
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium">Resumo do Pedido</h4>
-                    <div className="max-h-[200px] overflow-y-auto space-y-1">
-                      {selectedOrder.order_items?.map((item: any) => (
-                        <div key={item.id} className="flex justify-between py-1.5 text-sm border-b border-border/50">
-                          <span className="truncate flex-1">
-                            {item.quantity}x {item.product?.name || 'Produto'}
-                            {item.variation?.name && (
-                              <span className="text-muted-foreground"> - {item.variation.name}</span>
-                            )}
-                          </span>
-                          <span className="font-medium ml-2">{formatCurrency(item.total_price)}</span>
-                        </div>
-                      ))}
+                  {/* Informações do Pedido */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Pedido</span>
+                      <span className="font-mono">#{selectedOrder.id.slice(0, 8)}</span>
                     </div>
-                    
-                    {/* Subtotal e Total */}
-                    <div className="border-t pt-3 mt-3 space-y-2">
-                      <div className="flex justify-between text-sm text-muted-foreground">
-                        <span>Subtotal</span>
-                        <span>{formatCurrency(subtotal)}</span>
+                    {selectedOrder.created_at && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Aberto há</span>
+                        <span>{formatDistanceToNow(new Date(selectedOrder.created_at), { locale: ptBR })}</span>
                       </div>
-                      <div className="flex justify-between text-lg font-bold">
-                        <span>Total</span>
-                        <span className="text-primary">{formatCurrency(selectedOrder.total || 0)}</span>
+                    )}
+                    {/* Garçom que criou o pedido */}
+                    {selectedOrder.created_by_profile?.name && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Garçom</span>
+                        <span>{selectedOrder.created_by_profile.name}</span>
                       </div>
+                    )}
+                    {/* Nome do Cliente editável */}
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Cliente</span>
+                      <CustomerNameInput
+                        initialValue={selectedOrder.customer_name}
+                        onSave={handleSaveCustomerName}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Total */}
+                  <div className="border-t pt-3 mt-3">
+                    <div className="flex justify-between text-lg font-bold">
+                      <span>Total</span>
+                      <span className="text-primary">{formatCurrency(selectedOrder.total || 0)}</span>
                     </div>
                   </div>
                   
-                  {/* Botões de ação para o resumo - Mobile */}
+                  {/* Botões de ação - Mobile */}
                   <div className="space-y-2 pt-2">
-                    {selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
-                      <Button 
-                        variant="outline" 
-                        className="w-full"
-                        onClick={async () => {
-                          if (!selectedOrder || !selectedTable) return;
-                          const receiptData = propsToReceiptData({
-                            order: selectedOrder,
-                            payments: [],
-                            discount: discountAmount > 0 ? { type: discountType, value: discountValue, amount: discountAmount } : undefined,
-                            serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
-                            splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
-                            tableNumber: selectedTable.number,
-                            receiptType: 'summary',
-                          });
-                          const success = await centralPrinting.printCustomerReceipt(receiptData);
-                          if (success) {
-                            toast.success('Resumo da conta enviado para impressão');
-                          } else {
-                            toast.error('Falha ao enviar para impressão');
-                          }
-                        }}
-                      >
-                        <Receipt className="h-4 w-4 mr-2" />
-                        Imprimir Resumo
-                      </Button>
+                    {selectedTable?.status === 'occupied' && (
+                      <>
+                        <Button 
+                          className="w-full" 
+                          onClick={() => {
+                            const currentTable = selectedTable;
+                            setSelectedTable(null);
+                            setTimeout(() => {
+                              setSelectedTable(currentTable);
+                              setIsAddingMode(true);
+                              setIsOrderDrawerOpen(true);
+                            }, 100);
+                          }} 
+                          disabled={isAddingItems}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          {isAddingItems ? 'Adicionando...' : 'Adicionar Pedido'}
+                        </Button>
+                        {selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
+                          <Button 
+                            variant="outline" 
+                            className="w-full"
+                            onClick={async () => {
+                              if (!selectedOrder || !selectedTable) return;
+                              const receiptData = propsToReceiptData({
+                                order: selectedOrder,
+                                payments: [],
+                                discount: discountAmount > 0 ? { type: discountType, value: discountValue, amount: discountAmount } : undefined,
+                                serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
+                                splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
+                                tableNumber: selectedTable.number,
+                                receiptType: 'summary',
+                              });
+                              const success = await centralPrinting.printCustomerReceipt(receiptData);
+                              if (success) {
+                                toast.success('Resumo da conta enviado para impressão');
+                              } else {
+                                toast.error('Falha ao enviar para impressão');
+                              }
+                            }}
+                          >
+                            <Receipt className="h-4 w-4 mr-2" />
+                            Resumo da Conta
+                          </Button>
+                        )}
+                        {canSwitchTable && (
+                          <Button 
+                            variant="outline" 
+                            className="w-full"
+                            onClick={() => setIsSwitchTableDialogOpen(true)}
+                          >
+                            <ArrowRightLeft className="h-4 w-4 mr-2" />
+                            Trocar Mesa
+                          </Button>
+                        )}
+                        {/* Fechar Conta */}
+                        {canCloseBill && selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
+                          <Button 
+                            variant="outline" 
+                            className="w-full" 
+                            onClick={handleStartClosing}
+                            disabled={!['ready', 'delivered'].includes(selectedOrder.status)}
+                          >
+                            <Receipt className="h-4 w-4 mr-2" />
+                            {['ready', 'delivered'].includes(selectedOrder.status) ? 'Fechar Conta' : 'Aguardando Preparo...'}
+                          </Button>
+                        )}
+                        {/* Cancelar Pedido */}
+                        {canCancelOrder && selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
+                          <Button 
+                            variant="outline" 
+                            className="w-full text-destructive border-destructive/50 hover:bg-destructive/10"
+                            onClick={() => setIsCancelOrderDialogOpen(true)}
+                          >
+                            <Ban className="h-4 w-4 mr-2" />
+                            Cancelar Pedido
+                          </Button>
+                        )}
+                      </>
                     )}
-                    {/* Fechar Conta - Mobile */}
-                    {canCloseBill && selectedOrder?.order_items && selectedOrder.order_items.length > 0 && (
-                      <Button 
-                        className="w-full" 
-                        onClick={handleStartClosing}
-                        disabled={!['ready', 'delivered'].includes(selectedOrder.status)}
-                      >
-                        <Receipt className="h-4 w-4 mr-2" />
-                        {['ready', 'delivered'].includes(selectedOrder.status) ? 'Fechar Conta' : 'Aguardando Preparo...'}
+
+                    {selectedTable?.status === 'reserved' && (
+                      <Button variant="destructive" className="w-full" onClick={handleCloseTable}>
+                        Liberar Mesa
                       </Button>
                     )}
                   </div>
