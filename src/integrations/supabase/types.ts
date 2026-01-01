@@ -2629,6 +2629,7 @@ export type Database = {
         | "closing_history_view"
         | "closing_history_export"
         | "reopen_history_view"
+        | "cash_view_difference"
       stock_movement_type: "entry" | "exit" | "adjustment"
       table_status: "available" | "occupied" | "reserved" | "bill_requested"
     }
@@ -2834,6 +2835,7 @@ export const Constants = {
         "closing_history_view",
         "closing_history_export",
         "reopen_history_view",
+        "cash_view_difference",
       ],
       stock_movement_type: ["entry", "exit", "adjustment"],
       table_status: ["available", "occupied", "reserved", "bill_requested"],
