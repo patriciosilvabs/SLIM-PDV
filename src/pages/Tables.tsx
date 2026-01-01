@@ -1525,27 +1525,6 @@ export default function Tables() {
                         onClick={() => handleTableClick(table)}
                       >
                         <CardContent className="p-3 flex flex-col items-center justify-center aspect-square relative">
-                          {/* KDS Status Badges - Posicionados no topo */}
-                          <div className="absolute top-1 left-0 right-0 flex justify-center gap-1">
-                            {isOrderReady && (
-                              <span className="px-1.5 py-0.5 bg-green-500 text-white text-[10px] font-bold rounded animate-pulse">
-                                PRONTO
-                              </span>
-                            )}
-                            {isOrderPreparing && currentStation && (
-                              <span 
-                                className="px-1.5 py-0.5 text-white text-[10px] font-bold rounded truncate max-w-[90%]"
-                                style={{ backgroundColor: currentStation.color || '#f59e0b' }}
-                              >
-                                {currentStation.name}
-                              </span>
-                            )}
-                            {isOrderPending && (
-                              <span className="px-1.5 py-0.5 bg-yellow-500 text-white text-[10px] font-bold rounded">
-                                AGUARDANDO
-                              </span>
-                            )}
-                          </div>
                           
                           {/* Numero da mesa */}
                           <p className="text-3xl font-bold">{table.number}</p>
@@ -1706,25 +1685,25 @@ export default function Tables() {
                                         >
                                           {/* Status Badge Individual */}
                                           {itemStatus === 'pending' && (
-                                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 w-fit">
+                                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 w-fit animate-pulse-soft">
                                               <Clock className="h-3 w-3" />
                                               Aguardando Produção
                                             </div>
                                           )}
                                           {itemStatus === 'in_production' && item.current_station && (
                                             <div 
-                                              className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 w-fit"
+                                              className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 w-fit animate-pulse-soft"
                                               style={{ 
                                                 backgroundColor: item.current_station.color ? `${item.current_station.color}20` : 'hsl(var(--primary) / 0.1)',
                                                 color: item.current_station.color || 'hsl(var(--primary))'
                                               }}
                                             >
-                                              <span className="animate-pulse">●</span>
+                                              <span>●</span>
                                               {item.current_station.name}
                                             </div>
                                           )}
                                           {itemStatus === 'ready' && (
-                                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 w-fit">
+                                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 w-fit animate-pulse-soft">
                                               <Bell className="h-3 w-3" />
                                               Pronto para servir
                                             </div>
@@ -2717,25 +2696,25 @@ export default function Tables() {
                                 >
                                   {/* Status Badge Individual - Mobile */}
                                   {itemStatus === 'pending' && (
-                                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 w-fit">
+                                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 w-fit animate-pulse-soft">
                                       <Clock className="h-3 w-3" />
                                       Aguardando
                                     </div>
                                   )}
                                   {itemStatus === 'in_production' && item.current_station && (
                                     <div 
-                                      className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 w-fit"
+                                      className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 w-fit animate-pulse-soft"
                                       style={{ 
                                         backgroundColor: item.current_station.color ? `${item.current_station.color}20` : 'hsl(var(--primary) / 0.1)',
                                         color: item.current_station.color || 'hsl(var(--primary))'
                                       }}
                                     >
-                                      <span className="animate-pulse">●</span>
+                                      <span>●</span>
                                       {item.current_station.name}
                                     </div>
                                   )}
                                   {itemStatus === 'ready' && (
-                                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 w-fit">
+                                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 w-fit animate-pulse-soft">
                                       <Bell className="h-3 w-3" />
                                       Pronto
                                     </div>
