@@ -386,6 +386,53 @@ export function useKdsWorkflow() {
     },
   });
 
+  // Servir um item individualmente (marcar como servido)
+  const serveItem = useMutation({
+    mutationFn: async (itemId: string) => {
+      const now = new Date().toISOString();
+
+      const { error } = await supabase
+        .from('order_items')
+        .update({
+          served_at: now,
+        })
+        .eq('id', itemId);
+
+      if (error) throw error;
+
+      return { itemId, servedAt: now };
+    },
+    onMutate: async (itemId) => {
+      await queryClient.cancelQueries({ queryKey: ['orders'] });
+      const previousOrders = queryClient.getQueryData(['orders']);
+      
+      // Optimistic update
+      queryClient.setQueryData(['orders'], (old: OrderData[] | undefined) => {
+        if (!old) return old;
+        return old.map(order => ({
+          ...order,
+          order_items: order.order_items?.map((item: OrderItem) => 
+            item.id === itemId 
+              ? { ...item, served_at: new Date().toISOString() }
+              : item
+          ) || []
+        }));
+      });
+      
+      return { previousOrders };
+    },
+    onError: (error, variables, context) => {
+      if (context?.previousOrders) {
+        queryClient.setQueryData(['orders'], context.previousOrders);
+      }
+      toast.error('Erro ao marcar item como servido');
+      console.error(error);
+    },
+    onSuccess: () => {
+      toast.success('Item servido!');
+    },
+  });
+
   // Finalizar pedido na estação de status (marcar como entregue)
   const finalizeOrderFromStatus = useMutation({
     mutationFn: async (orderId: string) => {
@@ -394,12 +441,12 @@ export function useKdsWorkflow() {
       // Buscar todos os itens do pedido na estação order_status
       const { data: items, error: fetchError } = await supabase
         .from('order_items')
-        .select('id, current_station_id')
+        .select('id, current_station_id, served_at')
         .eq('order_id', orderId);
 
       if (fetchError) throw fetchError;
 
-      // Marcar todos os itens como done
+      // Marcar todos os itens como done e servidos (se ainda não estiverem)
       for (const item of items || []) {
         if (item.current_station_id && orderStatusStationIds.includes(item.current_station_id)) {
           // Log de conclusão
@@ -417,6 +464,7 @@ export function useKdsWorkflow() {
             station_status: 'done',
             station_completed_at: now,
             status: 'delivered',
+            served_at: item.served_at || now, // Marca como servido se ainda não estiver
           })
           .eq('id', item.id);
       }
@@ -511,6 +559,7 @@ export function useKdsWorkflow() {
     skipItemToNextStation,
     initializeOrderForProductionLine,
     finalizeOrderFromStatus,
+    serveItem,
     getItemsByStation,
     getWaitingItems,
     orderStatusStation,
