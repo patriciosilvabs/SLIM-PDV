@@ -333,6 +333,9 @@ export default function Tables() {
         .eq('id', itemId);
       
       if (error) throw error;
+      
+      await queryClient.invalidateQueries({ queryKey: ['orders'] });
+      
       toast.success('Item marcado como servido');
     } catch (error) {
       console.error('Error serving item:', error);
