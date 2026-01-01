@@ -46,6 +46,9 @@ export interface OrderItem {
   current_station_id?: string | null;
   station_status?: 'waiting' | 'in_progress' | 'completed' | null;
   served_at?: string | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
+  cancellation_reason?: string | null;
   product?: { name: string; image_url: string | null };
   variation?: { name: string } | null;
   extras?: { extra_name: string; price: number }[] | null;
@@ -141,6 +144,9 @@ export function useOrders(status?: OrderStatus[]) {
           current_station_id: item.current_station_id as string | null,
           station_status: item.station_status as 'waiting' | 'in_progress' | 'completed' | null,
           served_at: item.served_at as string | null,
+          cancelled_at: item.cancelled_at as string | null,
+          cancelled_by: item.cancelled_by as string | null,
+          cancellation_reason: item.cancellation_reason as string | null,
           product: item.product as { name: string; image_url: string | null } | undefined,
           variation: item.variation as { name: string } | null,
           extras: item.extras as { extra_name: string; price: number }[] | null,
@@ -548,5 +554,71 @@ export function useOrderMutations() {
     },
   });
 
-  return { createOrder, updateOrder, addOrderItem, addOrderItemExtras, addOrderItemSubItems, updateOrderItem, deleteOrderItem };
+  // Mutation para cancelar item individual
+  const cancelOrderItem = useMutation({
+    mutationFn: async (params: {
+      itemId: string;
+      orderId: string;
+      reason: string;
+      cancelledBy: string;
+    }) => {
+      if (!tenantId) throw new Error('Tenant não encontrado');
+
+      // 1. Buscar preço do item
+      const { data: item, error: itemError } = await supabase
+        .from('order_items')
+        .select('total_price')
+        .eq('id', params.itemId)
+        .single();
+      
+      if (itemError) throw itemError;
+
+      // 2. Marcar item como cancelado
+      const { error: updateError } = await supabase
+        .from('order_items')
+        .update({
+          cancelled_at: new Date().toISOString(),
+          cancelled_by: params.cancelledBy,
+          cancellation_reason: params.reason,
+          current_station_id: null,
+          station_status: null
+        })
+        .eq('id', params.itemId);
+
+      if (updateError) throw updateError;
+
+      // 3. Atualizar total do pedido (subtrair valor do item)
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .select('subtotal, total, discount')
+        .eq('id', params.orderId)
+        .single();
+
+      if (orderError) throw orderError;
+
+      if (order && item) {
+        const newSubtotal = (order.subtotal || 0) - item.total_price;
+        const newTotal = newSubtotal - (order.discount || 0);
+        
+        await supabase
+          .from('orders')
+          .update({
+            subtotal: newSubtotal,
+            total: newTotal
+          })
+          .eq('id', params.orderId);
+      }
+
+      return { success: true };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast({ title: 'Item cancelado com sucesso' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Erro ao cancelar item', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  return { createOrder, updateOrder, addOrderItem, addOrderItemExtras, addOrderItemSubItems, updateOrderItem, deleteOrderItem, cancelOrderItem };
 }
