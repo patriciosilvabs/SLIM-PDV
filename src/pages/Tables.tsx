@@ -1695,25 +1695,6 @@ export default function Tables() {
                       );
                     })()}
                     
-                    {/* Ready Alert Banner - Clickable to mark as delivered */}
-                    {selectedOrder?.status === 'ready' && !isClosingBill && (
-                      <button 
-                        onClick={() => handleMarkAsDelivered(selectedOrder.id)}
-                        className="w-full bg-green-500 hover:bg-green-600 text-white p-3 rounded-lg flex items-center justify-between gap-2 transition-colors cursor-pointer group"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Bell className="h-5 w-5 animate-pulse group-hover:animate-none" />
-                          <div className="text-left">
-                            <p className="font-bold">Pedido Pronto!</p>
-                            <p className="text-xs opacity-90">A cozinha finalizou o preparo</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-lg">
-                          <Check className="h-4 w-4" />
-                          <span className="font-medium text-sm">Marcar Entregue</span>
-                        </div>
-                      </button>
-                    )}
                     
                     {/* Delivered Banner - Awaiting bill closure */}
                     {selectedOrder?.status === 'delivered' && !isClosingBill && (
@@ -1787,7 +1768,11 @@ export default function Tables() {
                                     {readyItems.map((item: any) => (
                                       <div 
                                         key={item.id} 
-                                        className="flex items-start justify-between p-2 bg-muted/50 rounded group"
+                                        className={`flex items-start justify-between p-2 rounded group transition-colors ${
+                                          item.served_at 
+                                            ? 'bg-green-100 dark:bg-green-900/40 border border-green-300 dark:border-green-700' 
+                                            : 'bg-muted/50'
+                                        }`}
                                       >
                                         <div className="flex-1 min-w-0">
                                           <p className="text-sm font-medium">
@@ -2711,24 +2696,6 @@ export default function Tables() {
               {/* ===== ABA CONSUMO - MOBILE ===== */}
               {tableViewMode === 'consumo' && (
                 <>
-                  {/* Ready Alert Banner - Mobile */}
-                  {selectedOrder?.status === 'ready' && (
-                    <button 
-                      onClick={() => handleMarkAsDelivered(selectedOrder.id)}
-                      className="w-full bg-green-500 hover:bg-green-600 text-white p-3 rounded-lg flex items-center justify-between gap-2 transition-colors cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Bell className="h-5 w-5 animate-pulse" />
-                        <div className="text-left">
-                          <p className="font-bold text-sm">Pedido Pronto!</p>
-                          <p className="text-xs opacity-90">Clique para marcar como entregue</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 bg-white/20 px-2 py-1 rounded">
-                        <Check className="h-4 w-4" />
-                      </div>
-                    </button>
-                  )}
                   
                   {/* Delivered Banner - Mobile */}
                   {selectedOrder?.status === 'delivered' && (
@@ -2788,7 +2755,11 @@ export default function Tables() {
                             {readyItems.map((item: any) => (
                               <div 
                                 key={item.id} 
-                                className="p-2 bg-muted/50 rounded text-sm"
+                                className={`p-2 rounded text-sm transition-colors ${
+                                  item.served_at 
+                                    ? 'bg-green-100 dark:bg-green-900/40 border border-green-300 dark:border-green-700' 
+                                    : 'bg-muted/50'
+                                }`}
                               >
                                 <div className="flex items-start justify-between">
                                   <div className="flex-1">
