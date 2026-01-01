@@ -13,10 +13,15 @@ interface KdsItemBadgesProps {
   compact?: boolean;
 }
 
-// Extrair informação da borda dos extras
-const getBorderInfo = (extras?: OrderItemExtra[]): string | null => {
+// Extrair informação da borda dos extras e verificar se deve destacar
+const getBorderInfo = (
+  extras?: OrderItemExtra[],
+  hasSpecialBorder?: (text: string) => boolean,
+  highlightEnabled?: boolean
+): { text: string; shouldHighlight: boolean } | null => {
   if (!extras || extras.length === 0) return null;
   
+  // Encontrar extra que contém "borda" ou "massa" (para extrair o nome)
   const borderExtra = extras.find(e => {
     const lower = e.extra_name.toLowerCase();
     return lower.includes('borda') || lower.includes('massa');
@@ -26,7 +31,14 @@ const getBorderInfo = (extras?: OrderItemExtra[]): string | null => {
   
   // "Massa & Borda: Borda de Chocolate" → "Borda de Chocolate"
   const parts = borderExtra.extra_name.split(':');
-  return parts.length > 1 ? parts[1].trim() : borderExtra.extra_name;
+  const borderText = parts.length > 1 ? parts[1].trim() : borderExtra.extra_name;
+  
+  // Verificar se deve destacar baseado nas palavras-chave configuradas
+  const shouldHighlight = highlightEnabled && hasSpecialBorder 
+    ? hasSpecialBorder(borderText) 
+    : false;
+  
+  return { text: borderText, shouldHighlight };
 };
 
 // Extrair sabores dos extras (exclui bordas)
@@ -49,13 +61,16 @@ export const getFlavorsFromExtras = (extras?: OrderItemExtra[]): string[] => {
  * em itens de pedido. Exibe badges animados com cores configuráveis.
  */
 export function KdsItemBadges({ notes, extras, compact = false }: KdsItemBadgesProps) {
-  const { settings } = useKdsSettings();
+  const { settings, hasSpecialBorder } = useKdsSettings();
   
-  const borderInfo = getBorderInfo(extras);
+  const borderInfo = getBorderInfo(extras, hasSpecialBorder, settings.highlightSpecialBorders);
   const borderColors = getBadgeColorClasses(settings.borderBadgeColor);
   const notesColors = getBadgeColorClasses(settings.notesBadgeColor);
   
-  if (!borderInfo && !notes) {
+  // Só mostra borda se houver E se deveria destacar
+  const showBorder = borderInfo?.shouldHighlight;
+  
+  if (!showBorder && !notes) {
     return null;
   }
   
@@ -65,14 +80,14 @@ export function KdsItemBadges({ notes, extras, compact = false }: KdsItemBadgesP
 
   return (
     <div className={cn("flex flex-wrap gap-1", compact ? "mt-0.5" : "mt-1")}>
-      {/* Badge de borda - SEMPRE pisca */}
-      {borderInfo && (
+      {/* Badge de borda - só aparece se shouldHighlight for true */}
+      {showBorder && borderInfo && (
         <span className={cn(
           "inline-flex rounded font-bold relative overflow-hidden animate-pulse",
           sizeClasses
         )}>
           <span className={cn("absolute inset-0", borderColors.bg)}></span>
-          <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo}</span>
+          <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo.text}</span>
         </span>
       )}
       
@@ -94,12 +109,13 @@ export function KdsItemBadges({ notes, extras, compact = false }: KdsItemBadgesP
  * Exibe apenas o badge de borda (para uso em locais com espaço limitado)
  */
 export function KdsBorderOnlyBadge({ extras, compact = false }: { extras?: OrderItemExtra[]; compact?: boolean }) {
-  const { settings } = useKdsSettings();
+  const { settings, hasSpecialBorder } = useKdsSettings();
   
-  const borderInfo = getBorderInfo(extras);
+  const borderInfo = getBorderInfo(extras, hasSpecialBorder, settings.highlightSpecialBorders);
   const borderColors = getBadgeColorClasses(settings.borderBadgeColor);
   
-  if (!borderInfo) {
+  // Só mostra se shouldHighlight for true
+  if (!borderInfo?.shouldHighlight) {
     return null;
   }
   
@@ -113,7 +129,7 @@ export function KdsBorderOnlyBadge({ extras, compact = false }: { extras?: Order
       sizeClasses
     )}>
       <span className={cn("absolute inset-0", borderColors.bg)}></span>
-      <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo}</span>
+      <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo.text}</span>
     </span>
   );
 }
