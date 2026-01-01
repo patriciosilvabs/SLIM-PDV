@@ -94,7 +94,7 @@ const defaultGlobalSettings: KdsGlobalSettings = {
   cancellationAlertsEnabled: true,
   autoPrintCancellations: true,
   highlightSpecialBorders: true,
-  borderKeywords: ['borda', 'recheada', 'chocolate', 'catupiry', 'cheddar'],
+  borderKeywords: [],
   bottleneckSettings: defaultBottleneckSettings,
   showPartySize: true,
   compactMode: false,
