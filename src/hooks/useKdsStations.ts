@@ -50,8 +50,11 @@ export function useKdsStations() {
   // Estações de produção (exclui order_status)
   const productionStations = activeStations.filter(s => s.station_type !== 'order_status');
   
-  // Estação de status do pedido
-  const orderStatusStation = activeStations.find(s => s.station_type === 'order_status');
+  // Estações de status do pedido (pode haver múltiplas)
+  const orderStatusStations = activeStations.filter(s => s.station_type === 'order_status');
+  
+  // Primeira estação de status (para compatibilidade)
+  const orderStatusStation = orderStatusStations[0];
 
   const createStation = useMutation({
     mutationFn: async (station: Omit<KdsStation, 'id' | 'created_at' | 'updated_at'>) => {
@@ -173,6 +176,7 @@ export function useKdsStations() {
     activeStations,
     productionStations,
     orderStatusStation,
+    orderStatusStations,
     isLoading,
     error,
     createStation,
