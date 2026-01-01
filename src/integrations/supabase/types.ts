@@ -1046,6 +1046,7 @@ export type Database = {
           order_id: string
           product_id: string | null
           quantity: number
+          served_at: string | null
           station_completed_at: string | null
           station_started_at: string | null
           station_status: string | null
@@ -1064,6 +1065,7 @@ export type Database = {
           order_id: string
           product_id?: string | null
           quantity?: number
+          served_at?: string | null
           station_completed_at?: string | null
           station_started_at?: string | null
           station_status?: string | null
@@ -1082,6 +1084,7 @@ export type Database = {
           order_id?: string
           product_id?: string | null
           quantity?: number
+          served_at?: string | null
           station_completed_at?: string | null
           station_started_at?: string | null
           station_status?: string | null

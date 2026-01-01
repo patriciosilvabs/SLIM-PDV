@@ -45,6 +45,7 @@ export interface OrderItem {
   added_by?: string | null;
   current_station_id?: string | null;
   station_status?: 'waiting' | 'in_progress' | 'completed' | null;
+  served_at?: string | null;
   product?: { name: string; image_url: string | null };
   variation?: { name: string } | null;
   extras?: { extra_name: string; price: number }[] | null;
@@ -139,6 +140,7 @@ export function useOrders(status?: OrderStatus[]) {
           added_by: item.added_by as string | null,
           current_station_id: item.current_station_id as string | null,
           station_status: item.station_status as 'waiting' | 'in_progress' | 'completed' | null,
+          served_at: item.served_at as string | null,
           product: item.product as { name: string; image_url: string | null } | undefined,
           variation: item.variation as { name: string } | null,
           extras: item.extras as { extra_name: string; price: number }[] | null,

@@ -24,6 +24,7 @@ interface OrderItem {
   product?: { name: string } | null;
   variation?: { name: string } | null;
   extras?: Array<{ extra_name: string; price: number }>;
+  served_at?: string | null;
 }
 
 interface Order {
@@ -50,7 +51,8 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
   const { 
     moveItemToNextStation,
     skipItemToNextStation,
-    finalizeOrderFromStatus
+    finalizeOrderFromStatus,
+    serveItem
   } = useKdsWorkflow();
 
   // Cast orders to local type for internal use
@@ -123,6 +125,10 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
 
   const handleFinalizeOrder = (orderId: string) => {
     finalizeOrderFromStatus.mutate(orderId);
+  };
+
+  const handleServeItem = (itemId: string) => {
+    serveItem.mutate(itemId);
   };
 
   // Pedidos prontos na estação de status (ou com todos itens em order_status)
@@ -333,7 +339,8 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
                       items={items}
                       stationColor={orderStatusStation.color}
                       onFinalize={handleFinalizeOrder}
-                      isProcessing={finalizeOrderFromStatus.isPending}
+                      onServeItem={handleServeItem}
+                      isProcessing={finalizeOrderFromStatus.isPending || serveItem.isPending}
                     />
                   ))}
                 </div>
