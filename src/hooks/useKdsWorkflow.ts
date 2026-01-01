@@ -94,38 +94,36 @@ export function useKdsWorkflow() {
         }).catch(() => {}) : Promise.resolve(),
       ]);
 
-      // Verificar se pedido está pronto (em background)
+      // Verificar se pedido está pronto - AGORA SÍNCRONO para garantir consistência
       if (!nextStation) {
-        supabase
+        const { data: itemData } = await supabase
           .from('order_items')
           .select('order_id')
           .eq('id', itemId)
-          .single()
-          .then(({ data: itemData }) => {
-            if (itemData?.order_id) {
-              supabase
-                .from('order_items')
-                .select('id, current_station_id, station_status')
-                .eq('order_id', itemData.order_id)
-              .then(({ data: allItems }) => {
-                  const allItemsReady = allItems?.every(item => 
-                    (item.current_station_id && orderStatusStationIds.includes(item.current_station_id)) ||
-                    item.station_status === 'done'
-                  );
-                  if (allItemsReady) {
-                    supabase
-                      .from('orders')
-                      .update({ status: 'ready', ready_at: new Date().toISOString() })
-                      .eq('id', itemData.order_id)
-                      .then(({ error }) => {
-                        if (error) {
-                          console.error('Erro ao atualizar status do pedido para ready:', error);
-                        }
-                      });
-                  }
-                });
+          .single();
+
+        if (itemData?.order_id) {
+          const { data: allItems } = await supabase
+            .from('order_items')
+            .select('id, current_station_id, station_status')
+            .eq('order_id', itemData.order_id);
+
+          const allItemsReady = allItems?.every(item => 
+            (item.current_station_id && orderStatusStationIds.includes(item.current_station_id)) ||
+            item.station_status === 'done'
+          );
+          
+          if (allItemsReady) {
+            const { error } = await supabase
+              .from('orders')
+              .update({ status: 'ready', ready_at: new Date().toISOString() })
+              .eq('id', itemData.order_id);
+              
+            if (error) {
+              console.error('Erro ao atualizar status do pedido para ready:', error);
             }
-          });
+          }
+        }
       }
 
       return { itemId, nextStationId: targetStationId, isComplete: !nextStation && !orderStatusStation };

@@ -125,16 +125,31 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
     finalizeOrderFromStatus.mutate(orderId);
   };
 
-  // Pedidos prontos na estação de status
+  // Pedidos prontos na estação de status (ou com todos itens em order_status)
   const readyOrdersInStatus = useMemo(() => {
     if (!orderStatusStation) return [];
     
     return filteredOrders
-      .filter(order => order.status === 'ready')
+      .filter(order => {
+        // Pedido já está ready
+        if (order.status === 'ready') return true;
+        
+        // OU todos os itens estão na estação order_status (pedido deveria ser ready)
+        const allItemsInOrderStatus = order.order_items?.every(
+          item => item.current_station_id === orderStatusStation.id || item.station_status === 'done'
+        );
+        return allItemsInOrderStatus && (order.order_items?.length ?? 0) > 0;
+      })
       .map(order => {
         const itemsInStation = order.order_items?.filter(
           item => item.current_station_id === orderStatusStation.id
         ) || [];
+        
+        // Se não houver itens na estação (já foram done), mostrar todos os itens
+        if (itemsInStation.length === 0) {
+          return { order, items: order.order_items || [] };
+        }
+        
         return { order, items: itemsInStation };
       })
       .filter(entry => entry.items.length > 0);
