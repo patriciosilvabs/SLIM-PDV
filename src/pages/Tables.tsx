@@ -1626,76 +1626,6 @@ export default function Tables() {
                     {/* ===== ABA CONSUMO ===== */}
                     {tableViewMode === 'consumo' && (
                       <>
-                        {/* Pending Banner - Awaiting production */}
-                        {selectedOrder?.status === 'pending' && !isClosingBill && (
-                          <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-700 dark:text-yellow-400 p-3 rounded-lg flex items-center gap-2">
-                            <Clock className="h-5 w-5" />
-                            <div>
-                              <p className="font-medium">Aguardando Produção</p>
-                              <p className="text-xs opacity-80">O pedido ainda não entrou na cozinha</p>
-                            </div>
-                          </div>
-                        )}
-                    
-                    {/* Preparing Banner - In production */}
-                    {selectedOrder?.status === 'preparing' && !isClosingBill && (() => {
-                      const selectedStation = getOrderCurrentStation(selectedOrder);
-                      const isAtOrderStatus = selectedStation?.station_type === 'order_status';
-                      
-                      // Se está na estação de status (Item Pronto) e ainda não foi servido
-                      if (isAtOrderStatus && !selectedOrder.served_at) {
-                        return (
-                          <button 
-                            onClick={() => handleMarkAsServed(selectedOrder.id)}
-                            className="w-full bg-green-500 hover:bg-green-600 text-white p-3 rounded-lg flex items-center justify-between gap-2 transition-colors cursor-pointer group"
-                          >
-                            <div className="flex items-center gap-2">
-                              <Bell className="h-5 w-5 animate-pulse group-hover:animate-none" />
-                              <div className="text-left">
-                                <p className="font-bold">Item Pronto!</p>
-                                <p className="text-xs opacity-90">Pronto para ser servido na mesa</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-lg">
-                              <Check className="h-4 w-4" />
-                              <span className="font-medium text-sm">Marcar Servido</span>
-                            </div>
-                          </button>
-                        );
-                      }
-                      
-                      // Se já foi servido, mostrar banner de confirmação
-                      if (selectedOrder.served_at) {
-                        return (
-                          <div className="bg-green-500/10 border border-green-500/30 text-green-700 dark:text-green-400 p-3 rounded-lg flex items-center gap-2">
-                            <Check className="h-5 w-5" />
-                            <div>
-                              <p className="font-medium">✓ Itens Servidos</p>
-                              <p className="text-xs opacity-80">Aguardando cliente pedir mais ou fechar conta</p>
-                            </div>
-                          </div>
-                        );
-                      }
-                      
-                      return (
-                        <div 
-                          className="p-3 rounded-lg flex items-center gap-2 animate-pulse border"
-                          style={{ 
-                            backgroundColor: selectedStation?.color ? `${selectedStation.color}1a` : 'rgba(245, 158, 11, 0.1)',
-                            borderColor: selectedStation?.color ? `${selectedStation.color}4d` : 'rgba(245, 158, 11, 0.3)',
-                            color: selectedStation?.color || '#f59e0b'
-                          }}
-                        >
-                          <span className="text-xl">🍳</span>
-                          <div>
-                            <p className="font-medium">{selectedStation?.name || 'Em Produção'}</p>
-                            <p className="text-xs opacity-80">A cozinha está preparando o pedido</p>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                    
-                    
                     {/* Delivered Banner - Awaiting bill closure */}
                     {selectedOrder?.status === 'delivered' && !isClosingBill && (
                       <div className="bg-blue-500/10 border border-blue-500/30 text-blue-700 dark:text-blue-400 p-4 rounded-lg space-y-2">
@@ -1738,138 +1668,159 @@ export default function Tables() {
                     {/* REGULAR VIEW - When NOT closing */}
                     {!isClosingBill && (
                       <>
-                        {/* Order Items - Consumo tab shows only READY items (station_status done/completed or no station) */}
+                        {/* Order Items - Consumo tab shows ALL items with individual status */}
                         {(() => {
-                          const isItemReadyToServe = (item: any) => {
-                            // Item já passou por todas as estações
-                            if (item.station_status === 'done' || item.station_status === 'completed') {
-                              return true;
-                            }
-                            // Item está na estação de order_status (expedição)
-                            if (item.current_station?.station_type === 'order_status') {
-                              return true;
-                            }
-                            // Item não tem estação atribuída (produto sem KDS ou já concluído)
-                            if (!item.current_station_id && !selectedOrder?.is_draft) {
-                              return true;
-                            }
-                            return false;
+                          const allItems = selectedOrder?.order_items || [];
+                          const hasAnyItems = allItems.length > 0;
+                          
+                          // Helper function to determine item status
+                          const getItemStatus = (item: any) => {
+                            if (item.served_at) return 'served';
+                            if (item.station_status === 'done' || item.station_status === 'completed') return 'ready';
+                            if (item.current_station?.station_type === 'order_status') return 'ready';
+                            if (!item.current_station_id && !selectedOrder?.is_draft) return 'ready';
+                            if (item.current_station_id && item.current_station) return 'in_production';
+                            if (selectedOrder?.status === 'pending' || selectedOrder?.is_draft) return 'pending';
+                            return 'in_production';
                           };
                           
-                          const readyItems = selectedOrder?.order_items?.filter(isItemReadyToServe) || [];
-                          const hasAnyItems = selectedOrder?.order_items?.length > 0;
-                          
-                          if (readyItems.length > 0) {
+                          if (hasAnyItems) {
                             return (
                               <div className="flex-1 flex flex-col min-h-0">
-                                <h4 className="text-sm font-medium mb-2">Itens Prontos para Servir</h4>
+                                <h4 className="text-sm font-medium mb-2">Itens do Pedido</h4>
                                 <ScrollArea className="flex-1">
                                   <div className="space-y-2 pr-2">
-                                    {readyItems.map((item: any) => (
-                                      <div 
-                                        key={item.id} 
-                                        className={`flex items-start justify-between p-2 rounded group transition-colors ${
-                                          item.served_at 
-                                            ? 'bg-green-100 dark:bg-green-900/40 border border-green-300 dark:border-green-700' 
-                                            : 'bg-muted/50'
-                                        }`}
-                                      >
-                                        <div className="flex-1 min-w-0">
-                                          <p className="text-sm font-medium">
-                                            {item.quantity}x {item.product?.name || 'Produto'}
-                                            {item.variation?.name && (
-                                              <span className="text-muted-foreground font-normal"> - {item.variation.name}</span>
-                                            )}
-                                          </p>
-                                          {/* Sub-items (pizzas individuais) */}
-                                          {item.sub_items && item.sub_items.length > 0 ? (
-                                            <div className="text-xs text-muted-foreground mt-1 space-y-1.5">
-                                              {item.sub_items
-                                                .sort((a: any, b: any) => a.sub_item_index - b.sub_item_index)
-                                                .map((subItem: any) => (
-                                                <div key={subItem.id} className="pl-2 border-l-2 border-primary/30">
-                                                  <p className="font-medium text-foreground">🍕 Pizza {subItem.sub_item_index + 1}:</p>
-                                                  {subItem.sub_extras && subItem.sub_extras.length > 0 && (
-                                                    <div className="pl-2 space-y-0.5">
-                                                      {subItem.sub_extras.map((extra: any, idx: number) => (
-                                                        <p key={idx}>• {extra.option_name}</p>
-                                                      ))}
-                                                    </div>
-                                                  )}
-                                                  {subItem.notes && (
-                                                    <p className="pl-2 italic text-amber-600">📝 {subItem.notes}</p>
-                                                  )}
-                                                </div>
-                                              ))}
+                                    {allItems.map((item: any) => {
+                                      const itemStatus = getItemStatus(item);
+                                      
+                                      return (
+                                        <div 
+                                          key={item.id} 
+                                          className={`flex flex-col p-2 rounded group transition-colors ${
+                                            itemStatus === 'served' 
+                                              ? 'bg-green-100 dark:bg-green-900/40 border border-green-300 dark:border-green-700' 
+                                              : itemStatus === 'ready'
+                                              ? 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800'
+                                              : 'bg-muted/50'
+                                          }`}
+                                        >
+                                          {/* Status Badge Individual */}
+                                          {itemStatus === 'pending' && (
+                                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 w-fit">
+                                              <Clock className="h-3 w-3" />
+                                              Aguardando Produção
                                             </div>
-                                          ) : (
-                                            /* Sabores/Complementos tradicionais */
-                                            item.extras && item.extras.length > 0 && (
-                                              <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                                                {item.extras.map((extra: any, idx: number) => (
-                                                  <p key={idx} className="pl-2">
-                                                    • {extra.extra_name.split(': ').slice(1).join(': ')}
-                                                  </p>
-                                                ))}
-                                              </div>
-                                            )
                                           )}
-                                          {/* Observações */}
-                                          {item.notes && (
-                                            <p className="text-xs text-amber-600 mt-1 pl-2 italic">
-                                              📝 {item.notes}
-                                            </p>
+                                          {itemStatus === 'in_production' && item.current_station && (
+                                            <div 
+                                              className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 w-fit"
+                                              style={{ 
+                                                backgroundColor: item.current_station.color ? `${item.current_station.color}20` : 'hsl(var(--primary) / 0.1)',
+                                                color: item.current_station.color || 'hsl(var(--primary))'
+                                              }}
+                                            >
+                                              <span className="animate-pulse">●</span>
+                                              {item.current_station.name}
+                                            </div>
                                           )}
-                                        </div>
-                                        <div className="flex items-center gap-2 ml-2">
-                                          {/* Botão Servir Item */}
-                                          {item.served_at ? (
-                                            <div className="flex items-center gap-1 text-green-600 text-xs bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded">
+                                          {itemStatus === 'ready' && (
+                                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 w-fit">
+                                              <Bell className="h-3 w-3" />
+                                              Pronto para servir
+                                            </div>
+                                          )}
+                                          {itemStatus === 'served' && (
+                                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 bg-green-200 dark:bg-green-800/60 text-green-800 dark:text-green-300 w-fit">
                                               <Check className="h-3 w-3" />
-                                              <span>Servido</span>
+                                              Servido
                                             </div>
-                                          ) : (
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              className="text-xs h-7"
-                                              onClick={() => handleServeOrderItem(item.id)}
-                                              disabled={isServingItem === item.id}
-                                            >
-                                              {isServingItem === item.id ? (
-                                                <span className="animate-pulse">...</span>
+                                          )}
+                                          
+                                          <div className="flex items-start justify-between">
+                                            <div className="flex-1 min-w-0">
+                                              <p className="text-sm font-medium">
+                                                {item.quantity}x {item.product?.name || 'Produto'}
+                                                {item.variation?.name && (
+                                                  <span className="text-muted-foreground font-normal"> - {item.variation.name}</span>
+                                                )}
+                                              </p>
+                                              {/* Sub-items (pizzas individuais) */}
+                                              {item.sub_items && item.sub_items.length > 0 ? (
+                                                <div className="text-xs text-muted-foreground mt-1 space-y-1.5">
+                                                  {item.sub_items
+                                                    .sort((a: any, b: any) => a.sub_item_index - b.sub_item_index)
+                                                    .map((subItem: any) => (
+                                                    <div key={subItem.id} className="pl-2 border-l-2 border-primary/30">
+                                                      <p className="font-medium text-foreground">🍕 Pizza {subItem.sub_item_index + 1}:</p>
+                                                      {subItem.sub_extras && subItem.sub_extras.length > 0 && (
+                                                        <div className="pl-2 space-y-0.5">
+                                                          {subItem.sub_extras.map((extra: any, idx: number) => (
+                                                            <p key={idx}>• {extra.option_name}</p>
+                                                          ))}
+                                                        </div>
+                                                      )}
+                                                      {subItem.notes && (
+                                                        <p className="pl-2 italic text-amber-600">📝 {subItem.notes}</p>
+                                                      )}
+                                                    </div>
+                                                  ))}
+                                                </div>
                                               ) : (
-                                                <>
-                                                  <Check className="h-3 w-3 mr-1" />
-                                                  Servir
-                                                </>
+                                                /* Sabores/Complementos tradicionais */
+                                                item.extras && item.extras.length > 0 && (
+                                                  <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                                                    {item.extras.map((extra: any, idx: number) => (
+                                                      <p key={idx} className="pl-2">
+                                                        • {extra.extra_name.split(': ').slice(1).join(': ')}
+                                                      </p>
+                                                    ))}
+                                                  </div>
+                                                )
                                               )}
-                                            </Button>
-                                          )}
-                                          {canDeleteItems && (
-                                            <Button 
-                                              variant="ghost" 
-                                              size="icon" 
-                                              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                                              onClick={() => handleDeleteOrderItem(item.id, item.order_id)}
-                                            >
-                                              <Trash2 className="h-3 w-3 text-destructive" />
-                                            </Button>
-                                          )}
+                                              {/* Observações */}
+                                              {item.notes && (
+                                                <p className="text-xs text-amber-600 mt-1 pl-2 italic">
+                                                  📝 {item.notes}
+                                                </p>
+                                              )}
+                                            </div>
+                                            <div className="flex items-center gap-2 ml-2">
+                                              {/* Botão Servir Item - Só aparece se pronto e não servido */}
+                                              {itemStatus === 'ready' && (
+                                                <Button
+                                                  variant="outline"
+                                                  size="sm"
+                                                  className="text-xs h-7 bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 hover:bg-green-100 dark:hover:bg-green-900/40"
+                                                  onClick={() => handleServeOrderItem(item.id)}
+                                                  disabled={isServingItem === item.id}
+                                                >
+                                                  {isServingItem === item.id ? (
+                                                    <span className="animate-pulse">...</span>
+                                                  ) : (
+                                                    <>
+                                                      <Check className="h-3 w-3 mr-1" />
+                                                      Servir
+                                                    </>
+                                                  )}
+                                                </Button>
+                                              )}
+                                              {canDeleteItems && (
+                                                <Button 
+                                                  variant="ghost" 
+                                                  size="icon" 
+                                                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                  onClick={() => handleDeleteOrderItem(item.id, item.order_id)}
+                                                >
+                                                  <Trash2 className="h-3 w-3 text-destructive" />
+                                                </Button>
+                                              )}
+                                            </div>
+                                          </div>
                                         </div>
-                                      </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 </ScrollArea>
-                              </div>
-                            );
-                          } else if (hasAnyItems) {
-                            // Há itens mas nenhum está pronto ainda
-                            return (
-                              <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground">
-                                <Clock className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                                <p className="text-sm font-medium">Nenhum item pronto ainda</p>
-                                <p className="text-xs mt-1">Os itens aparecerão aqui quando saírem da produção</p>
                               </div>
                             );
                           } else if (selectedTable.status === 'occupied') {
@@ -2729,142 +2680,164 @@ export default function Tables() {
                       </div>
                     </div>
                   )}
-                  {/* Mobile - Consumo tab shows only READY items */}
+                  {/* Mobile - Consumo tab shows ALL items with individual status */}
                   {(() => {
-                    const isItemReadyToServe = (item: any) => {
-                      if (item.station_status === 'done' || item.station_status === 'completed') {
-                        return true;
-                      }
-                      if (item.current_station?.station_type === 'order_status') {
-                        return true;
-                      }
-                      if (!item.current_station_id && !selectedOrder?.is_draft) {
-                        return true;
-                      }
-                      return false;
+                    const allItems = selectedOrder?.order_items || [];
+                    const hasAnyItems = allItems.length > 0;
+                    
+                    // Helper function to determine item status
+                    const getItemStatus = (item: any) => {
+                      if (item.served_at) return 'served';
+                      if (item.station_status === 'done' || item.station_status === 'completed') return 'ready';
+                      if (item.current_station?.station_type === 'order_status') return 'ready';
+                      if (!item.current_station_id && !selectedOrder?.is_draft) return 'ready';
+                      if (item.current_station_id && item.current_station) return 'in_production';
+                      if (selectedOrder?.status === 'pending' || selectedOrder?.is_draft) return 'pending';
+                      return 'in_production';
                     };
                     
-                    const readyItems = selectedOrder?.order_items?.filter(isItemReadyToServe) || [];
-                    const hasAnyItems = selectedOrder?.order_items?.length > 0;
-                    
-                    if (readyItems.length > 0) {
+                    if (hasAnyItems) {
                       return (
                         <div className="space-y-2">
-                          <h4 className="text-sm font-medium">Itens Prontos para Servir</h4>
-                          <div className="max-h-[180px] overflow-y-auto space-y-2">
-                            {readyItems.map((item: any) => (
-                              <div 
-                                key={item.id} 
-                                className={`p-2 rounded text-sm transition-colors ${
-                                  item.served_at 
-                                    ? 'bg-green-100 dark:bg-green-900/40 border border-green-300 dark:border-green-700' 
-                                    : 'bg-muted/50'
-                                }`}
-                              >
-                                <div className="flex items-start justify-between">
-                                  <div className="flex-1">
-                                    <span className="font-medium">
-                                      {item.quantity}x {item.product?.name || 'Produto'}
-                                      {item.variation?.name && (
-                                        <span className="text-muted-foreground font-normal"> - {item.variation.name}</span>
-                                      )}
-                                    </span>
-                                    {/* Sub-items (pizzas individuais) */}
-                                    {item.sub_items && item.sub_items.length > 0 ? (
-                                      <div className="text-xs text-muted-foreground mt-1 space-y-1.5">
-                                        {item.sub_items
-                                          .sort((a: any, b: any) => a.sub_item_index - b.sub_item_index)
-                                          .map((subItem: any) => (
-                                          <div key={subItem.id} className="pl-2 border-l-2 border-primary/30">
-                                            <p className="font-medium text-foreground">🍕 Pizza {subItem.sub_item_index + 1}:</p>
-                                            {subItem.sub_extras && subItem.sub_extras.length > 0 && (
-                                              <div className="pl-2 space-y-0.5">
-                                                {subItem.sub_extras.map((extra: any, idx: number) => (
-                                                  <p key={idx}>• {extra.option_name}</p>
-                                                ))}
-                                              </div>
-                                            )}
-                                            {subItem.notes && (
-                                              <p className="pl-2 italic text-amber-600">📝 {subItem.notes}</p>
-                                            )}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      /* Sabores/Complementos tradicionais */
-                                      item.extras && item.extras.length > 0 && (
-                                        <div className="text-xs text-muted-foreground mt-1">
-                                          {item.extras.map((extra: any, idx: number) => (
-                                            <p key={idx} className="pl-2">• {extra.extra_name.split(': ').slice(1).join(': ')}</p>
+                          <h4 className="text-sm font-medium">Itens do Pedido</h4>
+                          <div className="max-h-[250px] overflow-y-auto space-y-2">
+                            {allItems.map((item: any) => {
+                              const itemStatus = getItemStatus(item);
+                              
+                              return (
+                                <div 
+                                  key={item.id} 
+                                  className={`flex flex-col p-2 rounded text-sm transition-colors ${
+                                    itemStatus === 'served' 
+                                      ? 'bg-green-100 dark:bg-green-900/40 border border-green-300 dark:border-green-700' 
+                                      : itemStatus === 'ready'
+                                      ? 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800'
+                                      : 'bg-muted/50'
+                                  }`}
+                                >
+                                  {/* Status Badge Individual - Mobile */}
+                                  {itemStatus === 'pending' && (
+                                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 w-fit">
+                                      <Clock className="h-3 w-3" />
+                                      Aguardando
+                                    </div>
+                                  )}
+                                  {itemStatus === 'in_production' && item.current_station && (
+                                    <div 
+                                      className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 w-fit"
+                                      style={{ 
+                                        backgroundColor: item.current_station.color ? `${item.current_station.color}20` : 'hsl(var(--primary) / 0.1)',
+                                        color: item.current_station.color || 'hsl(var(--primary))'
+                                      }}
+                                    >
+                                      <span className="animate-pulse">●</span>
+                                      {item.current_station.name}
+                                    </div>
+                                  )}
+                                  {itemStatus === 'ready' && (
+                                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 w-fit">
+                                      <Bell className="h-3 w-3" />
+                                      Pronto
+                                    </div>
+                                  )}
+                                  {itemStatus === 'served' && (
+                                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mb-1.5 bg-green-200 dark:bg-green-800/60 text-green-800 dark:text-green-300 w-fit">
+                                      <Check className="h-3 w-3" />
+                                      Servido
+                                    </div>
+                                  )}
+                                  
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <span className="font-medium">
+                                        {item.quantity}x {item.product?.name || 'Produto'}
+                                        {item.variation?.name && (
+                                          <span className="text-muted-foreground font-normal"> - {item.variation.name}</span>
+                                        )}
+                                      </span>
+                                      {/* Sub-items (pizzas individuais) */}
+                                      {item.sub_items && item.sub_items.length > 0 ? (
+                                        <div className="text-xs text-muted-foreground mt-1 space-y-1.5">
+                                          {item.sub_items
+                                            .sort((a: any, b: any) => a.sub_item_index - b.sub_item_index)
+                                            .map((subItem: any) => (
+                                            <div key={subItem.id} className="pl-2 border-l-2 border-primary/30">
+                                              <p className="font-medium text-foreground">🍕 Pizza {subItem.sub_item_index + 1}:</p>
+                                              {subItem.sub_extras && subItem.sub_extras.length > 0 && (
+                                                <div className="pl-2 space-y-0.5">
+                                                  {subItem.sub_extras.map((extra: any, idx: number) => (
+                                                    <p key={idx}>• {extra.option_name}</p>
+                                                  ))}
+                                                </div>
+                                              )}
+                                              {subItem.notes && (
+                                                <p className="pl-2 italic text-amber-600">📝 {subItem.notes}</p>
+                                              )}
+                                            </div>
                                           ))}
                                         </div>
-                                      )
-                                    )}
-                                    {item.notes && (
-                                      <p className="text-xs text-amber-600 mt-1 italic">📝 {item.notes}</p>
-                                    )}
-                                  </div>
-                                  <div className="flex flex-col items-end gap-1 ml-2">
-                                    {/* Botão Servir Item - Mobile */}
-                                    {item.served_at ? (
-                                      <div className="flex items-center gap-1 text-green-600 text-xs bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded">
-                                        <Check className="h-3 w-3" />
-                                        <span>Servido</span>
-                                      </div>
-                                    ) : (
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="text-xs h-6 px-2"
-                                        onClick={() => handleServeOrderItem(item.id)}
-                                        disabled={isServingItem === item.id}
-                                      >
-                                        {isServingItem === item.id ? (
-                                          <span className="animate-pulse">...</span>
-                                        ) : (
-                                          <>
-                                            <Check className="h-3 w-3 mr-1" />
-                                            Servir
-                                          </>
-                                        )}
-                                      </Button>
-                                    )}
+                                      ) : (
+                                        /* Sabores/Complementos tradicionais */
+                                        item.extras && item.extras.length > 0 && (
+                                          <div className="text-xs text-muted-foreground mt-1">
+                                            {item.extras.map((extra: any, idx: number) => (
+                                              <p key={idx} className="pl-2">• {extra.extra_name.split(': ').slice(1).join(': ')}</p>
+                                            ))}
+                                          </div>
+                                        )
+                                      )}
+                                      {item.notes && (
+                                        <p className="text-xs text-amber-600 mt-1 italic">📝 {item.notes}</p>
+                                      )}
+                                    </div>
+                                    <div className="flex flex-col items-end gap-1 ml-2">
+                                      {/* Botão Servir Item - Mobile - Só aparece se pronto */}
+                                      {itemStatus === 'ready' && (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="text-xs h-6 px-2 bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700"
+                                          onClick={() => handleServeOrderItem(item.id)}
+                                          disabled={isServingItem === item.id}
+                                        >
+                                          {isServingItem === item.id ? (
+                                            <span className="animate-pulse">...</span>
+                                          ) : (
+                                            <>
+                                              <Check className="h-3 w-3 mr-1" />
+                                              Servir
+                                            </>
+                                          )}
+                                        </Button>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
-                        </div>
-                      );
-                    } else if (hasAnyItems) {
-                      // Há itens mas nenhum está pronto ainda
-                      return (
-                        <div className="text-center py-4 text-muted-foreground">
-                          <Clock className="h-10 w-10 mx-auto mb-2 opacity-50" />
-                          <p className="text-sm font-medium">Nenhum item pronto ainda</p>
-                          <p className="text-xs mt-1">Os itens aparecerão aqui quando saírem da produção</p>
                         </div>
                       );
                     }
                     return null;
                   })()}
                   {selectedOrder && (!selectedOrder.order_items || selectedOrder.order_items.length === 0) ? (
-                <div className="text-center py-4 space-y-3">
-                  <div className="text-muted-foreground">
-                    <ShoppingBag className="h-10 w-10 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">Nenhum item no pedido</p>
-                  </div>
-                  <Button 
-                    variant="destructive" 
-                    size="sm"
-                    onClick={handleCloseEmptyTable}
-                    disabled={isClosingEmptyTable}
-                  >
-                    <XCircle className="h-4 w-4 mr-2" />
-                    {isClosingEmptyTable ? 'Fechando...' : 'Fechar Mesa (Sem Consumo)'}
-                  </Button>
-                </div>
-              ) : null}
+                    <div className="text-center py-4 space-y-3">
+                      <div className="text-muted-foreground">
+                        <ShoppingBag className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">Nenhum item no pedido</p>
+                      </div>
+                      <Button 
+                        variant="destructive" 
+                        size="sm"
+                        onClick={handleCloseEmptyTable}
+                        disabled={isClosingEmptyTable}
+                      >
+                        <XCircle className="h-4 w-4 mr-2" />
+                        {isClosingEmptyTable ? 'Fechando...' : 'Fechar Mesa (Sem Consumo)'}
+                      </Button>
+                    </div>
+                  ) : null}
 
                 </>
               )}
