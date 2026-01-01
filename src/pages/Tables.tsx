@@ -1432,15 +1432,18 @@ export default function Tables() {
   return (
     <PDVLayout>
       <Tabs defaultValue="tables" className="h-full flex flex-col">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-2xl font-bold">Mesas</h1>
-            <p className="text-muted-foreground">Gerencie mesas e reservas</p>
-          </div>
+        {/* Tabs centralizadas no topo */}
+        <div className="flex justify-center mb-4">
           <TabsList>
             <TabsTrigger value="tables">Mesas</TabsTrigger>
             <TabsTrigger value="reservations">Reservas</TabsTrigger>
           </TabsList>
+        </div>
+
+        {/* Título abaixo das tabs */}
+        <div className="mb-4">
+          <h1 className="text-2xl font-bold">Mesas</h1>
+          <p className="text-muted-foreground">Gerencie mesas e reservas</p>
         </div>
 
         <TabsContent value="tables" className="flex-1 m-0">
