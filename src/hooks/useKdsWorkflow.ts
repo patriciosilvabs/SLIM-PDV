@@ -116,7 +116,12 @@ export function useKdsWorkflow() {
                     supabase
                       .from('orders')
                       .update({ status: 'ready', ready_at: new Date().toISOString() })
-                      .eq('id', itemData.order_id);
+                      .eq('id', itemData.order_id)
+                      .then(({ error }) => {
+                        if (error) {
+                          console.error('Erro ao atualizar status do pedido para ready:', error);
+                        }
+                      });
                   }
                 });
             }
