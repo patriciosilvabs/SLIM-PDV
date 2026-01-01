@@ -559,13 +559,15 @@ export default function Tables() {
   }, [orders, tables, idleTableSettings, audioSettings.enabled, playIdleTableAlertSound, updateTable, updateOrder]);
 
   const getTableOrder = (tableId: string) => {
-    // Retorna apenas pedidos ATIVOS (não-delivered, não-cancelled)
-    // Pedidos 'delivered' são histórico e não devem aparecer em mesas
-    // Ignora pedidos em rascunho sem itens (drafts vazios)
+    // Buscar a mesa para verificar se ainda está ocupada
+    const table = tables?.find(t => t.id === tableId);
+    
     return orders?.find(o => 
       o.table_id === tableId && 
       o.status !== 'cancelled' &&
-      o.status !== 'delivered' && // Sempre excluir delivered - são histórico
+      // Se a mesa está ocupada, mostrar mesmo pedidos 'delivered' até fechar a conta
+      // Se a mesa está livre, excluir pedidos 'delivered' (são histórico)
+      (table?.status !== 'available' || o.status !== 'delivered') &&
       // Ignorar drafts sem itens
       !(o.is_draft === true && (!o.order_items || o.order_items.length === 0))
     );
