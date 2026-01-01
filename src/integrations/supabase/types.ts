@@ -877,6 +877,85 @@ export type Database = {
           },
         ]
       }
+      order_item_cancellations: {
+        Row: {
+          cancellation_reason: string
+          cancelled_at: string
+          cancelled_by: string | null
+          customer_name: string | null
+          id: string
+          order_id: string
+          order_item_id: string
+          order_type: string | null
+          product_name: string
+          quantity: number
+          table_id: string | null
+          table_number: number | null
+          tenant_id: string | null
+          total_price: number
+          unit_price: number
+          variation_name: string | null
+        }
+        Insert: {
+          cancellation_reason: string
+          cancelled_at?: string
+          cancelled_by?: string | null
+          customer_name?: string | null
+          id?: string
+          order_id: string
+          order_item_id: string
+          order_type?: string | null
+          product_name: string
+          quantity: number
+          table_id?: string | null
+          table_number?: number | null
+          tenant_id?: string | null
+          total_price: number
+          unit_price: number
+          variation_name?: string | null
+        }
+        Update: {
+          cancellation_reason?: string
+          cancelled_at?: string
+          cancelled_by?: string | null
+          customer_name?: string | null
+          id?: string
+          order_id?: string
+          order_item_id?: string
+          order_type?: string | null
+          product_name?: string
+          quantity?: number
+          table_id?: string | null
+          table_number?: number | null
+          tenant_id?: string | null
+          total_price?: number
+          unit_price?: number
+          variation_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_item_cancellations_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_item_cancellations_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "tables"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_item_cancellations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_item_extras: {
         Row: {
           extra_id: string | null

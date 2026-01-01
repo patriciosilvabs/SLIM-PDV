@@ -564,16 +564,41 @@ export function useOrderMutations() {
     }) => {
       if (!tenantId) throw new Error('Tenant não encontrado');
 
-      // 1. Buscar preço do item
+      // 1. Buscar dados completos do item para auditoria
       const { data: item, error: itemError } = await supabase
         .from('order_items')
-        .select('total_price')
+        .select(`
+          id,
+          quantity,
+          unit_price,
+          total_price,
+          product:products(name),
+          variation:product_variations(name)
+        `)
         .eq('id', params.itemId)
         .single();
       
       if (itemError) throw itemError;
 
-      // 2. Marcar item como cancelado
+      // 2. Buscar dados do pedido para auditoria
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          subtotal,
+          total,
+          discount,
+          order_type,
+          customer_name,
+          table_id,
+          table:tables(number)
+        `)
+        .eq('id', params.orderId)
+        .single();
+
+      if (orderError) throw orderError;
+
+      // 3. Marcar item como cancelado
       const { error: updateError } = await supabase
         .from('order_items')
         .update({
@@ -587,15 +612,32 @@ export function useOrderMutations() {
 
       if (updateError) throw updateError;
 
-      // 3. Atualizar total do pedido (subtrair valor do item)
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .select('subtotal, total, discount')
-        .eq('id', params.orderId)
-        .single();
+      // 4. Criar registro de auditoria
+      const { error: auditError } = await supabase
+        .from('order_item_cancellations')
+        .insert({
+          order_item_id: params.itemId,
+          order_id: params.orderId,
+          table_id: order?.table_id || null,
+          product_name: (item?.product as any)?.name || 'Produto',
+          variation_name: (item?.variation as any)?.name || null,
+          quantity: item?.quantity || 1,
+          unit_price: item?.unit_price || 0,
+          total_price: item?.total_price || 0,
+          order_type: order?.order_type || null,
+          table_number: (order?.table as any)?.number || null,
+          customer_name: order?.customer_name || null,
+          cancellation_reason: params.reason,
+          cancelled_by: params.cancelledBy,
+          tenant_id: tenantId
+        });
 
-      if (orderError) throw orderError;
+      if (auditError) {
+        console.error('Erro ao criar registro de auditoria:', auditError);
+        // Não lançamos erro aqui para não impedir o cancelamento
+      }
 
+      // 5. Atualizar total do pedido (subtrair valor do item)
       if (order && item) {
         const newSubtotal = (order.subtotal || 0) - item.total_price;
         const newTotal = newSubtotal - (order.discount || 0);

@@ -26,6 +26,7 @@ import OrderManagement from "./pages/OrderManagement";
 import KDS from "./pages/KDS";
 import ClosingHistory from "./pages/ClosingHistory";
 import CancellationHistory from "./pages/CancellationHistory";
+import ItemCancellationHistory from "./pages/ItemCancellationHistory";
 import Performance from "./pages/Performance";
 import ReopenHistory from "./pages/ReopenHistory";
 import AuditDashboard from "./pages/AuditDashboard";
@@ -80,6 +81,7 @@ const App = () => (
                 <Route path="/kds" element={<RequireTenant><KDS /></RequireTenant>} />
                 <Route path="/closing-history" element={<RequireTenant><ClosingHistory /></RequireTenant>} />
                 <Route path="/cancellation-history" element={<RequireTenant><CancellationHistory /></RequireTenant>} />
+                <Route path="/item-cancellation-history" element={<RequireTenant><ItemCancellationHistory /></RequireTenant>} />
                 <Route path="/performance" element={<RequireTenant><Performance /></RequireTenant>} />
                 <Route path="/reopen-history" element={<RequireTenant><ReopenHistory /></RequireTenant>} />
                 <Route path="/audit-dashboard" element={<RequireTenant><AuditDashboard /></RequireTenant>} />

@@ -1901,8 +1901,8 @@ export default function Tables() {
                                         )}>
                                           {formatCurrency(item.total_price)}
                                         </span>
-                                        {/* Botão cancelar - apenas para itens servidos e não cancelados */}
-                                        {item.served_at && !item.cancelled_at && canDeleteItems && (
+                                        {/* Botão cancelar - para itens não cancelados */}
+                                        {!item.cancelled_at && canDeleteItems && (
                                           <Button
                                             variant="ghost"
                                             size="icon"
@@ -2938,8 +2938,8 @@ export default function Tables() {
                                 )}>
                                   {formatCurrency(item.total_price)}
                                 </span>
-                                {/* Botão cancelar - apenas para itens servidos e não cancelados */}
-                                {item.served_at && !item.cancelled_at && canDeleteItems && (
+                                {/* Botão cancelar - para itens não cancelados */}
+                                {!item.cancelled_at && canDeleteItems && (
                                   <Button
                                     variant="ghost"
                                     size="icon"
