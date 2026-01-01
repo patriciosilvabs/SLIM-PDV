@@ -1082,8 +1082,14 @@ export default function KDS() {
     const OriginIcon = origin.icon;
     const isCompact = kdsSettings.compactMode;
     
-    // Get items that need preparation
-    const itemsToShow = order.order_items?.filter(item => item.status === 'pending' || item.status === 'preparing') || [];
+    // Get items to display based on order status
+    // For ready orders, show ready items; for others, show pending/preparing items
+    const itemsToShow = order.order_items?.filter(item => {
+      if (order.status === 'ready') {
+        return item.status === 'ready';
+      }
+      return item.status === 'pending' || item.status === 'preparing';
+    }) || [];
     const totalItems = itemsToShow.length;
     
     // Check if any item has special border
