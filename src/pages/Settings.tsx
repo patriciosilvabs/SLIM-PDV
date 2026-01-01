@@ -31,8 +31,9 @@ import { OrderSettingsSection } from '@/components/settings/OrderSettingsSection
 import { UsersSettings } from '@/components/settings/UsersSettings';
 import { RolesSettings } from '@/components/settings/RolesSettings';
 import { InvitationsSettings } from '@/components/settings/InvitationsSettings';
+import { CashRegisterSettings } from '@/components/settings/CashRegisterSettings';
 
-const VALID_SECTIONS: SettingsSection[] = ['tables', 'kds', 'kds-stations', 'orders', 'printers', 'notifications', 'announcements', 'push', 'users', 'roles', 'invitations'];
+const VALID_SECTIONS: SettingsSection[] = ['tables', 'kds', 'kds-stations', 'orders', 'printers', 'cash-register', 'notifications', 'announcements', 'push', 'users', 'roles', 'invitations'];
 
 // Hook to check if system has any admins
 function useHasAdmins() {
@@ -163,6 +164,8 @@ export default function Settings() {
         return <OrderSettingsSection />;
       case 'printers':
         return <PrinterSettings />;
+      case 'cash-register':
+        return <CashRegisterSettings />;
       case 'notifications':
         return <NotificationSettings />;
       case 'announcements':
@@ -235,6 +238,7 @@ export default function Settings() {
                   <option value="kds-stations">Praças</option>
                   <option value="orders">Pedidos</option>
                   <option value="printers">Impressoras</option>
+                  <option value="cash-register">Caixa</option>
                 </optgroup>
                 <optgroup label="Notificações">
                   <option value="notifications">Sons</option>
