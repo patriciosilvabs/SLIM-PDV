@@ -229,31 +229,49 @@ export function useOrders(status?: OrderStatus[]) {
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'order_items' }, () => {
         debouncedInvalidate();
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'order_items' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'order_items' }, async (payload) => {
         // Direct cache update for item changes (most common operation in KDS)
-        const updatedItem = payload.new as { id: string; current_station_id?: string; station_status?: string; status?: string };
-        queryClient.setQueryData(['orders'], (old: Order[] | undefined) => {
+        const updatedItem = payload.new as { 
+          id: string; 
+          current_station_id?: string | null; 
+          station_status?: string; 
+          status?: string;
+          served_at?: string | null;
+        };
+        
+        // Se mudou de estação, buscar dados completos da nova estação
+        let currentStation: OrderItemStation | null = null;
+        if (updatedItem.current_station_id) {
+          const { data: stationData } = await supabase
+            .from('kds_stations')
+            .select('id, name, station_type, color, icon, sort_order')
+            .eq('id', updatedItem.current_station_id)
+            .single();
+          
+          if (stationData) {
+            currentStation = stationData as OrderItemStation;
+          }
+        }
+        
+        // Função para atualizar cache com dados completos
+        const updateFn = (old: Order[] | undefined) => {
           if (!old) return old;
           return old.map(order => ({
             ...order,
             order_items: order.order_items?.map((item: OrderItem) => 
               item.id === updatedItem.id 
-                ? { ...item, ...updatedItem }
+                ? { 
+                    ...item, 
+                    ...updatedItem,
+                    current_station: currentStation 
+                  }
                 : item
             )
           }));
-        });
-        queryClient.setQueryData(['orders', status], (old: Order[] | undefined) => {
-          if (!old) return old;
-          return old.map(order => ({
-            ...order,
-            order_items: order.order_items?.map((item: OrderItem) => 
-              item.id === updatedItem.id 
-                ? { ...item, ...updatedItem }
-                : item
-            )
-          }));
-        });
+        };
+        
+        queryClient.setQueryData(['orders'], updateFn);
+        queryClient.setQueryData(['orders', status], updateFn);
       })
       .subscribe();
 
