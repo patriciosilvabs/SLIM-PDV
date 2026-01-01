@@ -20,6 +20,7 @@ import {
 import { useAllUsers, AppRole, UserWithRoles } from '@/hooks/useUserRole';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useTenant } from '@/hooks/useTenant';
 import { useQueryClient } from '@tanstack/react-query';
 import { Users, UserPlus, Edit, X, Eye, EyeOff, Key, Trash2 } from 'lucide-react';
 import { UserPermissionsDialog } from '@/components/settings/UserPermissionsDialog';
@@ -44,6 +45,7 @@ export function UsersSettings() {
   const { data: users, isLoading, refetch } = useAllUsers();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
 
   // User creation state
   const [isCreateUserDialogOpen, setIsCreateUserDialogOpen] = useState(false);
@@ -208,7 +210,8 @@ export function UsersSettings() {
           email: newUserForm.email,
           name: newUserForm.name.toUpperCase(),
           password: newUserForm.password,
-          role: newUserForm.role
+          role: newUserForm.role,
+          tenant_id: tenantId
         }
       });
 
