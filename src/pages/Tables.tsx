@@ -1290,20 +1290,28 @@ export default function Tables() {
     setSelectedTable({ ...selectedTable, status: 'bill_requested' });
     
     // Auto-print bill summary when clicking "Fechar Conta"
-    if (order && centralPrinting.canPrintToCashier) {
+    if (order) {
       try {
-        const receiptData = propsToReceiptData({
+        const receiptProps = {
           order,
           payments: [],
           discount: discountAmount > 0 ? { type: discountType, value: discountValue, amount: discountAmount } : undefined,
           serviceCharge: serviceChargeEnabled ? { enabled: true, percent: serviceChargePercent, amount: serviceAmount } : undefined,
           splitBill: splitBillEnabled ? { enabled: true, count: splitCount, amountPerPerson: finalTotal / splitCount } : undefined,
           tableNumber: selectedTable.number,
-          receiptType: 'summary',
-        });
-        const success = await centralPrinting.printCustomerReceipt(receiptData);
-        if (success) {
-          toast.success('Resumo da conta enviado para impressão');
+          receiptType: 'summary' as const,
+        };
+        
+        if (centralPrinting.canPrintToCashier) {
+          // Impressão via QZ Tray ou fila centralizada
+          const receiptData = propsToReceiptData(receiptProps);
+          const success = await centralPrinting.printCustomerReceipt(receiptData);
+          if (success) {
+            toast.success('Resumo da conta enviado para impressão');
+          }
+        } else {
+          // Fallback: impressão via navegador
+          await printCustomerReceipt(receiptProps, printer);
         }
       } catch (err) {
         console.error('Auto print bill summary failed:', err);
