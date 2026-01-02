@@ -1529,11 +1529,47 @@ export default function Tables() {
                         className={cn(
                           'cursor-pointer transition-all hover:scale-105 relative rounded-lg border-0',
                           statusColors[table.status],
-                          isSelected && 'ring-4 ring-sky-400 ring-offset-2'
+                          isSelected && 'ring-4 ring-sky-400 ring-offset-2',
+                          // Borda brilhante para pedidos prontos
+                          isOrderReady && 'ring-2 ring-green-400 ring-offset-1 animate-glow-green'
                         )}
                         onClick={() => handleTableClick(table)}
                       >
                         <CardContent className="p-3 flex flex-col items-center justify-center aspect-square relative">
+                          
+                          {/* Indicador KDS no canto superior direito */}
+                          {table.status === 'occupied' && order && (
+                            <div className="absolute top-1 right-1">
+                              {isOrderReady ? (
+                                // Pronto - Verde pulsando forte
+                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-green-500 text-white text-[9px] font-bold rounded animate-pulse">
+                                  <Bell className="h-2.5 w-2.5" />
+                                  PRONTO
+                                </div>
+                              ) : isOrderDelivered ? (
+                                // Entregue - Azul estatico
+                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-500 text-white text-[9px] font-bold rounded">
+                                  <Check className="h-2.5 w-2.5" />
+                                  ENTREGUE
+                                </div>
+                              ) : currentStation ? (
+                                // Em producao - Cor da estacao + animacao
+                                <div 
+                                  className="flex items-center gap-1 px-1.5 py-0.5 text-white text-[9px] font-bold rounded animate-pulse-soft"
+                                  style={{ backgroundColor: currentStation.color || '#8B5CF6' }}
+                                >
+                                  <span className="h-2 w-2 rounded-full bg-white/80" />
+                                  {currentStation.name?.split(' ')[0]?.substring(0, 6)}
+                                </div>
+                              ) : isOrderPending ? (
+                                // Pendente - Amarelo pulsando
+                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-yellow-500 text-white text-[9px] font-bold rounded animate-pulse-soft">
+                                  <Clock className="h-2.5 w-2.5" />
+                                  AGUARDA
+                                </div>
+                              ) : null}
+                            </div>
+                          )}
                           
                           {/* Numero da mesa */}
                           <p className="text-3xl font-bold">{table.number}</p>
