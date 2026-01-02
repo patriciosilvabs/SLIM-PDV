@@ -107,6 +107,14 @@ export default {
             borderColor: "hsl(var(--destructive) / 0.5)",
           },
         },
+        "glow-green": {
+          "0%, 100%": { 
+            boxShadow: "0 0 5px 2px rgba(34, 197, 94, 0.5)",
+          },
+          "50%": { 
+            boxShadow: "0 0 15px 5px rgba(34, 197, 94, 0.8)",
+          },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -114,6 +122,7 @@ export default {
         "pulse-soft": "pulse-soft 2s ease-in-out infinite",
         "slide-in": "slide-in 0.3s ease-out",
         "blink-cancel": "blink-cancel 0.5s ease-in-out infinite",
+        "glow-green": "glow-green 1s ease-in-out infinite",
       },
     },
   },
