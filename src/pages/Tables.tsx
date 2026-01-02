@@ -680,6 +680,51 @@ export default function Tables() {
     return earliestItem.current_station || null;
   };
 
+  // Analyze all order items to determine KDS status (handles multiple items at different stages)
+  const getOrderKdsStatus = (order: Order | undefined) => {
+    if (!order?.order_items || order.order_items.length === 0) {
+      return { status: 'none' as const, station: null as OrderItemStation | null, counts: { ready: 0, inProgress: 0, pending: 0, served: 0 } };
+    }
+
+    // Filter only non-cancelled items
+    const activeItems = order.order_items.filter(item => !item.cancelled_at);
+    
+    // Count items in each state
+    const counts = {
+      ready: activeItems.filter(item => 
+        item.station_status === 'completed' && !item.served_at
+      ).length,
+      inProgress: activeItems.filter(item => 
+        item.current_station && item.station_status !== 'completed' && !item.served_at
+      ).length,
+      pending: activeItems.filter(item => 
+        !item.current_station && !item.served_at && (item.station_status === 'waiting' || !item.station_status)
+      ).length,
+      served: activeItems.filter(item => item.served_at).length,
+    };
+
+    // Determine priority status (order: ready > inProgress > pending > served)
+    let status: 'ready' | 'inProgress' | 'pending' | 'served' | 'none' = 'none';
+    let station: OrderItemStation | null = null;
+
+    if (counts.ready > 0) {
+      status = 'ready';
+    } else if (counts.inProgress > 0) {
+      status = 'inProgress';
+      // Get the station of the most recent in-progress item
+      const inProgressItem = activeItems.find(item => 
+        item.current_station && item.station_status !== 'completed' && !item.served_at
+      );
+      station = inProgressItem?.current_station || null;
+    } else if (counts.pending > 0) {
+      status = 'pending';
+    } else if (counts.served > 0) {
+      status = 'served';
+    }
+
+    return { status, station, counts };
+  };
+
   const handleTableClick = (table: Table) => {
     // Reset closing states when switching tables to prevent data leak
     setIsClosingBill(false);
@@ -1505,11 +1550,10 @@ export default function Tables() {
                     const order = getTableOrder(table.id);
                     const reservation = getTableReservation(table.id);
                     const isSelected = selectedTable?.id === table.id;
-                    const isOrderReady = order?.status === 'ready';
-                    const isOrderDelivered = order?.status === 'delivered' && table.status !== 'available';
-                    const isOrderPreparing = order?.status === 'preparing';
-                    const isOrderPending = order?.status === 'pending';
-                    const currentStation = getOrderCurrentStation(order);
+                    
+                    // Analyze KDS status based on individual items
+                    const kdsStatus = getOrderKdsStatus(order);
+                    const hasReadyItems = kdsStatus.status === 'ready';
                     
                     // Check for partial payments
                     const tablePaymentInfo = tablePaymentsMap.get(table.id);
@@ -1531,41 +1575,42 @@ export default function Tables() {
                           statusColors[table.status],
                           isSelected && 'ring-4 ring-sky-400 ring-offset-2',
                           // Borda brilhante para pedidos prontos
-                          isOrderReady && 'ring-2 ring-green-400 ring-offset-1 animate-glow-green'
+                          hasReadyItems && 'ring-2 ring-green-400 ring-offset-1 animate-glow-green'
                         )}
                         onClick={() => handleTableClick(table)}
                       >
                         <CardContent className="p-3 flex flex-col items-center justify-center aspect-square relative">
                           
                           {/* Indicador KDS no canto superior direito */}
-                          {table.status === 'occupied' && order && (
+                          {table.status === 'occupied' && order && kdsStatus.status !== 'none' && (
                             <div className="absolute top-1 right-1">
-                              {isOrderReady ? (
-                                // Pronto - Verde pulsando forte
+                              {kdsStatus.status === 'ready' ? (
+                                // Pronto - Verde pulsando forte com contagem
                                 <div className="flex items-center gap-1 px-1.5 py-0.5 bg-green-500 text-white text-[9px] font-bold rounded animate-pulse">
                                   <Bell className="h-2.5 w-2.5" />
-                                  PRONTO
+                                  PRONTO{kdsStatus.counts.ready > 1 ? ` (${kdsStatus.counts.ready})` : ''}
                                 </div>
-                              ) : isOrderDelivered ? (
-                                // Entregue - Azul estatico
-                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-500 text-white text-[9px] font-bold rounded">
-                                  <Check className="h-2.5 w-2.5" />
-                                  ENTREGUE
-                                </div>
-                              ) : currentStation ? (
-                                // Em producao - Cor da estacao + animacao
+                              ) : kdsStatus.status === 'inProgress' && kdsStatus.station ? (
+                                // Em producao - Cor da estacao + contagem de pendentes
                                 <div 
                                   className="flex items-center gap-1 px-1.5 py-0.5 text-white text-[9px] font-bold rounded animate-pulse-soft"
-                                  style={{ backgroundColor: currentStation.color || '#8B5CF6' }}
+                                  style={{ backgroundColor: kdsStatus.station.color || '#8B5CF6' }}
                                 >
                                   <span className="h-2 w-2 rounded-full bg-white/80" />
-                                  {currentStation.name?.split(' ')[0]?.substring(0, 6)}
+                                  {kdsStatus.station.name?.split(' ')[0]?.substring(0, 6)}
+                                  {kdsStatus.counts.pending > 0 && <span className="ml-1 opacity-70">+{kdsStatus.counts.pending}</span>}
                                 </div>
-                              ) : isOrderPending ? (
-                                // Pendente - Amarelo pulsando
+                              ) : kdsStatus.status === 'pending' ? (
+                                // Pendente - Amarelo pulsando com contagem
                                 <div className="flex items-center gap-1 px-1.5 py-0.5 bg-yellow-500 text-white text-[9px] font-bold rounded animate-pulse-soft">
                                   <Clock className="h-2.5 w-2.5" />
-                                  AGUARDA
+                                  AGUARDA{kdsStatus.counts.pending > 1 ? ` (${kdsStatus.counts.pending})` : ''}
+                                </div>
+                              ) : kdsStatus.status === 'served' ? (
+                                // Todos servidos - Azul estatico
+                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-500 text-white text-[9px] font-bold rounded">
+                                  <Check className="h-2.5 w-2.5" />
+                                  SERVIDO
                                 </div>
                               ) : null}
                             </div>
