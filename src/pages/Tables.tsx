@@ -2016,7 +2016,7 @@ export default function Tables() {
                                         )}
                                       </div>
                                     )}
-                                    {/* Sub-items (pizzas individuais) */}
+                                    {/* Sub-items (pizzas individuais) COM PREÇOS no Resumo */}
                                     {item.sub_items && item.sub_items.length > 0 && (
                                       <div className="text-xs text-muted-foreground mt-1 space-y-1.5">
                                         {item.sub_items
@@ -2027,7 +2027,14 @@ export default function Tables() {
                                             {subItem.sub_extras && subItem.sub_extras.length > 0 && (
                                               <div className="pl-2 space-y-0.5">
                                                 {subItem.sub_extras.map((extra: any, idx: number) => (
-                                                  <p key={idx}>• {extra.option_name}</p>
+                                                  <p key={idx} className="flex justify-between">
+                                                    <span>• {extra.option_name}</span>
+                                                    {extra.price > 0 && (
+                                                      <span className="text-muted-foreground ml-2">
+                                                        {formatCurrency(extra.price)}
+                                                      </span>
+                                                    )}
+                                                  </p>
                                                 ))}
                                               </div>
                                             )}
