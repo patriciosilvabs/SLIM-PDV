@@ -1662,25 +1662,27 @@ export default function Tables() {
                 {selectedTable ? (
                   <>
                   <CardHeader className="pb-3">
-                    {/* Tabs Consumo/Resumo centralizadas no topo */}
-                    <div className="flex justify-center mb-3">
-                      <div className="flex gap-1 p-1 bg-muted rounded-lg">
-                        <Button
-                          variant={tableViewMode === 'consumo' ? 'default' : 'ghost'}
-                          size="sm"
-                          onClick={() => setTableViewMode('consumo')}
-                        >
-                          Consumo
-                        </Button>
-                        <Button
-                          variant={tableViewMode === 'resumo' ? 'default' : 'ghost'}
-                          size="sm"
-                          onClick={() => setTableViewMode('resumo')}
-                        >
-                          Resumo
-                        </Button>
+                    {/* Tabs Consumo/Resumo centralizadas no topo - esconde durante fechamento */}
+                    {!isClosingBill && (
+                      <div className="flex justify-center mb-3">
+                        <div className="flex gap-1 p-1 bg-muted rounded-lg">
+                          <Button
+                            variant={tableViewMode === 'consumo' ? 'default' : 'ghost'}
+                            size="sm"
+                            onClick={() => setTableViewMode('consumo')}
+                          >
+                            Consumo
+                          </Button>
+                          <Button
+                            variant={tableViewMode === 'resumo' ? 'default' : 'ghost'}
+                            size="sm"
+                            onClick={() => setTableViewMode('resumo')}
+                          >
+                            Resumo
+                          </Button>
+                        </div>
                       </div>
-                    </div>
+                    )}
                     
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
