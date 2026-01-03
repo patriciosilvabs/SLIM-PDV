@@ -1846,11 +1846,14 @@ export default function Tables() {
                                                 /* Sabores/Complementos tradicionais */
                                                 item.extras && item.extras.length > 0 && (
                                                   <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                                                    {item.extras.map((extra: any, idx: number) => (
-                                                      <p key={idx} className="pl-2">
-                                                        • {extra.extra_name.split(': ').slice(1).join(': ')}
-                                                      </p>
-                                                    ))}
+                                                    {item.extras.map((extra: any, idx: number) => {
+                                                      const displayName = extra.extra_name?.includes(': ') 
+                                                        ? extra.extra_name.split(': ').slice(1).join(': ')
+                                                        : extra.extra_name || '';
+                                                      return displayName ? (
+                                                        <p key={idx} className="pl-2">• {displayName}</p>
+                                                      ) : null;
+                                                    })}
                                                   </div>
                                                 )
                                               )}
@@ -2048,9 +2051,21 @@ export default function Tables() {
                                     {/* Extras tradicionais */}
                                     {!item.sub_items?.length && item.extras && item.extras.length > 0 && (
                                       <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                                        {item.extras.map((extra: any, idx: number) => (
-                                          <p key={idx} className="pl-2">• {extra.extra_name.split(': ').slice(1).join(': ')}</p>
-                                        ))}
+                                        {item.extras.map((extra: any, idx: number) => {
+                                          const displayName = extra.extra_name?.includes(': ') 
+                                            ? extra.extra_name.split(': ').slice(1).join(': ')
+                                            : extra.extra_name || '';
+                                          return displayName ? (
+                                            <p key={idx} className="pl-2 flex justify-between">
+                                              <span>• {displayName}</span>
+                                              {extra.price > 0 && (
+                                                <span className="text-muted-foreground ml-2">
+                                                  {formatCurrency(extra.price)}
+                                                </span>
+                                              )}
+                                            </p>
+                                          ) : null;
+                                        })}
                                       </div>
                                     )}
                                     {/* Observações */}
@@ -2900,10 +2915,15 @@ export default function Tables() {
                                       ) : (
                                         /* Sabores/Complementos tradicionais */
                                         item.extras && item.extras.length > 0 && (
-                                          <div className="text-xs text-muted-foreground mt-1">
-                                            {item.extras.map((extra: any, idx: number) => (
-                                              <p key={idx} className="pl-2">• {extra.extra_name.split(': ').slice(1).join(': ')}</p>
-                                            ))}
+                                          <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                                            {item.extras.map((extra: any, idx: number) => {
+                                              const displayName = extra.extra_name?.includes(': ') 
+                                                ? extra.extra_name.split(': ').slice(1).join(': ')
+                                                : extra.extra_name || '';
+                                              return displayName ? (
+                                                <p key={idx} className="pl-2">• {displayName}</p>
+                                              ) : null;
+                                            })}
                                           </div>
                                         )
                                       )}
@@ -3085,9 +3105,21 @@ export default function Tables() {
                             {/* Extras tradicionais */}
                             {!item.sub_items?.length && item.extras && item.extras.length > 0 && (
                               <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                                {item.extras.map((extra: any, idx: number) => (
-                                  <p key={idx} className="pl-2">• {extra.extra_name.split(': ').slice(1).join(': ')}</p>
-                                ))}
+                                {item.extras.map((extra: any, idx: number) => {
+                                  const displayName = extra.extra_name?.includes(': ') 
+                                    ? extra.extra_name.split(': ').slice(1).join(': ')
+                                    : extra.extra_name || '';
+                                  return displayName ? (
+                                    <p key={idx} className="pl-2 flex justify-between">
+                                      <span>• {displayName}</span>
+                                      {extra.price > 0 && (
+                                        <span className="text-muted-foreground ml-2">
+                                          {formatCurrency(extra.price)}
+                                        </span>
+                                      )}
+                                    </p>
+                                  ) : null;
+                                })}
                               </div>
                             )}
                             {/* Observações */}
