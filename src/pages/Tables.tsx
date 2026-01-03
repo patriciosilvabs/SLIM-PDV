@@ -2239,8 +2239,8 @@ export default function Tables() {
                       </>
                     )}
 
-                    {/* CLOSING VIEW - Payment Flow */}
-                    {isClosingBill && selectedOrder && (
+                    {/* CLOSING VIEW - Payment Flow - Apenas na aba Resumo */}
+                    {isClosingBill && selectedOrder && tableViewMode === 'resumo' && (
                       <>
                         {/* Order Items Summary */}
                         <div className="flex-1 flex flex-col min-h-0">
