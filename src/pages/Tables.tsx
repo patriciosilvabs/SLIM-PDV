@@ -601,18 +601,19 @@ export default function Tables() {
   }, [orders, tables, idleTableSettings, audioSettings.enabled, playIdleTableAlertSound, updateTable, updateOrder]);
 
   const getTableOrder = (tableId: string) => {
-    // Buscar a mesa para verificar se ainda está ocupada
-    const table = tables?.find(t => t.id === tableId);
-    
-    return orders?.find(o => 
+    // 1. Primeiro, buscar pedidos ativos (não cancelled, não delivered)
+    const activeOrder = orders?.find(o => 
       o.table_id === tableId && 
       o.status !== 'cancelled' &&
-      // Se a mesa está ocupada, mostrar mesmo pedidos 'delivered' até fechar a conta
-      // Se a mesa está livre, excluir pedidos 'delivered' (são histórico)
-      (table?.status !== 'available' || o.status !== 'delivered') &&
-      // Ignorar drafts sem itens
-      !(o.is_draft === true && (!o.order_items || o.order_items.length === 0))
+      o.status !== 'delivered'
     );
+    
+    // Se encontrou pedido ativo (mesmo draft vazio), retornar
+    if (activeOrder) return activeOrder;
+    
+    // 2. Se não há pedido ativo, não retornar nada
+    // (pedidos delivered agora têm table_id = NULL devido ao trigger)
+    return undefined;
   };
 
   // Mark order as delivered (closes the order)
