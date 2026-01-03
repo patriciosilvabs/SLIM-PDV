@@ -3121,10 +3121,17 @@ export default function Tables() {
                                   .map((subItem: any) => (
                                   <div key={subItem.id} className="pl-2 border-l-2 border-primary/30">
                                     <p className="font-medium text-foreground">🍕 Pizza {subItem.sub_item_index + 1}:</p>
-                                    {subItem.sub_extras && subItem.sub_extras.length > 0 && (
+                                      {subItem.sub_extras && subItem.sub_extras.length > 0 && (
                                       <div className="pl-2 space-y-0.5">
                                         {subItem.sub_extras.map((extra: any, idx: number) => (
-                                          <p key={idx}>• {extra.option_name}</p>
+                                          <p key={idx} className="flex justify-between">
+                                            <span>• {extra.option_name}</span>
+                                            {extra.price > 0 && (
+                                              <span className="text-muted-foreground ml-2">
+                                                {formatCurrency(extra.price)}
+                                              </span>
+                                            )}
+                                          </p>
                                         ))}
                                       </div>
                                     )}
