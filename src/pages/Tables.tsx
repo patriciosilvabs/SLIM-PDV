@@ -55,6 +55,7 @@ import {
   CartReviewSheet,
   ProductSelector,
   PendingCartPanel,
+  ItemKdsJourney,
 } from '@/components/tables';
 
 function formatCurrency(value: number) {
@@ -1876,6 +1877,8 @@ export default function Tables() {
                                                   📝 {item.notes}
                                                 </p>
                                               )}
+                                              {/* Jornada KDS do item */}
+                                              <ItemKdsJourney orderItemId={item.id} />
                                             </div>
                                             <div className="flex items-center gap-2 ml-2">
                                               {/* Botão Servir Item - Só aparece se pronto e não servido */}

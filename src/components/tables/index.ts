@@ -12,3 +12,4 @@ export { CartBar } from './CartBar';
 export { CartReviewSheet } from './CartReviewSheet';
 export { ProductSelector } from './ProductSelector';
 export { PendingCartPanel } from './PendingCartPanel';
+export { ItemKdsJourney } from './ItemKdsJourney';
