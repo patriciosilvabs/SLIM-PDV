@@ -38,17 +38,30 @@ export function propsToReceiptData(props: CustomerReceiptProps): CustomerReceipt
     orderType: order.order_type || 'dine_in',
     tableNumber: tableNumber || order.table?.number,
     customerName: order.customer_name,
-    items: order.order_items?.map(item => ({
-      quantity: item.quantity,
-      productName: item.product?.name || 'Item',
-      variation: item.variation?.name,
-      extras: item.extras?.map(e => ({
-        name: e.extra_name.includes(':') ? e.extra_name.split(': ').slice(1).join(': ') : e.extra_name,
-        price: e.price,
-      })),
-      notes: item.notes,
-      totalPrice: item.total_price,
-    })) || [],
+    items: order.order_items?.map(item => {
+      // Collect extras from order_item_extras
+      const normalExtras = item.extras?.map(e => ({
+        name: e.extra_name?.includes(': ') ? e.extra_name.split(': ').slice(1).join(': ') : (e.extra_name || ''),
+        price: e.price || 0,
+      })) || [];
+      
+      // Collect extras from sub_items (pizza flavors)
+      const subItemExtras = item.sub_items?.flatMap(si => 
+        si.sub_extras?.map(se => ({
+          name: se.option_name || '',
+          price: se.price || 0,
+        })) || []
+      ) || [];
+      
+      return {
+        quantity: item.quantity,
+        productName: item.product?.name || 'Item',
+        variation: item.variation?.name,
+        extras: [...normalExtras, ...subItemExtras].filter(e => e.name),
+        notes: item.notes,
+        totalPrice: item.total_price,
+      };
+    }) || [],
     subtotal,
     discount: discount?.amount ? {
       type: discount.type,
@@ -275,20 +288,34 @@ function printWithBrowser({
       
       <div>
         <div class="items-header">ITENS</div>
-        ${order.order_items?.map(item => `
+        ${order.order_items?.map(item => {
+          // Collect all extras (normal + sub_items)
+          const normalExtras = item.extras?.map(e => ({
+            name: e.extra_name?.includes(': ') ? e.extra_name.split(': ').slice(1).join(': ') : (e.extra_name || ''),
+            price: e.price || 0,
+          })) || [];
+          const subItemExtras = item.sub_items?.flatMap(si => 
+            si.sub_extras?.map(se => ({
+              name: se.option_name || '',
+              price: se.price || 0,
+            })) || []
+          ) || [];
+          const allExtras = [...normalExtras, ...subItemExtras].filter(e => e.name);
+          
+          return `
           <div class="item">
             <div class="item-line">
               <span>${item.quantity}x ${escapeHtml(item.product?.name) || 'Item'}${item.variation?.name ? ` (${escapeHtml(item.variation.name)})` : ''}</span>
               <span>${formatCurrency(item.total_price)}</span>
             </div>
-            ${item.extras && item.extras.length > 0 ? `
+            ${allExtras.length > 0 ? `
               <div class="item-extras">
-                ${item.extras.map(e => `+ ${escapeHtml(e.extra_name.includes(':') ? e.extra_name.split(': ').slice(1).join(': ') : e.extra_name)}`).join('<br>')}
+                ${allExtras.map(e => `<div style="display:flex;justify-content:space-between;"><span>+ ${escapeHtml(e.name)}</span>${e.price > 0 ? `<span>${formatCurrency(e.price)}</span>` : ''}</div>`).join('')}
               </div>
             ` : ''}
             ${item.notes ? `<div class="item-notes">Obs: ${escapeHtml(item.notes)}</div>` : ''}
           </div>
-        `).join('') || ''}
+        `}).join('') || ''}
       </div>
       
       <div class="totals">
