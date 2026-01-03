@@ -26,7 +26,7 @@ import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { AddOrderItemsModal, CartItem } from '@/components/order/AddOrderItemsModal';
 import { CancelOrderDialog } from '@/components/order/CancelOrderDialog';
 import { CancelItemDialog } from '@/components/order/CancelItemDialog';
-import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, UserPlus, Minus, ArrowRightLeft, XCircle, Printer, RotateCcw, Ban, ArrowRight, Wallet } from 'lucide-react';
+import { Plus, Users, Receipt, CreditCard, Calendar, Clock, Phone, X, Check, ChevronLeft, ShoppingBag, Bell, Banknote, Smartphone, ArrowLeft, Trash2, UserPlus, Minus, ArrowRightLeft, XCircle, Printer, RotateCcw, Ban, ArrowRight, Wallet, AlertCircle } from 'lucide-react';
 import { printKitchenOrderTicket } from '@/components/kitchen/KitchenOrderTicket';
 import { printCustomerReceipt, printPartialPaymentReceipt, propsToReceiptData } from '@/components/receipt/CustomerReceipt';
 import { Switch } from '@/components/ui/switch';
@@ -1932,6 +1932,21 @@ export default function Tables() {
                       </>
                     )}
                       </>
+                    )}
+
+                    {/* Mensagem quando mesa está em fechamento e usuário clica em Consumo */}
+                    {isClosingBill && tableViewMode === 'consumo' && (
+                      <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+                        <div className="bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 rounded-lg p-6 max-w-sm">
+                          <AlertCircle className="h-12 w-12 text-amber-600 dark:text-amber-400 mx-auto mb-4" />
+                          <h3 className="text-lg font-semibold text-amber-800 dark:text-amber-300 mb-2">
+                            Mesa em Fechamento
+                          </h3>
+                          <p className="text-sm text-amber-700 dark:text-amber-400">
+                            Não há consumo nesse momento. Mesa em fechamento.
+                          </p>
+                        </div>
+                      </div>
                     )}
 
                     {/* ===== ABA RESUMO ===== */}
