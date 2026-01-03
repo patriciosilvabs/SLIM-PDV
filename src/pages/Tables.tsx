@@ -2224,21 +2224,47 @@ export default function Tables() {
                         {/* Order Items Summary */}
                         <div className="flex-1 flex flex-col min-h-0">
                           <h4 className="text-sm font-medium mb-2">Itens do Pedido</h4>
-                          <ScrollArea className="flex-1 max-h-[200px]">
+                          <ScrollArea className="flex-1 max-h-[280px]">
                             <div className="space-y-2 pr-2">
-                              {selectedOrder.order_items?.map((item: any) => (
-                                <div 
-                                  key={item.id} 
-                                  className="flex items-center justify-between p-2 bg-muted/50 rounded text-sm"
-                                >
-                                  <span className="truncate flex-1">
-                                    {item.quantity}x {item.product?.name || 'Produto'}
-                                  </span>
-                                  <span className="font-medium ml-2">
-                                    {formatCurrency(item.total_price)}
-                                  </span>
-                                </div>
-                              ))}
+                              {selectedOrder.order_items?.map((item: any) => {
+                                const allExtras = item.extras?.map((e: any) => ({
+                                  name: e.extra_name?.includes(': ') 
+                                    ? e.extra_name.split(': ').slice(1).join(': ')
+                                    : e.extra_name || '',
+                                  price: e.price || 0,
+                                })).filter((e: any) => e.name) || [];
+                                
+                                return (
+                                  <div key={item.id} className="p-2 bg-muted/50 rounded text-sm">
+                                    <div className="flex items-center justify-between">
+                                      <span className="truncate flex-1">
+                                        {item.quantity}x {item.product?.name || 'Produto'}
+                                        {item.variation?.name && (
+                                          <span className="text-muted-foreground"> - {item.variation.name}</span>
+                                        )}
+                                      </span>
+                                      <span className="font-medium ml-2">
+                                        {formatCurrency(item.total_price)}
+                                      </span>
+                                    </div>
+                                    {allExtras.length > 0 && (
+                                      <div className="mt-1 space-y-0.5">
+                                        {allExtras.map((extra: any, idx: number) => (
+                                          <div key={idx} className="flex justify-between text-xs text-muted-foreground pl-2">
+                                            <span>• {extra.name}</span>
+                                            {extra.price > 0 && (
+                                              <span>{formatCurrency(extra.price)}</span>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {item.notes && (
+                                      <p className="text-xs text-amber-600 mt-1 pl-2 italic">Obs: {item.notes}</p>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           </ScrollArea>
                         </div>
@@ -3254,16 +3280,37 @@ export default function Tables() {
           {isClosingBill && selectedOrder && (
             <div className="space-y-4 pt-4">
               {/* Order Items Summary */}
-              <div className="max-h-[120px] overflow-y-auto space-y-1">
-                {selectedOrder.order_items?.map((item: any) => (
-                  <div 
-                    key={item.id} 
-                    className="flex items-center justify-between p-2 bg-muted/50 rounded text-sm"
-                  >
-                    <span className="truncate">{item.quantity}x {item.product?.name || 'Produto'}</span>
-                    <span className="font-medium">{formatCurrency(item.total_price)}</span>
-                  </div>
-                ))}
+              <div className="max-h-[180px] overflow-y-auto space-y-1">
+                {selectedOrder.order_items?.map((item: any) => {
+                  const allExtras = item.extras?.map((e: any) => ({
+                    name: e.extra_name?.includes(': ') 
+                      ? e.extra_name.split(': ').slice(1).join(': ')
+                      : e.extra_name || '',
+                    price: e.price || 0,
+                  })).filter((e: any) => e.name) || [];
+                  
+                  return (
+                    <div key={item.id} className="p-2 bg-muted/50 rounded text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="truncate">{item.quantity}x {item.product?.name || 'Produto'}</span>
+                        <span className="font-medium">{formatCurrency(item.total_price)}</span>
+                      </div>
+                      {allExtras.length > 0 && (
+                        <div className="mt-1 space-y-0.5">
+                          {allExtras.map((extra: any, idx: number) => (
+                            <div key={idx} className="flex justify-between text-xs text-muted-foreground pl-2">
+                              <span>• {extra.name}</span>
+                              {extra.price > 0 && <span>{formatCurrency(extra.price)}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {item.notes && (
+                        <p className="text-xs text-amber-600 mt-1 pl-2 italic">Obs: {item.notes}</p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Financial Summary - Mobile */}
