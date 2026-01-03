@@ -1303,9 +1303,16 @@ export default function Tables() {
         };
         
         if (centralPrinting.canPrintToCashier) {
-          // Impressão via QZ Tray ou fila centralizada
+          // Impressão via fila centralizada ou QZ Tray
           const receiptData = propsToReceiptData(receiptProps);
           const success = await centralPrinting.printCustomerReceipt(receiptData);
+          if (success) {
+            toast.success('Resumo da conta enviado para impressão');
+          }
+        } else if (printer?.canPrintToCashier) {
+          // Impressão direta via QZ Tray (sem fila)
+          const receiptData = propsToReceiptData(receiptProps);
+          const success = await printer.printCustomerReceipt(receiptData);
           if (success) {
             toast.success('Resumo da conta enviado para impressão');
           }
