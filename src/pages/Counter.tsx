@@ -226,6 +226,13 @@ export default function Counter() {
   const activeCategories = categories?.filter(c => c.is_active !== false) || [];
   const activeProducts = products?.filter(p => p.is_available !== false) || [];
 
+  // Auto-select first category when categories are loaded
+  useEffect(() => {
+    if (activeCategories.length > 0 && selectedCategory === null) {
+      setSelectedCategory(activeCategories[0].id);
+    }
+  }, [activeCategories, selectedCategory]);
+
   // Filter products by category and search
   const filteredProducts = useMemo(() => {
     let filtered = activeProducts;
@@ -868,20 +875,6 @@ export default function Counter() {
           </div>
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-1">
-              <button
-                onClick={() => {
-                  setSelectedCategory(null);
-                  if (isTablet) setSidebarOpen(false);
-                }}
-                className={cn(
-                  "w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                  selectedCategory === null
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted text-foreground"
-                )}
-              >
-                Todos
-              </button>
               {activeCategories.map(cat => (
                 <button
                   key={cat.id}
