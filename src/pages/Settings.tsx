@@ -32,8 +32,9 @@ import { UsersSettings } from '@/components/settings/UsersSettings';
 import { RolesSettings } from '@/components/settings/RolesSettings';
 import { InvitationsSettings } from '@/components/settings/InvitationsSettings';
 import { CashRegisterSettings } from '@/components/settings/CashRegisterSettings';
+import { CardapioWebSettings } from '@/components/settings/CardapioWebSettings';
 
-const VALID_SECTIONS: SettingsSection[] = ['tables', 'kds', 'kds-stations', 'orders', 'printers', 'cash-register', 'notifications', 'announcements', 'push', 'users', 'roles', 'invitations'];
+const VALID_SECTIONS: SettingsSection[] = ['tables', 'kds', 'kds-stations', 'orders', 'printers', 'cash-register', 'notifications', 'announcements', 'push', 'users', 'roles', 'invitations', 'integrations'];
 
 // Hook to check if system has any admins
 function useHasAdmins() {
@@ -178,6 +179,8 @@ export default function Settings() {
         return <RolesSettings />;
       case 'invitations':
         return <InvitationsSettings />;
+      case 'integrations':
+        return <CardapioWebSettings />;
       default:
         return <TablesSettings />;
     }
@@ -249,6 +252,9 @@ export default function Settings() {
                   <option value="users">Usuários</option>
                   <option value="roles">Funções</option>
                   <option value="invitations">Convites</option>
+                </optgroup>
+                <optgroup label="Integrações">
+                  <option value="integrations">CardápioWeb</option>
                 </optgroup>
               </select>
             </div>

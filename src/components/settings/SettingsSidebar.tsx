@@ -15,6 +15,7 @@ import {
   Factory,
   Mail,
   Wallet,
+  Plug,
   LucideIcon
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -31,7 +32,8 @@ export type SettingsSection =
   | 'push' 
   | 'users' 
   | 'roles'
-  | 'invitations';
+  | 'invitations'
+  | 'integrations';
 
 // Export section info for reuse (breadcrumb, etc.)
 export const SECTION_INFO: Record<SettingsSection, { label: string; icon: LucideIcon }> = {
@@ -47,6 +49,7 @@ export const SECTION_INFO: Record<SettingsSection, { label: string; icon: Lucide
   users: { label: 'Usuários', icon: Users },
   roles: { label: 'Funções', icon: Shield },
   invitations: { label: 'Convites', icon: Mail },
+  integrations: { label: 'Integrações', icon: Plug },
 };
 
 interface SettingsSidebarProps {
@@ -80,6 +83,12 @@ const sections = [
       { id: 'users' as const, label: 'Usuários', icon: Users },
       { id: 'roles' as const, label: 'Funções', icon: Shield },
       { id: 'invitations' as const, label: 'Convites', icon: Mail },
+    ],
+  },
+  {
+    group: 'Integrações',
+    items: [
+      { id: 'integrations' as const, label: 'CardápioWeb', icon: Plug },
     ],
   },
 ];
