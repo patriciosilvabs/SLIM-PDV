@@ -138,16 +138,16 @@ Deno.serve(async (req) => {
 
     console.log('[CardápioWeb Webhook] Received event:', JSON.stringify(body));
 
-    const { event, data } = body;
-    const { merchant_id, order_id } = data || {};
+  // CardápioWeb sends fields at root level, not nested in data
+  const { event_type, merchant_id, order_id, order_status } = body;
 
-    if (!merchant_id || !order_id) {
-      console.error('[CardápioWeb Webhook] Missing merchant_id or order_id');
-      return new Response(
-        JSON.stringify({ error: 'Missing merchant_id or order_id' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+  if (!merchant_id || !order_id) {
+    console.error('[CardápioWeb Webhook] Missing merchant_id or order_id. Payload:', JSON.stringify(body));
+    return new Response(
+      JSON.stringify({ error: 'Missing merchant_id or order_id' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
 
     // Find integration by store_id (merchant_id)
     const { data: integration, error: integrationError } = await supabase
@@ -182,13 +182,13 @@ Deno.serve(async (req) => {
     // Log the webhook event
     await supabase.from('cardapioweb_logs').insert({
       tenant_id: integration.tenant_id,
-      event_type: event,
+      event_type: event_type,
       external_order_id: String(order_id),
       payload: body,
       status: 'processing',
     });
 
-    if (event === 'ORDER_CREATED') {
+    if (event_type === 'ORDER_CREATED') {
       // Fetch full order details from CardápioWeb API
       const orderResponse = await fetch(
         `${CARDAPIOWEB_API_URL}/orders/${order_id}`,
@@ -347,8 +347,9 @@ Deno.serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
 
-    } else if (event === 'ORDER_STATUS_UPDATED') {
-      const newStatus = data.new_status;
+    } else if (event_type === 'ORDER_STATUS_UPDATED') {
+      // order_status comes from the root of the webhook payload
+      const newStatus = order_status;
 
       // Find existing order
       const { data: existingOrder, error: findError } = await supabase
@@ -375,7 +376,7 @@ Deno.serve(async (req) => {
         .update({ 
           status: mappedStatus,
           ...(mappedStatus === 'cancelled' ? { 
-            cancellation_reason: data.cancellation_reason || 'Cancelado pelo CardápioWeb',
+            cancellation_reason: 'Cancelado pelo CardápioWeb',
             cancelled_at: new Date().toISOString(),
           } : {}),
           ...(mappedStatus === 'delivered' ? { 
@@ -406,7 +407,7 @@ Deno.serve(async (req) => {
     }
 
     // Unknown event
-    console.log('[CardápioWeb Webhook] Unknown event:', event);
+    console.log('[CardápioWeb Webhook] Unknown event:', event_type);
     return new Response(
       JSON.stringify({ success: true, message: 'Event ignored' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
