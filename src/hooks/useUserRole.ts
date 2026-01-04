@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTenant } from '@/hooks/useTenant';
 
 export type AppRole = 'admin' | 'cashier' | 'waiter' | 'kitchen' | 'kds';
 
@@ -8,20 +9,29 @@ export interface UserRole {
   id: string;
   user_id: string;
   role: AppRole;
+  tenant_id: string | null;
 }
 
 export function useUserRole() {
   const { user } = useAuth();
+  const { tenantId } = useTenant();
 
   const query = useQuery({
-    queryKey: ['user-roles', user?.id],
+    queryKey: ['user-roles', user?.id, tenantId],
     queryFn: async () => {
       if (!user?.id) return [];
       
-      const { data, error } = await supabase
+      let queryBuilder = supabase
         .from('user_roles')
         .select('*')
         .eq('user_id', user.id);
+      
+      // Filter by tenant if user belongs to one
+      if (tenantId) {
+        queryBuilder = queryBuilder.eq('tenant_id', tenantId);
+      }
+      
+      const { data, error } = await queryBuilder;
       
       if (error) throw error;
       return data as UserRole[];
