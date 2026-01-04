@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { 
   Globe, 
   Key, 
@@ -23,14 +24,182 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
+  AlertTriangle,
+  ExternalLink,
+  BookOpen,
+  Zap,
 } from 'lucide-react';
 import { useCardapioWebIntegration, useCardapioWebMappings, useCardapioWebLogs } from '@/hooks/useCardapioWebIntegration';
 import { useProducts } from '@/hooks/useProducts';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format } from 'date-fns';
+import { format, differenceInHours } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 const WEBHOOK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/cardapioweb-webhook`;
+
+function IntegrationHealthStatus({ logs, integration }: { logs: any[]; integration: any }) {
+  const lastLog = logs[0];
+  const hasRecentActivity = lastLog && differenceInHours(new Date(), new Date(lastLog.created_at)) < 24;
+  const successfulLogs = logs.filter(l => l.status === 'success');
+  const errorLogs = logs.filter(l => l.status === 'error');
+  
+  if (!integration) {
+    return null;
+  }
+
+  return (
+    <Card className={hasRecentActivity ? 'border-green-500/30 bg-green-500/5' : 'border-amber-500/30 bg-amber-500/5'}>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Zap className="h-4 w-4" />
+          Status da Integração
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div>
+            <div className="text-2xl font-bold text-green-600">{successfulLogs.length}</div>
+            <div className="text-xs text-muted-foreground">Eventos OK</div>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-destructive">{errorLogs.length}</div>
+            <div className="text-xs text-muted-foreground">Erros</div>
+          </div>
+          <div>
+            <div className="text-2xl font-bold">{lastLog ? format(new Date(lastLog.created_at), "dd/MM HH:mm", { locale: ptBR }) : '—'}</div>
+            <div className="text-xs text-muted-foreground">Último Evento</div>
+          </div>
+        </div>
+        
+        {!hasRecentActivity && logs.length === 0 && (
+          <Alert variant="default" className="mt-4 border-amber-500/50 bg-amber-500/10">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertTitle className="text-amber-700">Nenhum webhook recebido</AlertTitle>
+            <AlertDescription className="text-amber-600">
+              Configure a URL do webhook no Portal do CardápioWeb para começar a receber pedidos.
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {!hasRecentActivity && logs.length > 0 && (
+          <Alert variant="default" className="mt-4 border-amber-500/50 bg-amber-500/10">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertTitle className="text-amber-700">Sem atividade recente</AlertTitle>
+            <AlertDescription className="text-amber-600">
+              Nenhum webhook recebido nas últimas 24 horas. Verifique se a integração está ativa no CardápioWeb.
+            </AlertDescription>
+          </Alert>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SetupGuide() {
+  const [isOpen, setIsOpen] = useState(true);
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <Card className="border-primary/30 bg-primary/5">
+        <CardHeader className="pb-2">
+          <CollapsibleTrigger className="flex items-center justify-between w-full">
+            <CardTitle className="text-base flex items-center gap-2">
+              <BookOpen className="h-4 w-4" />
+              Guia de Configuração
+            </CardTitle>
+            <Badge variant="outline" className="text-xs">
+              {isOpen ? 'Clique para fechar' : 'Clique para expandir'}
+            </Badge>
+          </CollapsibleTrigger>
+        </CardHeader>
+        <CollapsibleContent>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="flex items-center justify-center h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex-shrink-0">
+                  1
+                </div>
+                <div>
+                  <p className="font-medium">Copie a URL do Webhook</p>
+                  <p className="text-sm text-muted-foreground">
+                    Use o botão de copiar no campo "URL do Webhook" abaixo.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <div className="flex items-center justify-center h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex-shrink-0">
+                  2
+                </div>
+                <div>
+                  <p className="font-medium">Acesse o Portal do CardápioWeb</p>
+                  <p className="text-sm text-muted-foreground">
+                    Faça login no seu painel administrativo do CardápioWeb.
+                  </p>
+                  <Button 
+                    variant="link" 
+                    className="h-auto p-0 text-sm" 
+                    asChild
+                  >
+                    <a href="https://cardapioweb.com.br" target="_blank" rel="noopener noreferrer">
+                      Abrir CardápioWeb <ExternalLink className="h-3 w-3 ml-1" />
+                    </a>
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <div className="flex items-center justify-center h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex-shrink-0">
+                  3
+                </div>
+                <div>
+                  <p className="font-medium">Configure o Webhook</p>
+                  <p className="text-sm text-muted-foreground">
+                    No CardápioWeb, vá em <strong>Configurações → Integrações → Webhook</strong> e cole a URL copiada.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <div className="flex items-center justify-center h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex-shrink-0">
+                  4
+                </div>
+                <div>
+                  <p className="font-medium">Preencha as credenciais aqui</p>
+                  <p className="text-sm text-muted-foreground">
+                    Insira seu API Token e ID da Loja (merchant_id) nos campos abaixo.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <div className="flex items-center justify-center h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex-shrink-0">
+                  5
+                </div>
+                <div>
+                  <p className="font-medium">Faça um pedido de teste</p>
+                  <p className="text-sm text-muted-foreground">
+                    Crie um pedido no CardápioWeb para verificar se está funcionando. O pedido deve aparecer automaticamente.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Importante</AlertTitle>
+              <AlertDescription>
+                O <strong>ID da Loja (merchant_id)</strong> deve corresponder exatamente ao ID configurado no CardápioWeb. 
+                Se não souber o ID, verifique nas configurações da sua loja no painel do CardápioWeb.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+  );
+}
 
 export function CardapioWebSettings() {
   const { integration, isLoading, saveIntegration, deleteIntegration, testConnection } = useCardapioWebIntegration();
@@ -109,6 +278,14 @@ export function CardapioWebSettings() {
         )}
       </div>
 
+      {/* Setup Guide */}
+      <SetupGuide />
+
+      {/* Health Status */}
+      {integration && !logsLoading && (
+        <IntegrationHealthStatus logs={logs} integration={integration} />
+      )}
+
       <Tabs defaultValue="config">
         <TabsList>
           <TabsTrigger value="config">Configuração</TabsTrigger>
@@ -138,7 +315,7 @@ export function CardapioWebSettings() {
                 Configure este URL no Portal do CardápioWeb para receber pedidos automaticamente
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               <div className="flex gap-2">
                 <Input 
                   value={WEBHOOK_URL} 
@@ -149,10 +326,14 @@ export function CardapioWebSettings() {
                   variant="outline" 
                   size="icon"
                   onClick={handleCopyWebhook}
+                  title="Copiar URL"
                 >
-                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                ⚠️ Cole esta URL exatamente como está no campo de webhook do CardápioWeb.
+              </p>
             </CardContent>
           </Card>
 
@@ -182,7 +363,7 @@ export function CardapioWebSettings() {
               <div className="space-y-2">
                 <Label htmlFor="store-id" className="flex items-center gap-2">
                   <Store className="h-4 w-4" />
-                  ID da Loja (merchant_id)
+                  ID da Loja (merchant_id) *
                 </Label>
                 <Input
                   id="store-id"
@@ -191,7 +372,7 @@ export function CardapioWebSettings() {
                   onChange={(e) => setStoreId(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Necessário para receber webhooks. Encontre no Portal do CardápioWeb.
+                  ⚠️ Este ID deve corresponder exatamente ao merchant_id enviado pelo CardápioWeb nos webhooks.
                 </p>
               </div>
 
@@ -348,8 +529,13 @@ export function CardapioWebSettings() {
               ) : logs.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Clock className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p>Nenhum log registrado ainda.</p>
-                  <p className="text-sm">Os webhooks aparecerão aqui quando receberem eventos.</p>
+                  <p className="font-medium">Nenhum webhook recebido ainda</p>
+                  <p className="text-sm mt-1">
+                    Verifique se a URL do webhook foi configurada corretamente no CardápioWeb.
+                  </p>
+                  <p className="text-sm mt-2 text-amber-600">
+                    Dica: Faça um pedido de teste no CardápioWeb para verificar se a integração está funcionando.
+                  </p>
                 </div>
               ) : (
                 <ScrollArea className="h-[400px]">
