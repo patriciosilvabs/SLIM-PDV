@@ -14,6 +14,143 @@ export type Database = {
   }
   public: {
     Tables: {
+      cardapioweb_integrations: {
+        Row: {
+          api_token: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          last_sync_at: string | null
+          store_id: string | null
+          tenant_id: string
+          updated_at: string | null
+          webhook_secret: string | null
+        }
+        Insert: {
+          api_token: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_sync_at?: string | null
+          store_id?: string | null
+          tenant_id: string
+          updated_at?: string | null
+          webhook_secret?: string | null
+        }
+        Update: {
+          api_token?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_sync_at?: string | null
+          store_id?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+          webhook_secret?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cardapioweb_integrations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cardapioweb_logs: {
+        Row: {
+          created_at: string | null
+          error_message: string | null
+          event_type: string
+          external_order_id: string | null
+          id: string
+          payload: Json | null
+          status: string | null
+          tenant_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          error_message?: string | null
+          event_type: string
+          external_order_id?: string | null
+          id?: string
+          payload?: Json | null
+          status?: string | null
+          tenant_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          error_message?: string | null
+          event_type?: string
+          external_order_id?: string | null
+          id?: string
+          payload?: Json | null
+          status?: string | null
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cardapioweb_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cardapioweb_product_mappings: {
+        Row: {
+          cardapioweb_item_id: number
+          cardapioweb_item_name: string
+          created_at: string | null
+          id: string
+          local_product_id: string | null
+          local_variation_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          cardapioweb_item_id: number
+          cardapioweb_item_name: string
+          created_at?: string | null
+          id?: string
+          local_product_id?: string | null
+          local_variation_id?: string | null
+          tenant_id: string
+        }
+        Update: {
+          cardapioweb_item_id?: number
+          cardapioweb_item_name?: string
+          created_at?: string | null
+          id?: string
+          local_product_id?: string | null
+          local_variation_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cardapioweb_product_mappings_local_product_id_fkey"
+            columns: ["local_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cardapioweb_product_mappings_local_variation_id_fkey"
+            columns: ["local_variation_id"]
+            isOneToOne: false
+            referencedRelation: "product_variations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cardapioweb_product_mappings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cash_movements: {
         Row: {
           amount: number
@@ -1298,13 +1435,20 @@ export type Database = {
           customer_name: string | null
           customer_phone: string | null
           delivered_at: string | null
+          delivery_fee: number | null
           discount: number | null
+          external_display_id: string | null
+          external_order_id: string | null
+          external_source: string | null
           id: string
           is_draft: boolean | null
           notes: string | null
           order_type: Database["public"]["Enums"]["order_type"] | null
           party_size: number | null
+          payment_method: string | null
+          payment_status: string | null
           ready_at: string | null
+          scheduled_for: string | null
           served_at: string | null
           status: Database["public"]["Enums"]["order_status"] | null
           status_before_cancellation:
@@ -1326,13 +1470,20 @@ export type Database = {
           customer_name?: string | null
           customer_phone?: string | null
           delivered_at?: string | null
+          delivery_fee?: number | null
           discount?: number | null
+          external_display_id?: string | null
+          external_order_id?: string | null
+          external_source?: string | null
           id?: string
           is_draft?: boolean | null
           notes?: string | null
           order_type?: Database["public"]["Enums"]["order_type"] | null
           party_size?: number | null
+          payment_method?: string | null
+          payment_status?: string | null
           ready_at?: string | null
+          scheduled_for?: string | null
           served_at?: string | null
           status?: Database["public"]["Enums"]["order_status"] | null
           status_before_cancellation?:
@@ -1354,13 +1505,20 @@ export type Database = {
           customer_name?: string | null
           customer_phone?: string | null
           delivered_at?: string | null
+          delivery_fee?: number | null
           discount?: number | null
+          external_display_id?: string | null
+          external_order_id?: string | null
+          external_source?: string | null
           id?: string
           is_draft?: boolean | null
           notes?: string | null
           order_type?: Database["public"]["Enums"]["order_type"] | null
           party_size?: number | null
+          payment_method?: string | null
+          payment_status?: string | null
           ready_at?: string | null
+          scheduled_for?: string | null
           served_at?: string | null
           status?: Database["public"]["Enums"]["order_status"] | null
           status_before_cancellation?:

@@ -23,3 +23,9 @@ verify_jwt = true
 
 [functions.admin-update-user]
 verify_jwt = true
+
+[functions.cardapioweb-webhook]
+verify_jwt = false
+
+[functions.cardapioweb-sync-status]
+verify_jwt = true
