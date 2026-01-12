@@ -28,8 +28,10 @@ import {
   ExternalLink,
   BookOpen,
   Zap,
+  Download,
+  Calendar,
 } from 'lucide-react';
-import { useCardapioWebIntegration, useCardapioWebMappings, useCardapioWebLogs } from '@/hooks/useCardapioWebIntegration';
+import { useCardapioWebIntegration, useCardapioWebMappings, useCardapioWebLogs, useSyncOrders } from '@/hooks/useCardapioWebIntegration';
 import { useProducts } from '@/hooks/useProducts';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, differenceInHours } from 'date-fns';
@@ -206,12 +208,14 @@ export function CardapioWebSettings() {
   const { mappings, isLoading: mappingsLoading, updateMapping, deleteMapping } = useCardapioWebMappings();
   const { logs, isLoading: logsLoading } = useCardapioWebLogs();
   const { data: products } = useProducts();
+  const syncOrders = useSyncOrders();
 
   const [apiToken, setApiToken] = useState('');
   const [storeId, setStoreId] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [syncPeriod, setSyncPeriod] = useState('today');
 
   useEffect(() => {
     if (integration) {
@@ -245,6 +249,38 @@ export function CardapioWebSettings() {
     if (confirm('Tem certeza que deseja remover a integração?')) {
       deleteIntegration.mutate();
     }
+  };
+
+  const handleSync = () => {
+    const today = new Date();
+    let start_date: string;
+    let end_date = today.toISOString().split('T')[0];
+    
+    switch (syncPeriod) {
+      case 'today':
+        start_date = end_date;
+        break;
+      case 'yesterday':
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        start_date = yesterday.toISOString().split('T')[0];
+        end_date = start_date;
+        break;
+      case 'week':
+        const weekAgo = new Date(today);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        start_date = weekAgo.toISOString().split('T')[0];
+        break;
+      case 'month':
+        const monthAgo = new Date(today);
+        monthAgo.setDate(monthAgo.getDate() - 30);
+        start_date = monthAgo.toISOString().split('T')[0];
+        break;
+      default:
+        start_date = end_date;
+    }
+    
+    syncOrders.mutate({ start_date, end_date });
   };
 
   if (isLoading) {
@@ -289,6 +325,9 @@ export function CardapioWebSettings() {
       <Tabs defaultValue="config">
         <TabsList>
           <TabsTrigger value="config">Configuração</TabsTrigger>
+          <TabsTrigger value="sync">
+            Sincronizar
+          </TabsTrigger>
           <TabsTrigger value="mappings">
             Mapeamento de Produtos
             {mappings.length > 0 && (
@@ -435,6 +474,104 @@ export function CardapioWebSettings() {
               {saveIntegration.isPending ? 'Salvando...' : 'Salvar'}
             </Button>
           </div>
+        </TabsContent>
+
+        <TabsContent value="sync" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Download className="h-4 w-4" />
+                Sincronizar Pedidos
+              </CardTitle>
+              <CardDescription>
+                Importe pedidos anteriores do CardápioWeb que não foram recebidos via webhook
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!integration ? (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Integração não configurada</AlertTitle>
+                  <AlertDescription>
+                    Configure a integração na aba "Configuração" antes de sincronizar pedidos.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="sync-period" className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      Período
+                    </Label>
+                    <Select value={syncPeriod} onValueChange={setSyncPeriod}>
+                      <SelectTrigger id="sync-period">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="today">Hoje</SelectItem>
+                        <SelectItem value="yesterday">Ontem</SelectItem>
+                        <SelectItem value="week">Últimos 7 dias</SelectItem>
+                        <SelectItem value="month">Últimos 30 dias</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Selecione o período para buscar pedidos do CardápioWeb
+                    </p>
+                  </div>
+
+                  <Button 
+                    onClick={handleSync}
+                    disabled={syncOrders.isPending}
+                    className="w-full"
+                  >
+                    {syncOrders.isPending ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Sincronizando...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-4 w-4 mr-2" />
+                        Sincronizar Agora
+                      </>
+                    )}
+                  </Button>
+
+                  {syncOrders.data && (
+                    <Alert className={syncOrders.data.errors > 0 ? 'border-amber-500/50 bg-amber-500/10' : 'border-green-500/50 bg-green-500/10'}>
+                      {syncOrders.data.errors > 0 ? (
+                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      ) : (
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                      )}
+                      <AlertTitle>
+                        {syncOrders.data.errors > 0 ? 'Sincronização parcial' : 'Sincronização concluída'}
+                      </AlertTitle>
+                      <AlertDescription>
+                        <ul className="text-sm mt-1 space-y-1">
+                          <li>• {syncOrders.data.total} pedidos encontrados</li>
+                          <li>• {syncOrders.data.imported} importados</li>
+                          <li>• {syncOrders.data.skipped} já existiam</li>
+                          {syncOrders.data.errors > 0 && (
+                            <li className="text-amber-600">• {syncOrders.data.errors} erros</li>
+                          )}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Como funciona</AlertTitle>
+                    <AlertDescription>
+                      Esta função busca pedidos diretamente da API do CardápioWeb. 
+                      Pedidos que já existem no sistema serão ignorados automaticamente.
+                    </AlertDescription>
+                  </Alert>
+                </>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="mappings" className="mt-4">
