@@ -305,3 +305,50 @@ export function useSyncOrderStatus() {
     },
   });
 }
+
+export interface SyncOrdersResult {
+  success: boolean;
+  imported: number;
+  skipped: number;
+  errors: number;
+  total: number;
+}
+
+export function useSyncOrders() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      start_date,
+      end_date,
+    }: {
+      start_date: string;
+      end_date: string;
+    }): Promise<SyncOrdersResult> => {
+      const { data, error } = await supabase.functions.invoke('cardapioweb-sync-orders', {
+        body: { start_date, end_date },
+      });
+
+      if (error) throw error;
+      return data as SyncOrdersResult;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['cardapioweb-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['cardapioweb-mappings'] });
+      toast({
+        title: 'Sincronização concluída!',
+        description: `${data.imported} pedidos importados, ${data.skipped} já existiam.`,
+      });
+    },
+    onError: (error: Error) => {
+      console.error('[CardápioWeb] Sync orders error:', error);
+      toast({
+        title: 'Erro na sincronização',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+}

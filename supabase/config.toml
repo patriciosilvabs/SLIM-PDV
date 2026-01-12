@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.cardapioweb-sync-status]
 verify_jwt = true
+
+[functions.cardapioweb-sync-orders]
+verify_jwt = true
