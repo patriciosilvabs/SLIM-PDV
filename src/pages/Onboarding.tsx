@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTenant } from '@/hooks/useTenant';
+import { useTenantContext } from '@/contexts/TenantContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,10 +23,14 @@ const tenantSchema = z.object({
 
 export default function Onboarding() {
   const { user, loading: authLoading, signOut } = useAuth();
-  const { hasTenant, isLoading: tenantLoading } = useTenant();
+  const { hasTenant, isLoading: tenantLoading, refreshTenants, setActiveTenant } = useTenantContext();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Check if user wants to add another store
+  const addingStore = searchParams.get('add') === 'store';
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -277,8 +281,12 @@ export default function Onboarding() {
         description: 'Você já pode começar a usar o sistema.',
       });
 
-      // Force page reload to refresh tenant context
-      window.location.href = '/dashboard';
+      // Refresh tenants list and switch to new tenant
+      await refreshTenants();
+      setActiveTenant(tenant.id);
+      
+      // Navigate to dashboard
+      navigate('/dashboard');
     } catch (error: unknown) {
       console.error('=== Onboarding Error ===', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -304,7 +312,8 @@ export default function Onboarding() {
     return <Navigate to="/auth" replace />;
   }
 
-  if (hasTenant) {
+  // Only redirect to dashboard if user has tenant AND is not explicitly adding a store
+  if (hasTenant && !addingStore) {
     return <Navigate to="/dashboard" replace />;
   }
 

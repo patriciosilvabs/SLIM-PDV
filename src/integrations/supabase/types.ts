@@ -2481,6 +2481,7 @@ export type Database = {
           max_orders_per_month: number | null
           max_products: number | null
           max_tables: number | null
+          max_tenants: number | null
           max_users: number | null
           name: string
           price_monthly: number
@@ -2498,6 +2499,7 @@ export type Database = {
           max_orders_per_month?: number | null
           max_products?: number | null
           max_tables?: number | null
+          max_tenants?: number | null
           max_users?: number | null
           name: string
           price_monthly?: number
@@ -2515,6 +2517,7 @@ export type Database = {
           max_orders_per_month?: number | null
           max_products?: number | null
           max_tables?: number | null
+          max_tenants?: number | null
           max_users?: number | null
           name?: string
           price_monthly?: number
