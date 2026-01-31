@@ -16,6 +16,7 @@ import {
   Mail,
   Wallet,
   Plug,
+  Target,
   LucideIcon
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -27,6 +28,7 @@ export type SettingsSection =
   | 'orders' 
   | 'printers' 
   | 'cash-register'
+  | 'production-targets'
   | 'notifications' 
   | 'announcements' 
   | 'push' 
@@ -43,6 +45,7 @@ export const SECTION_INFO: Record<SettingsSection, { label: string; icon: Lucide
   orders: { label: 'Pedidos', icon: ShoppingCart },
   printers: { label: 'Impressoras', icon: Printer },
   'cash-register': { label: 'Caixa', icon: Wallet },
+  'production-targets': { label: 'Metas de Produção', icon: Target },
   notifications: { label: 'Sons', icon: Bell },
   announcements: { label: 'Avisos Agendados', icon: Megaphone },
   push: { label: 'Push', icon: Smartphone },
@@ -67,6 +70,7 @@ const sections = [
       { id: 'orders' as const, label: 'Pedidos', icon: ShoppingCart },
       { id: 'printers' as const, label: 'Impressoras', icon: Printer },
       { id: 'cash-register' as const, label: 'Caixa', icon: Wallet },
+      { id: 'production-targets' as const, label: 'Metas de Produção', icon: Target },
     ],
   },
   {
