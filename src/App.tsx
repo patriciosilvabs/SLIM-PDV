@@ -52,9 +52,9 @@ const App = () => (
         <OfflineSyncProvider>
           <PrinterProvider>
             <TooltipProvider>
-              <PrintQueueListener />
               <Sonner />
               <BrowserRouter>
+                <PrintQueueListener />
                 <Routes>
                   <Route path="/" element={<Navigate to="/auth" replace />} />
                   <Route path="/auth" element={<Auth />} />
