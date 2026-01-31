@@ -64,33 +64,51 @@ export interface UserWithRoles {
 }
 
 export function useAllUsers() {
+  const { tenantId } = useTenant();
+
   return useQuery({
-    queryKey: ['all-users'],
+    queryKey: ['all-users', tenantId],
     queryFn: async () => {
-      // Fetch profiles
+      if (!tenantId) return [];
+
+      // Fetch only members of the current tenant
+      const { data: members, error: membersError } = await supabase
+        .from('tenant_members')
+        .select('user_id')
+        .eq('tenant_id', tenantId);
+
+      if (membersError) throw membersError;
+      if (!members?.length) return [];
+
+      const userIds = members.map(m => m.user_id);
+
+      // Fetch profiles only for tenant members
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('*');
+        .select('*')
+        .in('id', userIds);
       
       if (profilesError) throw profilesError;
 
-      // Fetch all roles
+      // Fetch roles filtered by tenant
       const { data: allRoles, error: rolesError } = await supabase
         .from('user_roles')
-        .select('*');
+        .select('*')
+        .eq('tenant_id', tenantId);
       
       if (rolesError) throw rolesError;
 
       // Combine data
-      const usersWithRoles: UserWithRoles[] = profiles.map((profile) => ({
+      const usersWithRoles: UserWithRoles[] = (profiles || []).map((profile) => ({
         ...profile,
-        user_roles: allRoles
+        user_roles: (allRoles || [])
           .filter((role) => role.user_id === profile.id)
           .map((r) => ({ role: r.role as AppRole })),
       }));
 
       return usersWithRoles;
     },
+    enabled: !!tenantId,
   });
 }
 
