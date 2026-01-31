@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { TenantProvider } from "@/contexts/TenantContext";
 import { OfflineSyncProvider } from "@/contexts/OfflineSyncContext";
 import { PrinterProvider } from "@/contexts/PrinterContext";
 import { PrintQueueListener } from "@/components/PrintQueueListener";
@@ -33,6 +34,7 @@ import AuditDashboard from "./pages/AuditDashboard";
 import ShareReceiver from "./pages/ShareReceiver";
 import AcceptInvite from "./pages/AcceptInvite";
 import Production from "./pages/Production";
+import CreateStore from "./pages/CreateStore";
 import NotFound from "./pages/NotFound";
 
 // Platform Admin Pages
@@ -46,55 +48,58 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <OfflineSyncProvider>
-        <PrinterProvider>
-          <TooltipProvider>
-            <PrintQueueListener />
-            <Sonner />
-            <BrowserRouter>
-              <Routes>
-                <Route path="/" element={<Navigate to="/auth" replace />} />
-                <Route path="/auth" element={<Auth />} />
-                <Route path="/reset-password" element={<ResetPassword />} />
-                <Route path="/onboarding" element={<Onboarding />} />
-                <Route path="/invite/:token" element={<AcceptInvite />} />
-                
-                {/* Platform Admin routes */}
-                <Route path="/platform" element={<PlatformDashboard />} />
-                <Route path="/platform/tenants" element={<PlatformTenants />} />
-                <Route path="/platform/subscriptions" element={<PlatformSubscriptions />} />
-                <Route path="/platform/admins" element={<PlatformAdmins />} />
-                
-                {/* Protected routes - require tenant */}
-                <Route path="/dashboard" element={<RequireTenant><Dashboard /></RequireTenant>} />
-                <Route path="/tables" element={<RequireTenant><Tables /></RequireTenant>} />
-                <Route path="/orders" element={<RequireTenant><Orders /></RequireTenant>} />
-                <Route path="/menu" element={<RequireTenant><Menu /></RequireTenant>} />
-                <Route path="/stock" element={<RequireTenant><Stock /></RequireTenant>} />
-                <Route path="/cash-register" element={<RequireTenant><CashRegister /></RequireTenant>} />
-                <Route path="/reports" element={<RequireTenant><Reports /></RequireTenant>} />
-                <Route path="/settings" element={<RequireTenant><Settings /></RequireTenant>} />
-                <Route path="/settings/:section" element={<RequireTenant><Settings /></RequireTenant>} />
-                <Route path="/install" element={<RequireTenant><Install /></RequireTenant>} />
-                <Route path="/counter" element={<RequireTenant><Counter /></RequireTenant>} />
-                <Route path="/customers" element={<RequireTenant><Customers /></RequireTenant>} />
-                <Route path="/order-management" element={<RequireTenant><OrderManagement /></RequireTenant>} />
-                <Route path="/kds" element={<RequireTenant><KDS /></RequireTenant>} />
-                <Route path="/closing-history" element={<RequireTenant><ClosingHistory /></RequireTenant>} />
-                <Route path="/cancellation-history" element={<RequireTenant><CancellationHistory /></RequireTenant>} />
-                <Route path="/item-cancellation-history" element={<RequireTenant><ItemCancellationHistory /></RequireTenant>} />
-                <Route path="/performance" element={<RequireTenant><Performance /></RequireTenant>} />
-                <Route path="/reopen-history" element={<RequireTenant><ReopenHistory /></RequireTenant>} />
-                <Route path="/audit-dashboard" element={<RequireTenant><AuditDashboard /></RequireTenant>} />
-                <Route path="/share-receiver" element={<RequireTenant><ShareReceiver /></RequireTenant>} />
-                <Route path="/profile" element={<RequireTenant><Profile /></RequireTenant>} />
-                <Route path="/production" element={<RequireTenant><Production /></RequireTenant>} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </BrowserRouter>
-          </TooltipProvider>
-        </PrinterProvider>
-      </OfflineSyncProvider>
+      <TenantProvider>
+        <OfflineSyncProvider>
+          <PrinterProvider>
+            <TooltipProvider>
+              <PrintQueueListener />
+              <Sonner />
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/" element={<Navigate to="/auth" replace />} />
+                  <Route path="/auth" element={<Auth />} />
+                  <Route path="/reset-password" element={<ResetPassword />} />
+                  <Route path="/onboarding" element={<Onboarding />} />
+                  <Route path="/invite/:token" element={<AcceptInvite />} />
+                  <Route path="/create-store" element={<CreateStore />} />
+                  
+                  {/* Platform Admin routes */}
+                  <Route path="/platform" element={<PlatformDashboard />} />
+                  <Route path="/platform/tenants" element={<PlatformTenants />} />
+                  <Route path="/platform/subscriptions" element={<PlatformSubscriptions />} />
+                  <Route path="/platform/admins" element={<PlatformAdmins />} />
+                  
+                  {/* Protected routes - require tenant */}
+                  <Route path="/dashboard" element={<RequireTenant><Dashboard /></RequireTenant>} />
+                  <Route path="/tables" element={<RequireTenant><Tables /></RequireTenant>} />
+                  <Route path="/orders" element={<RequireTenant><Orders /></RequireTenant>} />
+                  <Route path="/menu" element={<RequireTenant><Menu /></RequireTenant>} />
+                  <Route path="/stock" element={<RequireTenant><Stock /></RequireTenant>} />
+                  <Route path="/cash-register" element={<RequireTenant><CashRegister /></RequireTenant>} />
+                  <Route path="/reports" element={<RequireTenant><Reports /></RequireTenant>} />
+                  <Route path="/settings" element={<RequireTenant><Settings /></RequireTenant>} />
+                  <Route path="/settings/:section" element={<RequireTenant><Settings /></RequireTenant>} />
+                  <Route path="/install" element={<RequireTenant><Install /></RequireTenant>} />
+                  <Route path="/counter" element={<RequireTenant><Counter /></RequireTenant>} />
+                  <Route path="/customers" element={<RequireTenant><Customers /></RequireTenant>} />
+                  <Route path="/order-management" element={<RequireTenant><OrderManagement /></RequireTenant>} />
+                  <Route path="/kds" element={<RequireTenant><KDS /></RequireTenant>} />
+                  <Route path="/closing-history" element={<RequireTenant><ClosingHistory /></RequireTenant>} />
+                  <Route path="/cancellation-history" element={<RequireTenant><CancellationHistory /></RequireTenant>} />
+                  <Route path="/item-cancellation-history" element={<RequireTenant><ItemCancellationHistory /></RequireTenant>} />
+                  <Route path="/performance" element={<RequireTenant><Performance /></RequireTenant>} />
+                  <Route path="/reopen-history" element={<RequireTenant><ReopenHistory /></RequireTenant>} />
+                  <Route path="/audit-dashboard" element={<RequireTenant><AuditDashboard /></RequireTenant>} />
+                  <Route path="/share-receiver" element={<RequireTenant><ShareReceiver /></RequireTenant>} />
+                  <Route path="/profile" element={<RequireTenant><Profile /></RequireTenant>} />
+                  <Route path="/production" element={<RequireTenant><Production /></RequireTenant>} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </BrowserRouter>
+            </TooltipProvider>
+          </PrinterProvider>
+        </OfflineSyncProvider>
+      </TenantProvider>
     </AuthProvider>
   </QueryClientProvider>
 );

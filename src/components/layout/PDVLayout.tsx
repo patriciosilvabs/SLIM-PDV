@@ -5,12 +5,14 @@ import { useUserRole, AppRole } from '@/hooks/useUserRole';
 import { useUserPermissions, PermissionCode } from '@/hooks/useUserPermissions';
 import { usePlatformAdmin } from '@/hooks/usePlatformAdmin';
 import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
+import { useTenantContext } from '@/contexts/TenantContext';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { PrinterStatusIndicator } from '@/components/PrinterStatusIndicator';
+import { TenantSwitcher } from '@/components/TenantSwitcher';
 import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Store, Users, Kanban, ChefHat, History, Target, UserCircle, Pizza, RotateCcw, Shield, Ban, Crown, Factory } from 'lucide-react';
 import logoSlim from '@/assets/logo-slim.png';
 
@@ -64,13 +66,14 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
   const { roles, isLoading: rolesLoading } = useUserRole();
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const { isPlatformAdmin } = usePlatformAdmin();
+  const { allTenants, isLoading: tenantLoading } = useTenantContext();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Initialize realtime notifications
   useRealtimeNotifications();
 
-  if (loading || rolesLoading || permissionsLoading) {
+  if (loading || rolesLoading || permissionsLoading || tenantLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -138,6 +141,13 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
           <div className="h-16 flex items-center justify-center px-4 border-b border-sidebar-border">
             <img src={logoSlim} alt="slim - Sistema para Restaurante" className="max-h-12 max-w-full object-contain" />
           </div>
+
+          {/* Tenant Switcher - only show if multiple tenants */}
+          {allTenants.length > 1 && (
+            <div className="px-3 py-2 border-b border-sidebar-border">
+              <TenantSwitcher />
+            </div>
+          )}
 
           {/* Status indicators for desktop */}
           <div className="hidden lg:flex px-4 py-2 border-b border-sidebar-border gap-2">
