@@ -1,114 +1,284 @@
 
+# Plano: Sistema Multi-Loja com Grupos e Replicação de Cardápio
 
-# Plano: Resolver Problema de Usuários de Outros Tenants Aparecendo
+## Visão Geral
 
-## Problema Diagnosticado
+Implementar funcionalidades para que um proprietário possa:
+1. Criar múltiplas lojas dentro de um "grupo"
+2. Cada loja ter seu link de pedidos independente (via slug)
+3. Replicar/sincronizar cardápio entre lojas do mesmo grupo
 
-Após análise detalhada do banco de dados e código:
+## Arquitetura Proposta
 
-| Usuário | Status no Banco | Tenant Associado |
-|---------|-----------------|------------------|
-| DOM HELDER PIZZARIA | ✅ Correto | DOM HELDER PIZZARIA |
-| HELDER MOITA FREIRE | ✅ Correto | DOM HELDER PIZZARIA - ALEIXO |
-| PATRICIO | ✅ Correto | Meu Restaurante |
-| JULIETE CAIXA | ⚠️ Sem tenant_members | Nenhum |
-| KDS-ALEIXO | ⚠️ Errado | Meu Restaurante (em user_roles) mas sem tenant_members |
-
-### Causa Raiz
-
-1. **Código correto mas não publicado** - As alterações no hook `useAllUsers()` foram feitas no preview, mas o usuário está acessando a **versão publicada** que ainda tem o código antigo
-
-2. **Dados legados** - Alguns usuários foram criados antes da implementação do sistema multi-tenant e não têm registro na tabela `tenant_members`
-
----
-
-## Solução em Duas Etapas
-
-### Etapa 1: Publicar a Aplicação
-
-Você precisa **publicar** o projeto para que as correções de código sejam aplicadas na versão de produção.
-
-O código já está correto no preview:
-- Hook `useAllUsers()` → Filtra por `tenant_members`
-- Hook `useEmployees()` → Filtra por `tenant_members`
-
-### Etapa 2: Limpar Dados Legados do Banco
-
-Usuários antigos que não pertencem a nenhum tenant precisam ser removidos ou corrigidos.
-
-**Opção A - Remover usuários órfãos:**
-Executar SQL para excluir usuários sem associação a tenant:
-
-```sql
--- Ver usuários órfãos
-SELECT p.id, p.name
-FROM profiles p
-LEFT JOIN tenant_members tm ON tm.user_id = p.id
-WHERE tm.user_id IS NULL;
-
--- Remover roles de usuários órfãos
-DELETE FROM user_roles
-WHERE user_id NOT IN (SELECT user_id FROM tenant_members);
-
--- Os profiles podem ficar, pois podem ter referências em históricos
-```
-
-**Opção B - Associar usuários órfãos ao tenant correto:**
-Se JULIETE CAIXA deveria pertencer a "DOM HELDER PIZZARIA":
-
-```sql
-INSERT INTO tenant_members (user_id, tenant_id, is_owner, joined_at)
-VALUES (
-  '19107f85-df7d-4408-80f1-f871cb7ad699',  -- JULIETE CAIXA
-  '9760d4e5-4a73-4668-97bb-280170ff3431',  -- DOM HELDER PIZZARIA
-  false,
-  now()
-);
-
--- Atualizar role para ter tenant_id
-UPDATE user_roles
-SET tenant_id = '9760d4e5-4a73-4668-97bb-280170ff3431'
-WHERE user_id = '19107f85-df7d-4408-80f1-f871cb7ad699';
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                     OWNER (Proprietário)                    │
+│                    owner_id = user.id                       │
+└───────────────────────────┬─────────────────────────────────┘
+                            │
+                            │ Possui múltiplos
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    TENANT GROUP (Grupo)                     │
+│    - Agrupa lojas do mesmo dono                             │
+│    - Todas lojas com mesmo owner_id = mesmo grupo           │
+└───────────────────────────┬─────────────────────────────────┘
+                            │
+          ┌─────────────────┼─────────────────┐
+          ▼                 ▼                 ▼
+    ┌──────────┐      ┌──────────┐      ┌──────────┐
+    │  Loja 1  │      │  Loja 2  │      │  Loja 3  │
+    │  /loja1  │      │  /loja2  │      │  /loja3  │
+    └──────────┘      └──────────┘      └──────────┘
+          │                 │
+          │  REPLICAR ──────┘
+          ▼
+    Categorias, Produtos, Grupos de Complemento, Opções
 ```
 
 ---
 
-## Ações Necessárias
+## Fase 1: Conceito de Grupo de Lojas
 
-| # | Ação | Responsável |
-|---|------|-------------|
-| 1 | Publicar o projeto (botão "Publish" no Lovable) | Você |
-| 2 | Executar migração SQL para limpar dados | Sistema (eu farei) |
+### Abordagem Simplificada (sem nova tabela)
 
----
+Todas as lojas do mesmo `owner_id` formam automaticamente um "grupo". Isso evita complexidade adicional e aproveita a estrutura existente.
 
-## SQL de Limpeza Proposto
+A identificação do grupo será:
+- **Grupo** = Todas as `tenants` onde `owner_id = user_id_do_proprietario`
 
-Executarei uma migração que:
-
-1. Remove roles de usuários sem tenant_members
-2. NÃO deleta os profiles (mantém histórico de ações)
+### Consulta para buscar lojas do grupo
 
 ```sql
--- Remover roles órfãs (usuários sem tenant)
-DELETE FROM user_roles
-WHERE user_id NOT IN (
-  SELECT user_id FROM tenant_members
-);
-
--- Remover permissões órfãs
-DELETE FROM user_permissions  
-WHERE user_id NOT IN (
-  SELECT user_id FROM tenant_members
-);
+SELECT * FROM tenants 
+WHERE owner_id = (SELECT owner_id FROM tenants WHERE id = :current_tenant_id)
 ```
 
 ---
 
-## Resultado Esperado
+## Fase 2: Interface de Gerenciamento de Lojas do Grupo
 
-Após publicar e executar a limpeza:
-- Cada cliente verá **APENAS** usuários do seu restaurante
-- Usuários legados serão removidos da listagem
-- O sistema estará seguro contra vazamento de dados entre tenants
+### 2.1 Nova Seção em Configurações: "Minhas Lojas"
+
+| Arquivo | Ação |
+|---------|------|
+| `src/components/settings/SettingsSidebar.tsx` | Adicionar seção "Lojas" com ícone `Building2` |
+| `src/components/settings/StoresSettings.tsx` | Novo componente para gerenciar lojas do grupo |
+| `src/pages/Settings.tsx` | Registrar nova seção |
+
+### 2.2 Componente StoresSettings
+
+Funcionalidades:
+- Listar todas as lojas do grupo (mesmo owner_id)
+- Botão para criar nova loja (redireciona para `/create-store`)
+- Ver link do cardápio de cada loja (`slim.app/{slug}`)
+- Acessar configurações de cada loja
+
+### 2.3 Hook useGroupStores
+
+```typescript
+// src/hooks/useGroupStores.ts
+export function useGroupStores() {
+  const { tenantId } = useTenant();
+  
+  return useQuery({
+    queryKey: ['group-stores', tenantId],
+    queryFn: async () => {
+      // 1. Buscar owner_id do tenant atual
+      const { data: currentTenant } = await supabase
+        .from('tenants')
+        .select('owner_id')
+        .eq('id', tenantId)
+        .single();
+      
+      if (!currentTenant?.owner_id) return [];
+      
+      // 2. Buscar todas lojas do mesmo owner
+      const { data } = await supabase
+        .from('tenants')
+        .select('id, name, slug, is_active, created_at')
+        .eq('owner_id', currentTenant.owner_id)
+        .order('created_at');
+      
+      return data || [];
+    },
+    enabled: !!tenantId,
+  });
+}
+```
+
+---
+
+## Fase 3: Replicação de Cardápio
+
+### 3.1 Dados que serão replicados
+
+| Tabela | Campos a copiar |
+|--------|-----------------|
+| `categories` | name, description, icon, sort_order, is_active |
+| `products` | Todos os campos exceto id, tenant_id, created_at, updated_at |
+| `product_variations` | name, description, price_modifier, is_active |
+| `complement_groups` | Todos os campos de configuração |
+| `complement_options` | name, price, cost_price, etc |
+| `complement_group_options` | Associações entre grupos e opções |
+| `product_complement_groups` | Associações entre produtos e grupos |
+
+### 3.2 Interface de Replicação
+
+Nova tela/modal: **"Replicar Cardápio"**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│            REPLICAR CARDÁPIO PARA OUTRAS LOJAS              │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Origem: DOM HELDER PIZZARIA (loja atual)                   │
+│                                                             │
+│  Selecione o que replicar:                                  │
+│  [x] Categorias                                             │
+│  [x] Produtos (inclui variações)                            │
+│  [x] Grupos de Complemento                                  │
+│  [x] Opções de Complemento                                  │
+│                                                             │
+│  Destino:                                                   │
+│  [ ] DOM HELDER PIZZARIA - ALEIXO                           │
+│  [ ] DOM HELDER - SHOPPING                                  │
+│                                                             │
+│  ⚠️ Atenção: Itens existentes com mesmo nome serão          │
+│     atualizados. Novos itens serão criados.                 │
+│                                                             │
+│             [ Cancelar ]    [ Replicar Cardápio ]           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 3.3 Edge Function para Replicação
+
+```typescript
+// supabase/functions/replicate-menu/index.ts
+// POST /replicate-menu
+// Body: { 
+//   source_tenant_id: string,
+//   target_tenant_ids: string[],
+//   options: { 
+//     categories: boolean,
+//     products: boolean, 
+//     variations: boolean,
+//     complement_groups: boolean,
+//     complement_options: boolean 
+//   }
+// }
+```
+
+**Lógica de replicação:**
+
+1. Validar que usuário é owner de ambos tenants
+2. Para cada tabela selecionada:
+   - Buscar dados do tenant origem
+   - Para cada item:
+     - Se existir item com mesmo `name` no destino → UPDATE
+     - Se não existir → INSERT com novo id e tenant_id destino
+3. Manter mapeamento de IDs antigos → novos para relacionamentos
+4. Replicar associações (product_complement_groups, etc)
+
+### 3.4 Hook useMenuReplication
+
+```typescript
+// src/hooks/useMenuReplication.ts
+export function useMenuReplication() {
+  const replicateMenu = useMutation({
+    mutationFn: async (params: ReplicateMenuParams) => {
+      const { data, error } = await supabase.functions.invoke('replicate-menu', {
+        body: params
+      });
+      if (error) throw error;
+      return data;
+    }
+  });
+  
+  return { replicateMenu };
+}
+```
+
+---
+
+## Fase 4: Melhorias no TenantSwitcher
+
+### Mostrar lojas agrupadas
+
+Atualizar `TenantSwitcher` para mostrar:
+- Lojas onde o usuário é **dono** (pode criar mais)
+- Lojas onde o usuário é apenas **membro** (não pode criar)
+
+```text
+┌──────────────────────────┐
+│    SUAS LOJAS            │
+│                          │
+│ 🏠 DOM HELDER PIZZARIA   │  ← Dono
+│    • Link: /dom-helder   │
+│                          │
+│ 🏠 DOM HELDER - ALEIXO   │  ← Dono  
+│    • Link: /dom-aleixo   │
+│                          │
+│ ─────────────────────────│
+│    LOJAS QUE TRABALHA    │
+│                          │
+│ 👤 Meu Restaurante       │  ← Membro
+│                          │
+│ ─────────────────────────│
+│ ➕ Adicionar loja        │
+└──────────────────────────┘
+```
+
+---
+
+## Arquivos a Criar
+
+| Arquivo | Descrição |
+|---------|-----------|
+| `src/hooks/useGroupStores.ts` | Hook para buscar lojas do mesmo grupo/owner |
+| `src/hooks/useMenuReplication.ts` | Hook para chamar edge function de replicação |
+| `src/components/settings/StoresSettings.tsx` | Componente de gerenciamento de lojas |
+| `src/components/menu/ReplicateMenuDialog.tsx` | Modal de replicação de cardápio |
+| `supabase/functions/replicate-menu/index.ts` | Edge function para replicação |
+
+## Arquivos a Modificar
+
+| Arquivo | Modificação |
+|---------|-------------|
+| `src/components/settings/SettingsSidebar.tsx` | Adicionar seção "Lojas" |
+| `src/pages/Settings.tsx` | Registrar nova seção e componente |
+| `src/components/TenantSwitcher.tsx` | Melhorar visualização de lojas |
+| `src/pages/Menu.tsx` | Adicionar botão "Replicar para outras lojas" |
+| `supabase/config.toml` | Registrar nova edge function |
+
+---
+
+## Ordem de Implementação
+
+1. **Criar hook `useGroupStores`** - Buscar todas lojas do owner
+2. **Criar `StoresSettings`** - Interface de listagem de lojas
+3. **Atualizar `SettingsSidebar`** - Nova seção
+4. **Atualizar `TenantSwitcher`** - Separar lojas próprias vs lojas que trabalha
+5. **Criar Edge Function `replicate-menu`** - Backend de replicação
+6. **Criar `ReplicateMenuDialog`** - Interface de replicação
+7. **Adicionar botão na tela de Menu** - Disparar replicação
+
+---
+
+## Considerações de Segurança
+
+- Edge function valida que usuário é `owner_id` de AMBOS os tenants (origem e destino)
+- Apenas donos podem replicar cardápio
+- Replicação é one-way (origem → destino), não sincronização bidirecional
+- Logs de replicação para auditoria
+
+---
+
+## Link do Site de Pedidos
+
+Cada loja já tem um `slug` único que pode ser usado como:
+- `https://cardapio.seudominio.com/{slug}`
+- `https://slim.app/{slug}`
+
+O slug já está sendo configurado na criação da loja (`CreateStore.tsx`).
 
