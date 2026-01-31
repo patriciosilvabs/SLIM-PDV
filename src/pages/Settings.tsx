@@ -35,8 +35,9 @@ import { CashRegisterSettings } from '@/components/settings/CashRegisterSettings
 import { CardapioWebSettings } from '@/components/settings/CardapioWebSettings';
 import { ProductionTargetsSettings } from '@/components/settings/ProductionTargetsSettings';
 import { ProductionApiSettings } from '@/components/settings/ProductionApiSettings';
+import { StoresSettings } from '@/components/settings/StoresSettings';
 
-const VALID_SECTIONS: SettingsSection[] = ['tables', 'kds', 'kds-stations', 'orders', 'printers', 'cash-register', 'production-targets', 'production-api', 'notifications', 'announcements', 'push', 'users', 'roles', 'invitations', 'integrations'];
+const VALID_SECTIONS: SettingsSection[] = ['stores', 'tables', 'kds', 'kds-stations', 'orders', 'printers', 'cash-register', 'production-targets', 'production-api', 'notifications', 'announcements', 'push', 'users', 'roles', 'invitations', 'integrations'];
 
 // Hook to check if system has any admins
 function useHasAdmins() {
@@ -64,15 +65,15 @@ export default function Settings() {
   const queryClient = useQueryClient();
   const [isBootstrapping, setIsBootstrapping] = useState(false);
   
-  // Validate section from URL or default to 'tables'
+  // Validate section from URL or default to 'stores'
   const activeSection: SettingsSection = VALID_SECTIONS.includes(section as SettingsSection) 
     ? (section as SettingsSection) 
-    : 'tables';
+    : 'stores';
 
   // Redirect to valid URL if section is missing or invalid
   useEffect(() => {
     if (!section || !VALID_SECTIONS.includes(section as SettingsSection)) {
-      navigate('/settings/tables', { replace: true });
+      navigate('/settings/stores', { replace: true });
     }
   }, [section, navigate]);
 
@@ -157,6 +158,8 @@ export default function Settings() {
 
   const renderContent = () => {
     switch (activeSection) {
+      case 'stores':
+        return <StoresSettings />;
       case 'tables':
         return <TablesSettings />;
       case 'kds':
@@ -188,7 +191,7 @@ export default function Settings() {
       case 'integrations':
         return <CardapioWebSettings />;
       default:
-        return <TablesSettings />;
+        return <StoresSettings />;
     }
   };
 
@@ -202,11 +205,11 @@ export default function Settings() {
               <BreadcrumbList>
                 <BreadcrumbItem>
                   <BreadcrumbLink 
-                    href="/settings/tables" 
+                    href="/settings/stores" 
                     className="flex items-center gap-2 hover:text-foreground"
                     onClick={(e) => {
                       e.preventDefault();
-                      handleSectionChange('tables');
+                      handleSectionChange('stores');
                     }}
                   >
                     <SettingsIcon className="h-4 w-4" />
@@ -241,6 +244,9 @@ export default function Settings() {
                 onChange={(e) => handleSectionChange(e.target.value as SettingsSection)}
                 className="w-full p-3 rounded-lg border bg-card text-card-foreground mb-4"
               >
+                <optgroup label="Lojas">
+                  <option value="stores">Minhas Lojas</option>
+                </optgroup>
                 <optgroup label="Sistema">
                   <option value="tables">Mesas</option>
                   <option value="kds">KDS</option>

@@ -19,8 +19,9 @@ import { useComplementGroupOptions, useComplementGroupOptionsMutations } from '@
 import { useProductComplementGroups, useProductComplementGroupsMutations } from '@/hooks/useProductComplementGroups';
 import { usePrintSectors } from '@/hooks/usePrintSectors';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
+import { useGroupStores } from '@/hooks/useGroupStores';
 import { AccessDenied } from '@/components/auth/AccessDenied';
-import { Plus, Edit, Trash2, Search, Package, GripVertical, MoreVertical, Star, Percent, Eye, EyeOff, Printer, Copy, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Package, GripVertical, MoreVertical, Star, Percent, Eye, EyeOff, Printer, Copy, X, Building2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ImageUpload } from '@/components/ImageUpload';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent, DragOverlay, DragStartEvent, useDroppable } from '@dnd-kit/core';
@@ -32,6 +33,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { ComplementGroupDialog } from '@/components/menu/ComplementGroupDialog';
 import { ComplementOptionDialog } from '@/components/menu/ComplementOptionDialog';
+import { ReplicateMenuDialog } from '@/components/menu/ReplicateMenuDialog';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -71,6 +73,7 @@ export default function Menu() {
   const { data: complementGroups } = useComplementGroups();
   const { data: complementOptions } = useComplementOptions();
   const { data: printSectors } = usePrintSectors();
+  const { otherStores, isOwnerOfGroup } = useGroupStores();
   const { createProduct, updateProduct, deleteProduct, updateSortOrder: updateProductSortOrder } = useProductMutations();
   const { createCategory, updateCategory, deleteCategory, updateSortOrder: updateCategorySortOrder } = useCategoryMutations();
   const { createGroup, updateGroup, deleteGroup } = useComplementGroupsMutations();
@@ -79,10 +82,12 @@ export default function Menu() {
   const { setProductGroups, setGroupsForProduct } = useProductComplementGroupsMutations();
   
   const canManageMenu = hasPermission('menu_manage');
+  const canReplicateMenu = isOwnerOfGroup && otherStores.length > 0;
   
   // ALL STATE HOOKS MUST BE BEFORE CONDITIONAL RETURN
   const [mainTab, setMainTab] = useState('categories');
   const [search, setSearch] = useState('');
+  const [isReplicateDialogOpen, setIsReplicateDialogOpen] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [isCategorySortMode, setIsCategorySortMode] = useState(false);
   
@@ -630,6 +635,12 @@ export default function Menu() {
                 onChange={(e) => setSearch(e.target.value)} 
               />
             </div>
+            {canReplicateMenu && (
+              <Button variant="outline" onClick={() => setIsReplicateDialogOpen(true)}>
+                <Building2 className="h-4 w-4 mr-2" />
+                Replicar para outras lojas
+              </Button>
+            )}
             <Button onClick={() => setIsProductDialogOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />Produto
             </Button>
@@ -1432,6 +1443,12 @@ export default function Menu() {
           linkedGroups={complementGroups?.filter(g => groupLinkedOptionIds.includes(g.id)) || []}
           onSave={handleSaveComplementOption}
           isEditing={!!editingOption}
+        />
+
+        {/* Replicate Menu Dialog */}
+        <ReplicateMenuDialog
+          open={isReplicateDialogOpen}
+          onOpenChange={setIsReplicateDialogOpen}
         />
       </div>
     </PDVLayout>
