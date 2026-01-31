@@ -1,4 +1,4 @@
-import { Store, ChevronDown, Plus, Check } from 'lucide-react';
+import { Store, ChevronDown, Plus, Check, Building2, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTenantContext } from '@/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,10 @@ export function TenantSwitcher({ collapsed = false }: TenantSwitcherProps) {
     navigate('/create-store');
   };
 
+  // Separar lojas próprias e lojas onde é membro
+  const ownedTenants = allTenants.filter(t => t.is_owner);
+  const memberTenants = allTenants.filter(t => !t.is_owner);
+
   if (collapsed) {
     return (
       <Popover>
@@ -48,10 +52,11 @@ export function TenantSwitcher({ collapsed = false }: TenantSwitcherProps) {
         <PopoverContent 
           align="start" 
           side="right" 
-          className="w-64 p-2"
+          className="w-72 p-2"
         >
           <TenantList
-            allTenants={allTenants}
+            ownedTenants={ownedTenants}
+            memberTenants={memberTenants}
             activeTenant={activeTenant}
             isOwner={isOwner}
             onSelectTenant={handleSelectTenant}
@@ -87,10 +92,11 @@ export function TenantSwitcher({ collapsed = false }: TenantSwitcherProps) {
       </PopoverTrigger>
       <PopoverContent 
         align="start" 
-        className="w-64 p-2"
+        className="w-72 p-2"
       >
         <TenantList
-          allTenants={allTenants}
+          ownedTenants={ownedTenants}
+          memberTenants={memberTenants}
           activeTenant={activeTenant}
           isOwner={isOwner}
           onSelectTenant={handleSelectTenant}
@@ -102,7 +108,12 @@ export function TenantSwitcher({ collapsed = false }: TenantSwitcherProps) {
 }
 
 interface TenantListProps {
-  allTenants: Array<{
+  ownedTenants: Array<{
+    tenant_id: string;
+    is_owner: boolean;
+    tenant: { id: string; name: string; slug: string } | null;
+  }>;
+  memberTenants: Array<{
     tenant_id: string;
     is_owner: boolean;
     tenant: { id: string; name: string; slug: string } | null;
@@ -117,7 +128,8 @@ interface TenantListProps {
 }
 
 function TenantList({ 
-  allTenants, 
+  ownedTenants, 
+  memberTenants,
   activeTenant, 
   isOwner, 
   onSelectTenant, 
@@ -125,39 +137,83 @@ function TenantList({
 }: TenantListProps) {
   return (
     <div className="space-y-1">
-      <p className="text-xs font-medium text-muted-foreground px-2 py-1">
-        Suas lojas
-      </p>
-      
-      {allTenants.map((membership) => {
-        const isActive = membership.tenant_id === activeTenant?.tenant_id;
-        return (
-          <button
-            key={membership.tenant_id}
-            onClick={() => onSelectTenant(membership.tenant_id)}
-            className={cn(
-              "w-full flex items-center gap-2 px-2 py-2 rounded-md text-sm transition-colors",
-              isActive 
-                ? "bg-primary/10 text-primary" 
-                : "hover:bg-muted text-foreground"
-            )}
-          >
-            <Store className="h-4 w-4 flex-shrink-0" />
-            <span className="truncate flex-1 text-left">
-              {membership.tenant?.name || 'Loja sem nome'}
-            </span>
-            {membership.is_owner && (
-              <Badge variant="outline" className="text-[10px] px-1 py-0">
-                Dono
-              </Badge>
-            )}
-            {isActive && (
-              <Check className="h-4 w-4 flex-shrink-0 text-primary" />
-            )}
-          </button>
-        );
-      })}
+      {/* Lojas próprias */}
+      {ownedTenants.length > 0 && (
+        <>
+          <p className="text-xs font-medium text-muted-foreground px-2 py-1 flex items-center gap-1.5">
+            <Building2 className="h-3 w-3" />
+            Suas lojas
+          </p>
+          
+          {ownedTenants.map((membership) => {
+            const isActive = membership.tenant_id === activeTenant?.tenant_id;
+            return (
+              <button
+                key={membership.tenant_id}
+                onClick={() => onSelectTenant(membership.tenant_id)}
+                className={cn(
+                  "w-full flex items-center gap-2 px-2 py-2 rounded-md text-sm transition-colors",
+                  isActive 
+                    ? "bg-primary/10 text-primary" 
+                    : "hover:bg-muted text-foreground"
+                )}
+              >
+                <Store className="h-4 w-4 flex-shrink-0" />
+                <div className="flex-1 min-w-0 text-left">
+                  <span className="truncate block">
+                    {membership.tenant?.name || 'Loja sem nome'}
+                  </span>
+                  {membership.tenant?.slug && (
+                    <code className="text-[10px] text-muted-foreground block truncate">
+                      /{membership.tenant.slug}
+                    </code>
+                  )}
+                </div>
+                {isActive && (
+                  <Check className="h-4 w-4 flex-shrink-0 text-primary" />
+                )}
+              </button>
+            );
+          })}
+        </>
+      )}
 
+      {/* Lojas onde é membro */}
+      {memberTenants.length > 0 && (
+        <>
+          <div className="border-t my-2" />
+          <p className="text-xs font-medium text-muted-foreground px-2 py-1 flex items-center gap-1.5">
+            <User className="h-3 w-3" />
+            Lojas que trabalha
+          </p>
+          
+          {memberTenants.map((membership) => {
+            const isActive = membership.tenant_id === activeTenant?.tenant_id;
+            return (
+              <button
+                key={membership.tenant_id}
+                onClick={() => onSelectTenant(membership.tenant_id)}
+                className={cn(
+                  "w-full flex items-center gap-2 px-2 py-2 rounded-md text-sm transition-colors",
+                  isActive 
+                    ? "bg-primary/10 text-primary" 
+                    : "hover:bg-muted text-foreground"
+                )}
+              >
+                <Store className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate flex-1 text-left">
+                  {membership.tenant?.name || 'Loja sem nome'}
+                </span>
+                {isActive && (
+                  <Check className="h-4 w-4 flex-shrink-0 text-primary" />
+                )}
+              </button>
+            );
+          })}
+        </>
+      )}
+
+      {/* Adicionar loja - apenas para owners */}
       {isOwner && (
         <>
           <div className="border-t my-2" />

@@ -18,11 +18,13 @@ import {
   Plug,
   Target,
   Server,
+  Building2,
   LucideIcon
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 export type SettingsSection = 
+  | 'stores'
   | 'tables' 
   | 'kds' 
   | 'kds-stations'
@@ -41,6 +43,7 @@ export type SettingsSection =
 
 // Export section info for reuse (breadcrumb, etc.)
 export const SECTION_INFO: Record<SettingsSection, { label: string; icon: LucideIcon }> = {
+  stores: { label: 'Lojas', icon: Building2 },
   tables: { label: 'Mesas', icon: UtensilsCrossed },
   kds: { label: 'KDS', icon: ChefHat },
   'kds-stations': { label: 'Praças', icon: Factory },
@@ -64,6 +67,12 @@ interface SettingsSidebarProps {
 }
 
 const sections = [
+  {
+    group: 'Lojas',
+    items: [
+      { id: 'stores' as const, label: 'Minhas Lojas', icon: Building2 },
+    ],
+  },
   {
     group: 'Sistema',
     items: [
