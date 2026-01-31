@@ -1,168 +1,104 @@
 
-# Plano: Sistema Multi-Lojas com Seletor de Tenant
+# Plano: Corrigir Erro 422 no Cadastro de Usuário
 
-## Contexto Atual
+## Diagnóstico
 
-O sistema já possui arquitetura multi-tenant:
-- Tabela `tenants` armazena as lojas
-- Tabela `tenant_members` vincula usuários às lojas
-- Mais de 40 hooks usam `tenantId` do `useTenant()`
+O erro HTTP 422 (Unprocessable Content) no endpoint `/signup` do Supabase Auth indica que a **política de senha** configurada no projeto exige senhas mais fortes.
 
-**Problema**: O hook `useTenant()` usa `.maybeSingle()`, retornando apenas a primeira loja encontrada. Não há mecanismo para:
-1. Listar todas as lojas do usuário
-2. Alternar entre lojas
-3. Persistir a loja selecionada
-
----
-
-## Arquitetura Proposta
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                      TenantProvider                         │
-│  (Contexto React que gerencia tenant ativo + lista)         │
-├─────────────────────────────────────────────────────────────┤
-│  • allTenants: TenantMembership[]                           │
-│  • activeTenant: TenantMembership | null                    │
-│  • setActiveTenant(tenantId): void                          │
-│  • tenantId: string (atalho para activeTenant.tenant_id)    │
-└─────────────────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    TenantSwitcher                           │
-│  (Componente dropdown no sidebar e header mobile)           │
-├─────────────────────────────────────────────────────────────┤
-│  • Mostra nome da loja atual                                │
-│  • Lista todas as lojas do usuário                          │
-│  • Permite criar nova loja (se owner)                       │
-└─────────────────────────────────────────────────────────────┘
+Baseado na pesquisa, o Supabase pode retornar:
+```json
+{
+  "code": 422,
+  "msg": "Password should contain at least one character of each...",
+  "weak_password": { "reasons": ["characters"] }
+}
 ```
 
+## Problema Atual
+
+1. **Validação frontend inadequada**: O Zod valida apenas `min(6)` caracteres
+2. **Tratamento de erro genérico**: Só verifica "already registered", outras mensagens são exibidas em inglês
+3. **UX ruim**: Usuário não sabe antecipadamente os requisitos da senha
+
 ---
 
-## O Que Será Criado
+## Solução Proposta
 
-### 1. Contexto: `TenantContext`
+### 1. Atualizar Validação de Senha (Zod Schema)
 
-Novo contexto React que substitui o hook `useTenant()` para gerenciar múltiplas lojas.
-
-Funcionalidades:
-- Carrega todas as lojas do usuário (não apenas uma)
-- Armazena tenant ativo no `localStorage`
-- Fornece método `setActiveTenant()` para trocar de loja
-- Valida se tenant persiste após login
-- Invalida cache de queries ao trocar de loja
-
-### 2. Componente: `TenantSwitcher`
-
-Dropdown para alternar entre lojas.
-
-Localização:
-- Desktop: no topo do sidebar, abaixo do logo
-- Mobile: no header, junto aos indicadores
-
-Funcionalidades:
-- Mostra nome da loja atual com ícone de loja
-- Lista todas as lojas com indicador de qual está ativa
-- Opção "Adicionar Loja" para owners (redireciona para onboarding adaptado)
-- Badge com quantidade de lojas
-
-### 3. Página: `CreateStore` (adaptação do Onboarding)
-
-Permite criar lojas adicionais sem sair do sistema.
-
-Diferenças do Onboarding:
-- Não redireciona para /auth se não tem tenant
-- Volta para o dashboard após criar
-- Mostra navegação para voltar
-
-### 4. Atualização do `useTenant` Hook
-
-O hook atual será modificado para usar o contexto:
+Adicionar validação que reflita os requisitos do Supabase:
 
 ```typescript
-// Antes
-const { tenantId } = useTenant(); // Buscava do banco
-
-// Depois  
-const { tenantId } = useTenant(); // Retorna do contexto (mesma interface)
+const passwordSchema = z.string()
+  .min(6, 'Senha deve ter pelo menos 6 caracteres')
+  .regex(/[a-z]/, 'Senha deve conter letra minúscula')
+  .regex(/[A-Z]/, 'Senha deve conter letra maiúscula')  
+  .regex(/[0-9]/, 'Senha deve conter número')
+  .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Senha deve conter caractere especial');
 ```
 
-Isso garante que os 40+ arquivos que usam o hook continuem funcionando sem modificação.
+### 2. Melhorar Tratamento de Erros
 
----
+Traduzir mensagens comuns do Supabase Auth:
 
-## Limite de Lojas por Plano
-
-Adicionar controle na tabela `subscription_plans`:
-
-| Plano | max_tenants |
-|-------|-------------|
-| Starter | 3 |
-| Professional | 20 |
-| Enterprise | 100 |
-
-A verificação será feita ao criar nova loja.
-
----
-
-## Fluxo de Troca de Loja
-
-```text
-1. Usuário clica no TenantSwitcher
-2. Seleciona outra loja
-3. Sistema executa:
-   a. setActiveTenant(newTenantId)
-   b. localStorage.setItem('activeTenantId', newTenantId)
-   c. queryClient.invalidateQueries() // Limpa todos os caches
-   d. Página recarrega dados automaticamente
-4. UI atualiza com dados da nova loja
+```typescript
+const getSignupErrorMessage = (error: Error): string => {
+  const msg = error.message.toLowerCase();
+  
+  if (msg.includes('already registered')) {
+    return 'Este email já está cadastrado';
+  }
+  if (msg.includes('weak_password') || msg.includes('password should contain')) {
+    return 'Senha muito fraca. Use letras maiúsculas, minúsculas, números e caracteres especiais';
+  }
+  if (msg.includes('invalid email')) {
+    return 'Email inválido';
+  }
+  if (msg.includes('rate limit')) {
+    return 'Muitas tentativas. Aguarde alguns minutos';
+  }
+  
+  return 'Erro ao criar conta. Tente novamente';
+};
 ```
 
+### 3. Adicionar Indicador Visual de Requisitos
+
+Mostrar checklist de requisitos enquanto usuário digita:
+
+- Mínimo 6 caracteres
+- Letra minúscula (a-z)
+- Letra maiúscula (A-Z)
+- Número (0-9)
+- Caractere especial (!@#$...)
+
 ---
-
-## Arquivos a Criar
-
-| Arquivo | Descrição |
-|---------|-----------|
-| `src/contexts/TenantContext.tsx` | Contexto principal de multi-tenant |
-| `src/components/TenantSwitcher.tsx` | Dropdown seletor de lojas |
-| `src/pages/CreateStore.tsx` | Página para criar loja adicional |
 
 ## Arquivos a Modificar
 
 | Arquivo | Modificação |
 |---------|-------------|
-| `src/hooks/useTenant.ts` | Usar contexto em vez de query direta |
-| `src/components/layout/PDVLayout.tsx` | Adicionar TenantSwitcher no sidebar |
-| `src/App.tsx` | Envolver com TenantProvider |
-| `src/pages/Onboarding.tsx` | Adaptar para permitir lojas adicionais |
+| `src/pages/Auth.tsx` | Atualizar schema Zod, adicionar tratamento de erros e indicador de requisitos |
 
 ---
 
-## Considerações de Segurança
+## Alternativa Simples
 
-1. **Validação de Acesso**: Ao selecionar tenant, verificar se usuário realmente pertence a ele
-2. **Tenant Inválido**: Se tenant salvo no localStorage não existir mais, limpar e redirecionar
-3. **RLS**: Políticas existentes já filtram por `tenant_id`, continuam funcionando
-4. **Refresh de Sessão**: Ao fazer login, verificar se tenant persistido ainda é válido
+Se não quiser forçar senhas complexas, outra opção é **desativar a política de senha forte** nas configurações de Auth do Lovable Cloud:
 
----
+1. Abrir Cloud Dashboard
+2. Ir em Auth Settings
+3. Desativar "Strong Password Policy"
 
-## Migração de Banco
-
-Adicionar coluna `max_tenants` na tabela `subscription_plans` para controlar limite por plano.
+Isso permitiria senhas simples de 6+ caracteres.
 
 ---
 
-## Ordem de Execução
+## Recomendação
 
-1. Criar `TenantContext.tsx` com lógica de multi-tenant
-2. Atualizar `useTenant.ts` para usar o contexto
-3. Criar `TenantSwitcher.tsx` 
-4. Adicionar TenantSwitcher ao `PDVLayout.tsx`
-5. Envolver App com `TenantProvider`
-6. Criar página `CreateStore.tsx`
-7. Adicionar migração para `max_tenants`
-8. Atualizar `Onboarding.tsx` para suportar criação adicional
+Implementar a **validação frontend completa** (opção 1-3) porque:
+- Melhora a segurança do sistema
+- Dá feedback instantâneo ao usuário
+- Evita erros 422 sendo mostrados no console
+- Mensagens em português
+
