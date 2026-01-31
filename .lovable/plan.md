@@ -1,76 +1,125 @@
 
-# Plano: Corrigir Erro 422 no Cadastro de Usuário
+# Plano: Corrigir Vazamento de Dados de Usuários Entre Tenants
 
-## Diagnóstico
+## Problema Identificado
 
-O erro HTTP 422 (Unprocessable Content) no endpoint `/signup` do Supabase Auth indica que a **política de senha** configurada no projeto exige senhas mais fortes.
+**Falha CRÍTICA de segurança**: Um cliente novo consegue ver usuários de OUTROS restaurantes na tela "Usuários do Sistema".
 
-Baseado na pesquisa, o Supabase pode retornar:
-```json
-{
-  "code": 422,
-  "msg": "Password should contain at least one character of each...",
-  "weak_password": { "reasons": ["characters"] }
-}
-```
+### Causa Raiz
 
-## Problema Atual
+1. **Política RLS da tabela `profiles`**: Está configurada com `qual:true` (qualquer autenticado vê todos)
+2. **Hook `useAllUsers()`**: Busca TODOS os profiles sem filtrar por tenant
+3. **Hook `useEmployees()`**: Mesmo problema
 
-1. **Validação frontend inadequada**: O Zod valida apenas `min(6)` caracteres
-2. **Tratamento de erro genérico**: Só verifica "already registered", outras mensagens são exibidas em inglês
-3. **UX ruim**: Usuário não sabe antecipadamente os requisitos da senha
+### Dados Atuais no Banco
+
+| Tenant | Usuário |
+|--------|---------|
+| DOM HELDER PIZZARIA | DOM HELDER PIZZARIA |
+| DOM HELDER PIZZARIA - ALEIXO | HELDER MOITA FREIRE |
+| Meu Restaurante | PATRICIO |
+
+Todos esses usuários estão aparecendo juntos para qualquer cliente!
 
 ---
 
-## Solução Proposta
+## Solução
 
-### 1. Atualizar Validação de Senha (Zod Schema)
+### 1. Corrigir Hook `useAllUsers()` 
 
-Adicionar validação que reflita os requisitos do Supabase:
-
-```typescript
-const passwordSchema = z.string()
-  .min(6, 'Senha deve ter pelo menos 6 caracteres')
-  .regex(/[a-z]/, 'Senha deve conter letra minúscula')
-  .regex(/[A-Z]/, 'Senha deve conter letra maiúscula')  
-  .regex(/[0-9]/, 'Senha deve conter número')
-  .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Senha deve conter caractere especial');
-```
-
-### 2. Melhorar Tratamento de Erros
-
-Traduzir mensagens comuns do Supabase Auth:
+Modificar para buscar apenas usuários que são membros do tenant atual:
 
 ```typescript
-const getSignupErrorMessage = (error: Error): string => {
-  const msg = error.message.toLowerCase();
+export function useAllUsers() {
+  const { tenantId } = useTenant();
   
-  if (msg.includes('already registered')) {
-    return 'Este email já está cadastrado';
-  }
-  if (msg.includes('weak_password') || msg.includes('password should contain')) {
-    return 'Senha muito fraca. Use letras maiúsculas, minúsculas, números e caracteres especiais';
-  }
-  if (msg.includes('invalid email')) {
-    return 'Email inválido';
-  }
-  if (msg.includes('rate limit')) {
-    return 'Muitas tentativas. Aguarde alguns minutos';
-  }
-  
-  return 'Erro ao criar conta. Tente novamente';
-};
+  return useQuery({
+    queryKey: ['all-users', tenantId],
+    queryFn: async () => {
+      if (!tenantId) return [];
+      
+      // Buscar apenas membros do tenant atual
+      const { data: members, error: membersError } = await supabase
+        .from('tenant_members')
+        .select('user_id')
+        .eq('tenant_id', tenantId);
+      
+      if (membersError) throw membersError;
+      if (!members?.length) return [];
+      
+      const userIds = members.map(m => m.user_id);
+      
+      // Buscar profiles apenas dos membros
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('*')
+        .in('id', userIds);
+      
+      if (profilesError) throw profilesError;
+      
+      // Buscar roles filtrados por tenant
+      const { data: allRoles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('*')
+        .eq('tenant_id', tenantId);
+      
+      if (rolesError) throw rolesError;
+      
+      // Combinar dados
+      return profiles.map((profile) => ({
+        ...profile,
+        user_roles: (allRoles || [])
+          .filter((role) => role.user_id === profile.id)
+          .map((r) => ({ role: r.role as AppRole })),
+      }));
+    },
+    enabled: !!tenantId,
+  });
+}
 ```
 
-### 3. Adicionar Indicador Visual de Requisitos
+### 2. Corrigir Hook `useEmployees()`
 
-Mostrar checklist de requisitos enquanto usuário digita:
+Mesmo padrão - filtrar por tenant:
 
-- Mínimo 6 caracteres
-- Letra minúscula (a-z)
-- Letra maiúscula (A-Z)
-- Número (0-9)
-- Caractere especial (!@#$...)
+```typescript
+export function useEmployees() {
+  const { tenantId } = useTenant();
+  
+  return useQuery({
+    queryKey: ['employees', tenantId],
+    queryFn: async (): Promise<Employee[]> => {
+      if (!tenantId) return [];
+      
+      // Buscar membros do tenant
+      const { data: members, error: membersError } = await supabase
+        .from('tenant_members')
+        .select('user_id')
+        .eq('tenant_id', tenantId);
+      
+      if (membersError) throw membersError;
+      if (!members?.length) return [];
+      
+      const userIds = members.map(m => m.user_id);
+      
+      // Buscar profiles apenas dos membros
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .in('id', userIds)
+        .order('name');
+      
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!tenantId,
+  });
+}
+```
+
+### 3. (Opcional) Reforçar RLS na tabela `profiles`
+
+Criar uma VIEW que mostra apenas profiles do mesmo tenant, ou manter a política atual já que a filtragem será feita no código. A política RLS atual é necessária porque alguns casos precisam ver nomes de usuários (ex: "cancelado por X").
 
 ---
 
@@ -78,27 +127,32 @@ Mostrar checklist de requisitos enquanto usuário digita:
 
 | Arquivo | Modificação |
 |---------|-------------|
-| `src/pages/Auth.tsx` | Atualizar schema Zod, adicionar tratamento de erros e indicador de requisitos |
+| `src/hooks/useUserRole.ts` | Adicionar import do `useTenant` e filtrar `useAllUsers()` por `tenant_id` |
+| `src/hooks/useEmployees.ts` | Adicionar import do `useTenant` e filtrar por `tenant_id` |
 
 ---
 
-## Alternativa Simples
+## Impacto
 
-Se não quiser forçar senhas complexas, outra opção é **desativar a política de senha forte** nas configurações de Auth do Lovable Cloud:
-
-1. Abrir Cloud Dashboard
-2. Ir em Auth Settings
-3. Desativar "Strong Password Policy"
-
-Isso permitiria senhas simples de 6+ caracteres.
+Após a correção:
+- Cada cliente verá APENAS os usuários do seu próprio restaurante
+- Usuários novos terão a lista vazia até adicionar funcionários
+- A troca de tenant (multi-store) continuará funcionando - a lista será atualizada automaticamente
 
 ---
 
-## Recomendação
+## Seção Técnica
 
-Implementar a **validação frontend completa** (opção 1-3) porque:
-- Melhora a segurança do sistema
-- Dá feedback instantâneo ao usuário
-- Evita erros 422 sendo mostrados no console
-- Mensagens em português
+### Por que não só ajustar RLS?
 
+A política RLS da tabela `profiles` com `qual:true` é intencional para permitir que:
+- Usuários vejam nomes em históricos de cancelamento
+- Usuários vejam quem fez determinadas ações
+
+A filtragem por tenant deve ser feita nas consultas específicas (hooks) porque `profiles` não tem `tenant_id` direto - precisa consultar via `tenant_members`.
+
+### Query Key
+
+Incluir `tenantId` na query key garante que:
+- Cache é invalidado ao trocar de loja
+- Dados corretos são carregados para cada tenant
