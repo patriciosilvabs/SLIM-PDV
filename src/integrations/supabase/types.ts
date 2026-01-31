@@ -704,6 +704,51 @@ export type Database = {
           },
         ]
       }
+      ingredient_daily_targets: {
+        Row: {
+          created_at: string
+          day_of_week: number
+          id: string
+          ingredient_id: string
+          target_quantity: number
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          day_of_week: number
+          id?: string
+          ingredient_id: string
+          target_quantity?: number
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          day_of_week?: number
+          id?: string
+          ingredient_id?: string
+          target_quantity?: number
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ingredient_daily_targets_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ingredient_daily_targets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ingredients: {
         Row: {
           cost_per_unit: number | null
@@ -1944,6 +1989,67 @@ export type Database = {
           },
         ]
       }
+      production_shipments: {
+        Row: {
+          from_tenant_id: string
+          id: string
+          ingredient_id: string
+          notes: string | null
+          quantity: number
+          received_at: string | null
+          received_by: string | null
+          shipped_at: string
+          shipped_by: string | null
+          to_tenant_id: string
+        }
+        Insert: {
+          from_tenant_id: string
+          id?: string
+          ingredient_id: string
+          notes?: string | null
+          quantity: number
+          received_at?: string | null
+          received_by?: string | null
+          shipped_at?: string
+          shipped_by?: string | null
+          to_tenant_id: string
+        }
+        Update: {
+          from_tenant_id?: string
+          id?: string
+          ingredient_id?: string
+          notes?: string | null
+          quantity?: number
+          received_at?: string | null
+          received_by?: string | null
+          shipped_at?: string
+          shipped_by?: string | null
+          to_tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_shipments_from_tenant_id_fkey"
+            columns: ["from_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_shipments_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_shipments_to_tenant_id_fkey"
+            columns: ["to_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           category_id: string | null
@@ -2205,6 +2311,7 @@ export type Database = {
           movement_type: Database["public"]["Enums"]["stock_movement_type"]
           new_stock: number
           notes: string | null
+          order_id: string | null
           previous_stock: number
           quantity: number
           tenant_id: string | null
@@ -2217,6 +2324,7 @@ export type Database = {
           movement_type: Database["public"]["Enums"]["stock_movement_type"]
           new_stock: number
           notes?: string | null
+          order_id?: string | null
           previous_stock: number
           quantity: number
           tenant_id?: string | null
@@ -2229,6 +2337,7 @@ export type Database = {
           movement_type?: Database["public"]["Enums"]["stock_movement_type"]
           new_stock?: number
           notes?: string | null
+          order_id?: string | null
           previous_stock?: number
           quantity?: number
           tenant_id?: string | null
@@ -2239,6 +2348,13 @@ export type Database = {
             columns: ["ingredient_id"]
             isOneToOne: false
             referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_movements_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
           {
@@ -2597,6 +2713,60 @@ export type Database = {
         }
         Relationships: []
       }
+      unmapped_sales: {
+        Row: {
+          created_at: string
+          id: string
+          order_id: string
+          order_item_id: string
+          product_name: string
+          quantity: number
+          resolved: boolean
+          resolved_at: string | null
+          resolved_by: string | null
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          order_id: string
+          order_item_id: string
+          product_name: string
+          quantity?: number
+          resolved?: boolean
+          resolved_at?: string | null
+          resolved_by?: string | null
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          order_id?: string
+          order_item_id?: string
+          product_name?: string
+          quantity?: number
+          resolved?: boolean
+          resolved_at?: string | null
+          resolved_by?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "unmapped_sales_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "unmapped_sales_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_permissions: {
         Row: {
           created_at: string | null
@@ -2666,7 +2836,36 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_production_demand: {
+        Row: {
+          current_stock: number | null
+          day_of_week: number | null
+          ideal_stock: number | null
+          ingredient_id: string | null
+          ingredient_name: string | null
+          status: string | null
+          store_name: string | null
+          tenant_id: string | null
+          to_produce: number | null
+          unit: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ingredient_daily_targets_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ingredient_daily_targets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       belongs_to_tenant: { Args: { _tenant_id: string }; Returns: boolean }
