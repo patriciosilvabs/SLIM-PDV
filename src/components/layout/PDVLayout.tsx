@@ -11,7 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { PrinterStatusIndicator } from '@/components/PrinterStatusIndicator';
-import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Store, Users, Kanban, ChefHat, History, Target, UserCircle, Pizza, RotateCcw, Shield, Ban, Crown } from 'lucide-react';
+import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Store, Users, Kanban, ChefHat, History, Target, UserCircle, Pizza, RotateCcw, Shield, Ban, Crown, Factory } from 'lucide-react';
 import logoSlim from '@/assets/logo-slim.png';
 
 interface NavItem {
@@ -32,6 +32,7 @@ const navigation: NavItem[] = [
   { name: 'Cardápio', href: '/menu', icon: Pizza, roles: ['admin', 'waiter', 'kitchen'], permission: 'menu_view' },
   { name: 'Clientes', href: '/customers', icon: Users, roles: ['admin', 'cashier', 'waiter'], permission: 'customers_view' },
   { name: 'Estoque', href: '/stock', icon: Package, roles: ['admin', 'kitchen'], permission: 'stock_view' },
+  { name: 'Produção', href: '/production', icon: Factory, roles: ['admin'], permission: 'production_view' },
   { name: 'Caixa', href: '/cash-register', icon: CreditCard, roles: ['admin', 'cashier'], permission: 'cash_register_view' },
   { name: 'Relatórios', href: '/reports', icon: BarChart3, roles: ['admin', 'cashier'], permission: 'reports_view' },
   { name: 'Histórico', href: '/closing-history', icon: History, roles: ['admin', 'cashier'], permission: 'closing_history_view' },

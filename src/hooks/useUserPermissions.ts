@@ -82,7 +82,11 @@ export type PermissionCode =
   // History
   | 'closing_history_view'
   | 'closing_history_export'
-  | 'reopen_history_view';
+  | 'reopen_history_view'
+  // Production
+  | 'production_view'
+  | 'production_manage'
+  | 'targets_manage';
 
 export interface UserPermission {
   id: string;
@@ -235,6 +239,14 @@ export const PERMISSION_GROUPS = {
       { code: 'closing_history_view' as PermissionCode, label: 'Ver histórico de fechamentos' },
       { code: 'closing_history_export' as PermissionCode, label: 'Exportar histórico de fechamentos' },
       { code: 'reopen_history_view' as PermissionCode, label: 'Ver histórico de reaberturas' },
+    ],
+  },
+  production: {
+    label: 'Produção (CPD)',
+    permissions: [
+      { code: 'production_view' as PermissionCode, label: 'Acessar dashboard de produção' },
+      { code: 'production_manage' as PermissionCode, label: 'Confirmar envios de produção' },
+      { code: 'targets_manage' as PermissionCode, label: 'Gerenciar metas de produção' },
     ],
   },
 };
