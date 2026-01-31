@@ -32,3 +32,9 @@ verify_jwt = true
 
 [functions.cardapioweb-sync-orders]
 verify_jwt = true
+
+[functions.production-api]
+verify_jwt = false
+
+[functions.production-webhook]
+verify_jwt = false

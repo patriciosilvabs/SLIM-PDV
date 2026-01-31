@@ -17,6 +17,7 @@ import {
   Wallet,
   Plug,
   Target,
+  Server,
   LucideIcon
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -29,6 +30,7 @@ export type SettingsSection =
   | 'printers' 
   | 'cash-register'
   | 'production-targets'
+  | 'production-api'
   | 'notifications' 
   | 'announcements' 
   | 'push' 
@@ -46,6 +48,7 @@ export const SECTION_INFO: Record<SettingsSection, { label: string; icon: Lucide
   printers: { label: 'Impressoras', icon: Printer },
   'cash-register': { label: 'Caixa', icon: Wallet },
   'production-targets': { label: 'Metas de Produção', icon: Target },
+  'production-api': { label: 'API de Produção', icon: Server },
   notifications: { label: 'Sons', icon: Bell },
   announcements: { label: 'Avisos Agendados', icon: Megaphone },
   push: { label: 'Push', icon: Smartphone },
@@ -71,6 +74,7 @@ const sections = [
       { id: 'printers' as const, label: 'Impressoras', icon: Printer },
       { id: 'cash-register' as const, label: 'Caixa', icon: Wallet },
       { id: 'production-targets' as const, label: 'Metas de Produção', icon: Target },
+      { id: 'production-api' as const, label: 'API de Produção', icon: Server },
     ],
   },
   {

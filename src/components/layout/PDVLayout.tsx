@@ -32,7 +32,7 @@ const navigation: NavItem[] = [
   { name: 'Cardápio', href: '/menu', icon: Pizza, roles: ['admin', 'waiter', 'kitchen'], permission: 'menu_view' },
   { name: 'Clientes', href: '/customers', icon: Users, roles: ['admin', 'cashier', 'waiter'], permission: 'customers_view' },
   { name: 'Estoque', href: '/stock', icon: Package, roles: ['admin', 'kitchen'], permission: 'stock_view' },
-  { name: 'Produção', href: '/production', icon: Factory, roles: ['admin'], permission: 'production_view' },
+  // { name: 'Produção', href: '/production', icon: Factory, roles: ['admin'], permission: 'production_view' }, // Removed: external CPD integration via API
   { name: 'Caixa', href: '/cash-register', icon: CreditCard, roles: ['admin', 'cashier'], permission: 'cash_register_view' },
   { name: 'Relatórios', href: '/reports', icon: BarChart3, roles: ['admin', 'cashier'], permission: 'reports_view' },
   { name: 'Histórico', href: '/closing-history', icon: History, roles: ['admin', 'cashier'], permission: 'closing_history_view' },
