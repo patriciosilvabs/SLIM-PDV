@@ -1,93 +1,33 @@
 
 
-# Plano: Corrigir Verificação de Slug Duplicado
+# Plano: Resolver Erro de Slug Duplicado na Versão Publicada
 
-## Problema Identificado
+## Diagnóstico
 
-A criação de loja falha com erro 409 (duplicate key) porque:
+O erro 409 (Conflict) está acontecendo porque:
 
-1. **Slug auto-gerado não é verificado** - Quando o usuário digita o nome, o slug é gerado automaticamente mas `checkSlugAvailability()` não é chamada
-2. **Validação aceita null** - A condição `if (!slugAvailable)` bloqueia corretamente `false`, mas o problema é que o estado começa como `null` e nunca muda para `true` quando auto-gerado
-3. **Race condition** - Se o usuário clicar rápido em "Criar Loja" antes da verificação terminar, pode tentar criar com slug duplicado
+| Ambiente | Status do Código |
+|----------|-----------------|
+| **Preview** (id-preview--51a2614a...) | ✅ Código corrigido |
+| **Publicado** (cardapio-offline-pos.lovable.app) | ❌ Código antigo |
 
-## Correções Necessárias
+O usuário está testando na **versão publicada**, que ainda não tem as correções de verificação de slug.
 
-### Arquivo: `src/pages/CreateStore.tsx`
+### Evidência
 
-| Correção | Descrição |
-|----------|-----------|
-| Verificar slug ao gerar | Chamar `checkSlugAvailability()` quando o slug é auto-gerado a partir do nome |
-| Bloquear envio se null | Mudar validação para exigir `slugAvailable === true` explicitamente |
-| Debounce na verificação | Adicionar debounce para evitar múltiplas chamadas à API |
-| Re-verificar antes de enviar | Fazer verificação final no momento do submit |
+O arquivo de bundle `index-BuzD3JZ5.js` no erro indica que é um build diferente do preview, confirmando que as correções não foram publicadas.
 
-### Mudanças Específicas
+## Solução
 
-**1. Adicionar verificação ao gerar slug automaticamente:**
-```typescript
-const handleNameChange = (name: string) => {
-  const generatedSlug = generateSlug(name);
-  setFormData(prev => ({
-    ...prev,
-    name,
-    slug: prev.slug || generatedSlug,
-  }));
-  
-  // Verificar disponibilidade do slug gerado
-  if (!formData.slug) {
-    checkSlugAvailability(generatedSlug);
-  }
-};
-```
+**Publicar a aplicação** para que as correções sejam aplicadas na versão de produção.
 
-**2. Validação mais rigorosa no submit:**
-```typescript
-// Antes
-if (!slugAvailable) {
-  setErrors(prev => ({ ...prev, slug: 'Este slug já está em uso' }));
-  return;
-}
+As correções já implementadas no código incluem:
+1. Verificação automática do slug quando gerado a partir do nome
+2. Botão desabilitado até confirmação de disponibilidade
+3. Re-verificação final antes de criar o tenant (previne race conditions)
+4. Mensagens de erro mais claras
 
-// Depois
-if (slugAvailable !== true) {
-  setErrors(prev => ({ 
-    ...prev, 
-    slug: slugAvailable === false 
-      ? 'Este slug já está em uso' 
-      : 'Aguarde a verificação do slug'
-  }));
-  return;
-}
-```
+## Ação Necessária
 
-**3. Adicionar verificação final antes de inserir:**
-```typescript
-// Re-verificar disponibilidade antes de criar
-const { data: existingSlug } = await supabase
-  .from('tenants')
-  .select('id')
-  .eq('slug', formData.slug)
-  .maybeSingle();
-
-if (existingSlug) {
-  setSlugAvailable(false);
-  setErrors(prev => ({ ...prev, slug: 'Este slug já está em uso' }));
-  return;
-}
-```
-
-**4. Desabilitar botão durante verificação:**
-```typescript
-<Button 
-  type="submit" 
-  disabled={isSubmitting || checkingSlug || slugAvailable !== true}
->
-```
-
-## Resultado Esperado
-
-- O slug será verificado automaticamente assim que for gerado do nome
-- O botão "Criar Loja" só ficará ativo quando o slug for confirmado como disponível
-- Verificação dupla no momento do submit previne race conditions
-- Mensagem de erro mais clara para o usuário
+Clicar no botão "Publicar" para aplicar as correções na versão de produção.
 
