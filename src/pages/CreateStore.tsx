@@ -48,12 +48,20 @@ export default function CreateStore() {
       .substring(0, 50);
   };
 
-  const handleNameChange = (name: string) => {
+const handleNameChange = (name: string) => {
+    const generatedSlug = generateSlug(name);
+    const shouldGenerateSlug = !formData.slug;
+    
     setFormData(prev => ({
       ...prev,
       name,
-      slug: prev.slug || generateSlug(name),
+      slug: prev.slug || generatedSlug,
     }));
+    
+    // Verificar disponibilidade do slug gerado automaticamente
+    if (shouldGenerateSlug && generatedSlug.length >= 3) {
+      checkSlugAvailability(generatedSlug);
+    }
   };
 
   const checkSlugAvailability = async (slug: string) => {
@@ -101,8 +109,13 @@ export default function CreateStore() {
       return;
     }
 
-    if (!slugAvailable) {
-      setErrors(prev => ({ ...prev, slug: 'Este slug já está em uso' }));
+    if (slugAvailable !== true) {
+      setErrors(prev => ({ 
+        ...prev, 
+        slug: slugAvailable === false 
+          ? 'Este slug já está em uso' 
+          : 'Aguarde a verificação do slug'
+      }));
       return;
     }
 
@@ -110,6 +123,20 @@ export default function CreateStore() {
     setErrors({});
 
     try {
+      // Re-verificar disponibilidade antes de criar (previne race conditions)
+      const { data: existingSlug } = await supabase
+        .from('tenants')
+        .select('id')
+        .eq('slug', formData.slug)
+        .maybeSingle();
+
+      if (existingSlug) {
+        setSlugAvailable(false);
+        setErrors(prev => ({ ...prev, slug: 'Este slug já está em uso' }));
+        setIsSubmitting(false);
+        return;
+      }
+
       // Create tenant
       const { data: tenant, error: tenantError } = await supabase
         .from('tenants')
@@ -314,9 +341,14 @@ export default function CreateStore() {
                 </p>
               </div>
 
-              <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
+              <Button 
+                type="submit" 
+                className="w-full" 
+                size="lg" 
+                disabled={isSubmitting || checkingSlug || slugAvailable !== true}
+              >
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Criar Loja
+                {checkingSlug ? 'Verificando...' : 'Criar Loja'}
               </Button>
             </form>
           )}
