@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
@@ -19,13 +19,24 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import logoSlim from '@/assets/logo-slim.png';
 import { z } from 'zod';
+import { PasswordRequirements } from '@/components/auth/PasswordRequirements';
+import { getSignupErrorMessage, getLoginErrorMessage } from '@/lib/authErrors';
+
+const passwordSchema = z.string()
+  .min(6, 'Senha deve ter pelo menos 6 caracteres')
+  .regex(/[a-z]/, 'Senha deve conter letra minúscula')
+  .regex(/[A-Z]/, 'Senha deve conter letra maiúscula')
+  .regex(/[0-9]/, 'Senha deve conter número')
+  .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Senha deve conter caractere especial');
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
-  password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),
+  password: z.string().min(1, 'Senha é obrigatória'),
 });
 
-const signupSchema = loginSchema.extend({
+const signupSchema = z.object({
+  email: z.string().email('Email inválido'),
+  password: passwordSchema,
   name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
   confirmPassword: z.string(),
 }).refine(data => data.password === data.confirmPassword, {
@@ -123,9 +134,7 @@ export default function Auth() {
     if (error) {
       toast({
         title: 'Erro ao entrar',
-        description: error.message === 'Invalid login credentials' 
-          ? 'Email ou senha incorretos' 
-          : error.message,
+        description: getLoginErrorMessage(error),
         variant: 'destructive',
       });
     }
@@ -151,9 +160,7 @@ export default function Auth() {
     if (error) {
       toast({
         title: 'Erro ao cadastrar',
-        description: error.message.includes('already registered')
-          ? 'Este email já está cadastrado'
-          : error.message,
+        description: getSignupErrorMessage(error),
         variant: 'destructive',
       });
     } else {
@@ -400,6 +407,7 @@ export default function Auth() {
                       {signupErrors.password}
                     </p>
                   )}
+                  <PasswordRequirements password={signupData.password} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="signup-confirm">Confirmar Senha</Label>
