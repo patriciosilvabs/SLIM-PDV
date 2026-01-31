@@ -32,6 +32,7 @@ import ReopenHistory from "./pages/ReopenHistory";
 import AuditDashboard from "./pages/AuditDashboard";
 import ShareReceiver from "./pages/ShareReceiver";
 import AcceptInvite from "./pages/AcceptInvite";
+import Production from "./pages/Production";
 import NotFound from "./pages/NotFound";
 
 // Platform Admin Pages
@@ -87,6 +88,7 @@ const App = () => (
                 <Route path="/audit-dashboard" element={<RequireTenant><AuditDashboard /></RequireTenant>} />
                 <Route path="/share-receiver" element={<RequireTenant><ShareReceiver /></RequireTenant>} />
                 <Route path="/profile" element={<RequireTenant><Profile /></RequireTenant>} />
+                <Route path="/production" element={<RequireTenant><Production /></RequireTenant>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
