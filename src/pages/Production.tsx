@@ -1,5 +1,4 @@
 import PDVLayout from '@/components/layout/PDVLayout';
-import { RequireRole } from '@/components/auth/RequireRole';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +21,8 @@ import {
   Package,
   AlertCircle,
   TrendingUp,
+  ShieldX,
+  Loader2,
 } from 'lucide-react';
 import { 
   useConsolidatedProductionDemand, 
@@ -32,6 +33,7 @@ import { useUnmappedSalesCount } from '@/hooks/useUnmappedSales';
 import { FULL_DAY_NAMES } from '@/hooks/useProductionTargets';
 import { UnmappedSalesAlert } from '@/components/production/UnmappedSalesAlert';
 import { ShipmentConfirmDialog } from '@/components/production/ShipmentConfirmDialog';
+import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { useState } from 'react';
 
 function StatusBadge({ status }: { status: 'ok' | 'warning' | 'critical' }) {
@@ -55,10 +57,12 @@ function LojaDemandCard({
   storeName, 
   items,
   onShipment,
+  canManage,
 }: { 
   storeName: string; 
   items: ProductionDemandItem[];
   onShipment: (item: ProductionDemandItem) => void;
+  canManage: boolean;
 }) {
   const criticalCount = items.filter(i => i.status === 'critical').length;
   const warningCount = items.filter(i => i.status === 'warning').length;
@@ -114,7 +118,7 @@ function LojaDemandCard({
                 `}>
                   {item.to_produce > 0 ? `+${item.to_produce}` : '✓'}
                 </span>
-                {item.to_produce > 0 && (
+                {item.to_produce > 0 && canManage && (
                   <Button 
                     size="sm" 
                     variant="outline"
@@ -135,9 +139,11 @@ function LojaDemandCard({
 function ConsolidatedTable({ 
   data,
   onShipment,
+  canManage,
 }: { 
   data: ProductionDemandItem[];
   onShipment: (item: ProductionDemandItem) => void;
+  canManage: boolean;
 }) {
   // Group by ingredient
   const byIngredient: Record<string, { 
@@ -203,8 +209,8 @@ function ConsolidatedTable({
                   <TableCell key={store} className="text-center">
                     {item ? (
                       <button
-                        onClick={() => value > 0 && onShipment(item)}
-                        disabled={value === 0}
+                        onClick={() => value > 0 && canManage && onShipment(item)}
+                        disabled={value === 0 || !canManage}
                         className={`
                           px-2 py-1 rounded font-medium transition-colors
                           ${item.status === 'critical' ? 'bg-red-500/10 text-red-600 hover:bg-red-500/20' : ''}
@@ -238,15 +244,46 @@ export default function Production() {
   const { data: demand, isLoading, error, refetch } = useConsolidatedProductionDemand();
   const { summary } = useProductionDemandSummary();
   const { data: unmappedCount } = useUnmappedSalesCount();
+  const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   
   const [shipmentItem, setShipmentItem] = useState<ProductionDemandItem | null>(null);
   
   const today = new Date();
   const dayName = FULL_DAY_NAMES[today.getDay()];
 
+  const canView = hasPermission('production_view');
+  const canManage = hasPermission('production_manage');
+
+  if (permissionsLoading) {
+    return (
+      <PDVLayout>
+        <div className="flex items-center justify-center p-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </PDVLayout>
+    );
+  }
+
+  if (!canView) {
+    return (
+      <PDVLayout>
+        <Card className="max-w-md mx-auto mt-12">
+          <CardContent className="flex flex-col items-center p-8 text-center">
+            <div className="p-4 bg-destructive/10 rounded-full mb-4">
+              <ShieldX className="h-8 w-8 text-destructive" />
+            </div>
+            <h2 className="text-xl font-bold mb-2">Acesso Negado</h2>
+            <p className="text-muted-foreground">
+              Você não tem permissão para acessar a Central de Produção.
+            </p>
+          </CardContent>
+        </Card>
+      </PDVLayout>
+    );
+  }
+
   return (
     <PDVLayout>
-      <RequireRole roles={['admin']}>
         <div className="space-y-6">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -370,6 +407,7 @@ export default function Production() {
                         storeName={storeName} 
                         items={items}
                         onShipment={setShipmentItem}
+                        canManage={canManage}
                       />
                     ))}
                   </div>
@@ -388,6 +426,7 @@ export default function Production() {
                     <ConsolidatedTable 
                       data={demand || []} 
                       onShipment={setShipmentItem}
+                      canManage={canManage}
                     />
                   </CardContent>
                 </Card>
@@ -401,7 +440,6 @@ export default function Production() {
           item={shipmentItem}
           onClose={() => setShipmentItem(null)}
         />
-      </RequireRole>
     </PDVLayout>
   );
 }
