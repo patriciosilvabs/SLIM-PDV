@@ -1,148 +1,140 @@
 
-# Plano: Correção do Problema de RLS - Owners sem Role 'admin'
+# Plano: Exclusao Permanente de Produtos, Complementos e Opcoes
 
-## Diagnóstico Final
+## Resumo
 
-O problema foi identificado com precisão. O log mostra:
+Alterar o comportamento de exclusao de **soft delete** (inativacao) para **hard delete** (remocao completa) para produtos, grupos de complementos e opcoes de complemento.
 
-```
-[deleteGroup] Result: {error: null, data: Array(0)}
-```
+## Analise de Dependencias
 
-**`data: Array(0)` significa que a RLS bloqueou silenciosamente a operação.**
+A analise do banco de dados revela as seguintes restricoes de chave estrangeira:
 
-### Causa Raiz
+| Tabela Pai | Tabela Filha | Regra Atual |
+|------------|--------------|-------------|
+| `products` | `order_items` | NO ACTION (bloqueia) |
+| `products` | `product_variations` | CASCADE |
+| `products` | `product_ingredients` | CASCADE |
+| `products` | `product_extra_links` | CASCADE |
+| `products` | `product_complement_groups` | CASCADE |
+| `products` | `combo_items` | CASCADE |
+| `products` | `cardapioweb_product_mappings` | NO ACTION (bloqueia) |
+| `complement_groups` | `complement_group_options` | CASCADE |
+| `complement_groups` | `product_complement_groups` | CASCADE |
+| `complement_groups` | `order_item_sub_item_extras` | NO ACTION (bloqueia) |
+| `complement_options` | `complement_group_options` | CASCADE |
+| `complement_options` | `complement_option_ingredients` | CASCADE |
+| `complement_options` | `order_item_sub_item_extras` | NO ACTION (bloqueia) |
 
-O grupo `f2902ad2-5bbe-4b54-95da-32ea813e8b6a` ("ESCOLHA 1 SABOR") pertence ao tenant `9f0ba9da-ccac-4835-80ed-e4e299c2109f` ("Unidade Aleixo").
+### Problema Identificado
 
-O usuário `c1c176df-8579-4942-b310-9a6e124facd9` (DOM HELDER PIZZARIA):
-- **É owner** do tenant "Unidade Aleixo" na tabela `tenant_members` (is_owner = true)
-- **NÃO tem role 'admin'** na tabela `user_roles` para esse tenant
+As tabelas de historico (`order_items`, `order_item_sub_item_extras`, `cardapioweb_product_mappings`) usam **NO ACTION**, o que impediria a exclusao de itens ja vendidos.
 
-A política de RLS exige:
-```sql
-belongs_to_tenant(tenant_id) AND has_tenant_role(auth.uid(), tenant_id, 'admin')
-```
+### Solucao
 
-Como não existe registro em `user_roles` para esse tenant, `has_tenant_role()` retorna `false` e o UPDATE é bloqueado.
+Alterar essas FKs para **SET NULL** - assim os pedidos historicos continuam existindo mas sem referencia ao item excluido. Os pedidos ja armazenam `product_name`, `option_name` e `group_name` como texto, entao o historico nao sera afetado.
 
-## Solução
+## Alteracoes
 
-Modificar as políticas de RLS para aceitar **tanto owners quanto admins**. Isso é mais correto semanticamente, pois um owner deveria ter pelo menos as mesmas permissões de um admin.
+### 1. Migracao SQL
 
-### Alteração das Políticas
+Atualizar as foreign keys para permitir exclusao:
 
-Substituir:
-```sql
-has_tenant_role(auth.uid(), tenant_id, 'admin'::app_role)
-```
-
-Por:
-```sql
-(has_tenant_role(auth.uid(), tenant_id, 'admin'::app_role) OR is_tenant_owner(tenant_id))
-```
-
-### Tabelas Afetadas
-
-| Tabela | Policy Atual | Nova Policy |
-|--------|-------------|-------------|
-| `complement_groups` | admin only | admin OR owner |
-| `complement_options` | admin only | admin OR owner |
-| `products` | admin only | admin OR owner |
-| `categories` | admin only | admin OR owner |
-| `product_extras` | admin only | admin OR owner |
-| `product_variations` | admin only | admin OR owner |
-| `ingredients` | admin only | admin OR owner |
-| `kds_stations` | admin only | admin OR owner |
-| `print_sectors` | admin only | admin OR owner |
-| `kds_global_settings` | admin only | admin OR owner |
-
-## Migração SQL
-
-```sql
--- Atualizar política de complement_groups
-DROP POLICY IF EXISTS "Tenant admins can manage complement groups" ON public.complement_groups;
-CREATE POLICY "Tenant admins can manage complement groups" ON public.complement_groups
-  FOR ALL USING (
-    belongs_to_tenant(tenant_id) AND 
-    (has_tenant_role(auth.uid(), tenant_id, 'admin'::app_role) OR is_tenant_owner(tenant_id))
-  )
-  WITH CHECK (
-    belongs_to_tenant(tenant_id) AND 
-    (has_tenant_role(auth.uid(), tenant_id, 'admin'::app_role) OR is_tenant_owner(tenant_id))
-  );
-
--- Atualizar política de complement_options
-DROP POLICY IF EXISTS "Tenant admins can manage complement options" ON public.complement_options;
-CREATE POLICY "Tenant admins can manage complement options" ON public.complement_options
-  FOR ALL USING (
-    belongs_to_tenant(tenant_id) AND 
-    (has_tenant_role(auth.uid(), tenant_id, 'admin'::app_role) OR is_tenant_owner(tenant_id))
-  )
-  WITH CHECK (
-    belongs_to_tenant(tenant_id) AND 
-    (has_tenant_role(auth.uid(), tenant_id, 'admin'::app_role) OR is_tenant_owner(tenant_id))
-  );
-
--- Atualizar política de products
-DROP POLICY IF EXISTS "Tenant admins can manage products" ON public.products;
-CREATE POLICY "Tenant admins can manage products" ON public.products
-  FOR ALL USING (
-    belongs_to_tenant(tenant_id) AND 
-    (has_tenant_role(auth.uid(), tenant_id, 'admin'::app_role) OR is_tenant_owner(tenant_id))
-  )
-  WITH CHECK (
-    belongs_to_tenant(tenant_id) AND 
-    (has_tenant_role(auth.uid(), tenant_id, 'admin'::app_role) OR is_tenant_owner(tenant_id))
-  );
-
--- Mesma lógica para demais tabelas...
+```text
++--------------------------------------------------+
+|     order_items.product_id -> SET NULL           |
+|     order_item_sub_item_extras.option_id -> SET NULL |
+|     order_item_sub_item_extras.group_id -> SET NULL  |
+|     cardapioweb_product_mappings.local_product_id -> SET NULL |
++--------------------------------------------------+
 ```
 
-## Alternativa: Trigger para Auto-criar Role
+### 2. Alteracoes nos Hooks
 
-Como medida complementar, podemos criar um trigger que automaticamente insere uma role 'admin' na `user_roles` quando um `tenant_member` é criado com `is_owner = true`.
+| Arquivo | Alteracao |
+|---------|-----------|
+| `useProducts.ts` | Trocar `.update({ is_available: false })` por `.delete()` |
+| `useComplementGroups.ts` | Trocar `.update({ is_active: false })` por `.delete()` |
+| `useComplementOptions.ts` | Trocar `.update({ is_active: false })` por `.delete()` |
+| `useProductExtras.ts` | Trocar `.update({ is_active: false })` por `.delete()` |
+| `useProductVariations.ts` | Trocar `.update({ is_active: false })` por `.delete()` |
+
+### 3. Exemplo de Alteracao (useProducts.ts)
+
+**Antes:**
+```typescript
+const deleteProduct = useMutation({
+  mutationFn: async (id: string) => {
+    const { error, data } = await supabase
+      .from('products')
+      .update({ is_available: false })
+      .eq('id', id)
+      .select();
+    if (error) throw error;
+    return { softDeleted: true };
+  },
+  onSuccess: () => {
+    toast({ title: 'Produto desativado com sucesso!' });
+  }
+});
+```
+
+**Depois:**
+```typescript
+const deleteProduct = useMutation({
+  mutationFn: async (id: string) => {
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  },
+  onSuccess: () => {
+    toast({ title: 'Produto excluído com sucesso!' });
+  }
+});
+```
+
+## Detalhes Tecnicos
+
+### SQL da Migracao
 
 ```sql
-CREATE OR REPLACE FUNCTION auto_create_admin_role_for_owner()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  IF NEW.is_owner = TRUE THEN
-    INSERT INTO user_roles (user_id, role, tenant_id)
-    VALUES (NEW.user_id, 'admin', NEW.tenant_id)
-    ON CONFLICT (user_id, role, tenant_id) DO NOTHING;
-  END IF;
-  RETURN NEW;
-END;
-$$;
+-- Alterar FK order_items.product_id para SET NULL
+ALTER TABLE order_items 
+  DROP CONSTRAINT IF EXISTS order_items_product_id_fkey,
+  ADD CONSTRAINT order_items_product_id_fkey 
+    FOREIGN KEY (product_id) 
+    REFERENCES products(id) 
+    ON DELETE SET NULL;
 
-CREATE TRIGGER trigger_auto_admin_for_owner
-AFTER INSERT ON tenant_members
-FOR EACH ROW
-EXECUTE FUNCTION auto_create_admin_role_for_owner();
+-- Alterar FK order_item_sub_item_extras.option_id para SET NULL
+ALTER TABLE order_item_sub_item_extras 
+  DROP CONSTRAINT IF EXISTS order_item_sub_item_extras_option_id_fkey,
+  ADD CONSTRAINT order_item_sub_item_extras_option_id_fkey 
+    FOREIGN KEY (option_id) 
+    REFERENCES complement_options(id) 
+    ON DELETE SET NULL;
 
--- Backfill: criar roles para owners existentes
-INSERT INTO user_roles (user_id, role, tenant_id)
-SELECT tm.user_id, 'admin', tm.tenant_id
-FROM tenant_members tm
-WHERE tm.is_owner = TRUE
-ON CONFLICT DO NOTHING;
+-- Alterar FK order_item_sub_item_extras.group_id para SET NULL
+ALTER TABLE order_item_sub_item_extras 
+  DROP CONSTRAINT IF EXISTS order_item_sub_item_extras_group_id_fkey,
+  ADD CONSTRAINT order_item_sub_item_extras_group_id_fkey 
+    FOREIGN KEY (group_id) 
+    REFERENCES complement_groups(id) 
+    ON DELETE SET NULL;
+
+-- Alterar FK cardapioweb_product_mappings.local_product_id para SET NULL
+ALTER TABLE cardapioweb_product_mappings 
+  DROP CONSTRAINT IF EXISTS cardapioweb_product_mappings_local_product_id_fkey,
+  ADD CONSTRAINT cardapioweb_product_mappings_local_product_id_fkey 
+    FOREIGN KEY (local_product_id) 
+    REFERENCES products(id) 
+    ON DELETE SET NULL;
 ```
 
 ## Resultado Esperado
 
-Após a migração:
-- Owners poderão gerenciar todos os dados do seu tenant
-- Admins (sem ser owner) continuarão funcionando normalmente
-- Novos owners terão role 'admin' criada automaticamente
-
-## Arquivos a Modificar
-
-| Arquivo | Ação |
-|---------|------|
-| **Nova Migração SQL** | Atualizar políticas RLS + criar trigger + backfill |
-| Nenhum código frontend | Não requer alterações |
+- Produtos, grupos e opcoes serao excluidos permanentemente do banco
+- Pedidos historicos manterao seus dados (nomes gravados como texto)
+- Referencias de FK serao anuladas (SET NULL) em vez de bloquear
+- Tabelas relacionadas com CASCADE serao limpas automaticamente (variacoes, ingredientes, links)
