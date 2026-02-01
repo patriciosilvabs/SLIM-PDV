@@ -20,16 +20,21 @@ export interface ComplementOption {
   updated_at: string | null;
 }
 
-export function useComplementOptions() {
+export function useComplementOptions(includeInactive = false) {
   return useQuery({
-    queryKey: ['complement-options'],
+    queryKey: ['complement-options', { includeInactive }],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('complement_options')
         .select('*')
         .order('sort_order')
         .order('name');
       
+      if (!includeInactive) {
+        query = query.eq('is_active', true);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return data as ComplementOption[];
     }

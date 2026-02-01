@@ -67,11 +67,11 @@ const LABEL_OPTIONS = [
 
 export default function Menu() {
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
-  const { data: products } = useProducts();
+  const { data: products } = useProducts(true); // Include inactive for management
   const { data: categories } = useCategories();
   const { data: variations } = useProductVariations();
-  const { data: complementGroups } = useComplementGroups();
-  const { data: complementOptions } = useComplementOptions();
+  const { data: complementGroups } = useComplementGroups(true); // Include inactive for management
+  const { data: complementOptions } = useComplementOptions(true); // Include inactive for management
   const { data: printSectors } = usePrintSectors();
   const { otherStores, isOwnerOfGroup } = useGroupStores();
   const { createProduct, updateProduct, deleteProduct, updateSortOrder: updateProductSortOrder } = useProductMutations();

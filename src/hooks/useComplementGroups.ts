@@ -22,16 +22,21 @@ export interface ComplementGroup {
   updated_at: string | null;
 }
 
-export function useComplementGroups() {
+export function useComplementGroups(includeInactive = false) {
   return useQuery({
-    queryKey: ['complement-groups'],
+    queryKey: ['complement-groups', { includeInactive }],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('complement_groups')
         .select('*')
         .order('sort_order')
         .order('name');
       
+      if (!includeInactive) {
+        query = query.eq('is_active', true);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return data as ComplementGroup[];
     }
