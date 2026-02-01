@@ -1,80 +1,171 @@
 
+# Plano: Correção Definitiva da Exclusão de Produtos, Complementos e Opções
 
-# Plano: Corrigir Exclusão - Alterar Foreign Keys para SET NULL
+## Diagnóstico Atual
 
-## Diagnóstico
+Após investigação detalhada, identifiquei que:
 
-O problema está nas **Foreign Keys com regra `NO ACTION`** na tabela `order_item_sub_item_extras`:
+1. **FKs no banco estão corretas** - As Foreign Keys nas tabelas `order_item_sub_item_extras` já foram alteradas para `ON DELETE SET NULL`
+2. **RLS policies estão corretas** - As policies são PERMISSIVAS e permitem operações para admins
+3. **Código dos hooks está correto** - A lógica de fallback para soft delete existe
 
-| FK | Regra Atual | Problema |
-|----|-------------|----------|
-| `order_item_sub_item_extras.group_id` → `complement_groups.id` | **NO ACTION** | Bloqueia exclusão |
-| `order_item_sub_item_extras.option_id` → `complement_options.id` | **NO ACTION** | Bloqueia exclusão |
+O problema provavelmente está em:
+- **Erro de RLS sendo interpretado incorretamente** - O PostgreSQL retorna erro de RLS como código diferente de `23503`
+- **Outras FKs ainda bloqueando** - Pode haver FKs em outras tabelas que não foram identificadas
 
-Quando você tenta excluir um grupo ou opção, o PostgreSQL retorna o erro `23503` porque existem 5+ registros na tabela `order_item_sub_item_extras` que referenciam esses itens.
+## Problemas Identificados
+
+### 1. Código de Erro Incorreto
+O erro de RLS (quando policy bloqueia) retorna código `42501` (insufficient_privilege), não `23503` (foreign_key_violation).
+
+### 2. FKs em Cascata com RLS
+Quando uma tabela filha tem RLS habilitado com policy restritiva, o CASCADE pode falhar se a operação de DELETE na tabela filha for bloqueada pela RLS.
 
 ## Solução
 
-Alterar as Foreign Keys para `SET NULL` para que:
-1. Ao excluir um complement_group, o `group_id` nos registros históricos seja definido como `NULL`
-2. Ao excluir um complement_option, o `option_id` nos registros históricos seja definido como `NULL`
+### Estratégia 1: Melhorar Tratamento de Erros nos Hooks
 
-Os registros históricos mantêm os campos `group_name` e `option_name` para preservar o histórico legível.
+Atualizar os hooks para tratar múltiplos códigos de erro:
 
-## Implementação
+```typescript
+const deleteProduct = useMutation({
+  mutationFn: async (id: string) => {
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id);
+    
+    if (error) {
+      // Códigos de erro que indicam que devemos fazer soft delete:
+      // 23503 = foreign_key_violation
+      // 42501 = insufficient_privilege (RLS)
+      // PGRST116 = "Results contain 0 rows" (RLS bloqueou silenciosamente)
+      if (error.code === '23503' || error.code === '42501' || error.code === 'PGRST116') {
+        const { error: softDeleteError } = await supabase
+          .from('products')
+          .update({ is_available: false })
+          .eq('id', id);
+        
+        if (softDeleteError) throw softDeleteError;
+        return { softDeleted: true };
+      }
+      throw error;
+    }
+    return { softDeleted: false };
+  },
+  // ...
+});
+```
 
-### Migração SQL
+### Estratégia 2: Alterar FKs em Cascata para Tabelas com RLS Restritivo
+
+Modificar as FKs das tabelas intermediárias que têm CASCADE para SET NULL ou adicionar triggers que executam com SECURITY DEFINER:
 
 ```sql
--- Alterar FK de group_id para SET NULL
-ALTER TABLE public.order_item_sub_item_extras
-  DROP CONSTRAINT IF EXISTS order_item_sub_item_extras_group_id_fkey;
+-- Alterar complement_group_options para SET NULL em vez de CASCADE
+ALTER TABLE public.complement_group_options
+  DROP CONSTRAINT IF EXISTS complement_group_options_option_id_fkey;
 
-ALTER TABLE public.order_item_sub_item_extras
-  ADD CONSTRAINT order_item_sub_item_extras_group_id_fkey
-    FOREIGN KEY (group_id)
-    REFERENCES public.complement_groups(id)
-    ON DELETE SET NULL;
-
--- Alterar FK de option_id para SET NULL
-ALTER TABLE public.order_item_sub_item_extras
-  DROP CONSTRAINT IF EXISTS order_item_sub_item_extras_option_id_fkey;
-
-ALTER TABLE public.order_item_sub_item_extras
-  ADD CONSTRAINT order_item_sub_item_extras_option_id_fkey
+ALTER TABLE public.complement_group_options
+  ADD CONSTRAINT complement_group_options_option_id_fkey
     FOREIGN KEY (option_id)
     REFERENCES public.complement_options(id)
     ON DELETE SET NULL;
+
+-- Mesmo para group_id
+ALTER TABLE public.complement_group_options
+  DROP CONSTRAINT IF EXISTS complement_group_options_group_id_fkey;
+
+ALTER TABLE public.complement_group_options
+  ADD CONSTRAINT complement_group_options_group_id_fkey
+    FOREIGN KEY (group_id)
+    REFERENCES public.complement_groups(id)
+    ON DELETE SET NULL;
 ```
 
-## Resultado Esperado
+### Estratégia 3: Usar Soft Delete Direto (Mais Seguro)
 
-Após a migração:
-
-| Ação | Antes | Depois |
-|------|-------|--------|
-| Excluir complement_group vinculado | **ERRO 23503** | Sucesso (group_id vira NULL) |
-| Excluir complement_option vinculado | **ERRO 23503** | Sucesso (option_id vira NULL) |
-| Histórico de pedidos | - | Preservado (group_name, option_name mantidos) |
-
-## Código (Já Implementado)
-
-Os hooks já têm a lógica de soft delete como fallback, portanto não precisam de alteração:
+Alterar a estratégia para sempre fazer soft delete primeiro, evitando problemas de FK:
 
 ```typescript
-// useComplementGroups.ts - Lógica já existente
-if (error.code === '23503') {
-  await supabase.from('complement_groups').update({ is_active: false }).eq('id', id);
-  return { softDeleted: true };
-}
+const deleteProduct = useMutation({
+  mutationFn: async (id: string) => {
+    // Sempre fazer soft delete primeiro
+    const { error } = await supabase
+      .from('products')
+      .update({ is_available: false })
+      .eq('id', id);
+    
+    if (error) throw error;
+    return { softDeleted: true };
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['products'] });
+    toast({ title: 'Produto desativado com sucesso!' });
+  },
+  // ...
+});
 ```
 
-Após a migração, a exclusão real funcionará diretamente, e o soft delete só será usado em casos extremos.
+## Arquivos a Modificar
 
-## Arquivos
+| Arquivo | Modificação |
+|---------|-------------|
+| `src/hooks/useProducts.ts` | Usar soft delete direto ou melhorar tratamento de erro |
+| `src/hooks/useComplementGroups.ts` | Usar soft delete direto ou melhorar tratamento de erro |
+| `src/hooks/useComplementOptions.ts` | Usar soft delete direto ou melhorar tratamento de erro |
+| `src/hooks/useProductExtras.ts` | Usar soft delete direto ou melhorar tratamento de erro |
+| `src/hooks/useProductVariations.ts` | Usar soft delete direto ou melhorar tratamento de erro |
+| `src/hooks/useCategories.ts` | Adicionar soft delete (não tem atualmente) |
+| Migração SQL | Alterar FKs de CASCADE para SET NULL nas tabelas intermediárias |
 
-| Arquivo | Ação |
-|---------|------|
-| **Migração SQL** | Alterar FKs de NO ACTION para SET NULL |
-| Hooks | Nenhuma alteração necessária |
+## Migração SQL Proposta
 
+```sql
+-- Alterar FKs de complement_group_options para SET NULL
+ALTER TABLE public.complement_group_options
+  DROP CONSTRAINT IF EXISTS complement_group_options_group_id_fkey,
+  ADD CONSTRAINT complement_group_options_group_id_fkey 
+    FOREIGN KEY (group_id) REFERENCES public.complement_groups(id) ON DELETE SET NULL;
+
+ALTER TABLE public.complement_group_options
+  DROP CONSTRAINT IF EXISTS complement_group_options_option_id_fkey,
+  ADD CONSTRAINT complement_group_options_option_id_fkey 
+    FOREIGN KEY (option_id) REFERENCES public.complement_options(id) ON DELETE SET NULL;
+
+-- Alterar FKs de product_complement_groups para SET NULL
+ALTER TABLE public.product_complement_groups
+  DROP CONSTRAINT IF EXISTS product_complement_groups_group_id_fkey,
+  ADD CONSTRAINT product_complement_groups_group_id_fkey 
+    FOREIGN KEY (group_id) REFERENCES public.complement_groups(id) ON DELETE SET NULL;
+
+ALTER TABLE public.product_complement_groups
+  DROP CONSTRAINT IF EXISTS product_complement_groups_product_id_fkey,
+  ADD CONSTRAINT product_complement_groups_product_id_fkey 
+    FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE SET NULL;
+
+-- Alterar FKs de complement_option_ingredients para SET NULL
+ALTER TABLE public.complement_option_ingredients
+  DROP CONSTRAINT IF EXISTS complement_option_ingredients_complement_option_id_fkey,
+  ADD CONSTRAINT complement_option_ingredients_complement_option_id_fkey 
+    FOREIGN KEY (complement_option_id) REFERENCES public.complement_options(id) ON DELETE SET NULL;
+
+-- Alterar FKs de product_ingredients para SET NULL
+ALTER TABLE public.product_ingredients
+  DROP CONSTRAINT IF EXISTS product_ingredients_product_id_fkey,
+  ADD CONSTRAINT product_ingredients_product_id_fkey 
+    FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE SET NULL;
+```
+
+## Recomendação Final
+
+Implementar **ambas** as estratégias:
+
+1. **Migração SQL** para alterar FKs de CASCADE para SET NULL nas tabelas intermediárias
+2. **Atualizar hooks** para usar soft delete direto, que é mais confiável e evita todos os problemas de FK
+
+A abordagem de soft delete direto é mais robusta porque:
+- Não depende de cascatas funcionarem corretamente
+- Preserva todos os dados históricos
+- Permite recuperação fácil se necessário
+- Evita problemas de RLS em cascata
