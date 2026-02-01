@@ -74,21 +74,19 @@ export function useProductExtrasMutations() {
 
   const deleteExtra = useMutation({
     mutationFn: async (id: string) => {
-      // Usar soft delete direto para evitar problemas de FK e RLS
       const { error } = await supabase
         .from('product_extras')
-        .update({ is_active: false })
+        .delete()
         .eq('id', id);
       
       if (error) throw error;
-      return { softDeleted: true };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-extras'] });
-      toast({ title: 'Complemento desativado com sucesso!' });
+      toast({ title: 'Complemento excluído com sucesso!' });
     },
     onError: (error) => {
-      toast({ title: 'Erro ao desativar complemento', description: error.message, variant: 'destructive' });
+      toast({ title: 'Erro ao excluir complemento', description: error.message, variant: 'destructive' });
     }
   });
 
