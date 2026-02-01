@@ -1,114 +1,148 @@
 
-
-# Plano: Correção Definitiva - Colunas NOT NULL Impedem SET NULL
+# Plano: Correção do Problema de RLS - Owners sem Role 'admin'
 
 ## Diagnóstico Final
 
-O erro **persiste** porque as migrações anteriores definiram `ON DELETE SET NULL` nas Foreign Keys, mas as **colunas continuam NOT NULL**. Quando o PostgreSQL tenta executar o SET NULL, ele falha com o erro:
+O problema foi identificado com precisão. O log mostra:
 
 ```
-null value in column "group_id" of relation "complement_group_options" violates not-null constraint
+[deleteGroup] Result: {error: null, data: Array(0)}
 ```
 
-### Status Atual das Colunas
+**`data: Array(0)` significa que a RLS bloqueou silenciosamente a operação.**
 
-| Tabela | Coluna | É Nullable? | Problema |
-|--------|--------|-------------|----------|
-| `complement_group_options` | `group_id` | **NO** | SET NULL falha |
-| `complement_group_options` | `option_id` | **NO** | SET NULL falha |
-| `product_complement_groups` | `product_id` | **NO** | SET NULL falha |
-| `product_complement_groups` | `group_id` | **NO** | SET NULL falha |
-| `product_ingredients` | `product_id` | **NO** | SET NULL falha |
-| `complement_option_ingredients` | `complement_option_id` | **NO** | SET NULL falha |
+### Causa Raiz
+
+O grupo `f2902ad2-5bbe-4b54-95da-32ea813e8b6a` ("ESCOLHA 1 SABOR") pertence ao tenant `9f0ba9da-ccac-4835-80ed-e4e299c2109f` ("Unidade Aleixo").
+
+O usuário `c1c176df-8579-4942-b310-9a6e124facd9` (DOM HELDER PIZZARIA):
+- **É owner** do tenant "Unidade Aleixo" na tabela `tenant_members` (is_owner = true)
+- **NÃO tem role 'admin'** na tabela `user_roles` para esse tenant
+
+A política de RLS exige:
+```sql
+belongs_to_tenant(tenant_id) AND has_tenant_role(auth.uid(), tenant_id, 'admin')
+```
+
+Como não existe registro em `user_roles` para esse tenant, `has_tenant_role()` retorna `false` e o UPDATE é bloqueado.
 
 ## Solução
 
-**Opção escolhida: Alterar FK para ON DELETE CASCADE + Usar Soft Delete Direto**
+Modificar as políticas de RLS para aceitar **tanto owners quanto admins**. Isso é mais correto semanticamente, pois um owner deveria ter pelo menos as mesmas permissões de um admin.
 
-A melhor abordagem para tabelas intermediárias (junction tables) é usar `ON DELETE CASCADE`:
-- Quando o grupo ou opção é excluído, os registros de vínculo são automaticamente removidos
-- Isso é o comportamento correto para tabelas de relacionamento N:N
-- Não afeta dados históricos (que estão em `order_item_sub_item_extras` com colunas nullable)
+### Alteração das Políticas
 
-### Migração SQL
-
+Substituir:
 ```sql
--- 1. Alterar complement_group_options para CASCADE
-ALTER TABLE public.complement_group_options
-  DROP CONSTRAINT IF EXISTS complement_group_options_group_id_fkey;
-ALTER TABLE public.complement_group_options
-  ADD CONSTRAINT complement_group_options_group_id_fkey
-    FOREIGN KEY (group_id) REFERENCES public.complement_groups(id) ON DELETE CASCADE;
-
-ALTER TABLE public.complement_group_options
-  DROP CONSTRAINT IF EXISTS complement_group_options_option_id_fkey;
-ALTER TABLE public.complement_group_options
-  ADD CONSTRAINT complement_group_options_option_id_fkey
-    FOREIGN KEY (option_id) REFERENCES public.complement_options(id) ON DELETE CASCADE;
-
--- 2. Alterar product_complement_groups para CASCADE
-ALTER TABLE public.product_complement_groups
-  DROP CONSTRAINT IF EXISTS product_complement_groups_group_id_fkey;
-ALTER TABLE public.product_complement_groups
-  ADD CONSTRAINT product_complement_groups_group_id_fkey
-    FOREIGN KEY (group_id) REFERENCES public.complement_groups(id) ON DELETE CASCADE;
-
-ALTER TABLE public.product_complement_groups
-  DROP CONSTRAINT IF EXISTS product_complement_groups_product_id_fkey;
-ALTER TABLE public.product_complement_groups
-  ADD CONSTRAINT product_complement_groups_product_id_fkey
-    FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
-
--- 3. Alterar complement_option_ingredients para CASCADE
-ALTER TABLE public.complement_option_ingredients
-  DROP CONSTRAINT IF EXISTS complement_option_ingredients_complement_option_id_fkey;
-ALTER TABLE public.complement_option_ingredients
-  ADD CONSTRAINT complement_option_ingredients_complement_option_id_fkey
-    FOREIGN KEY (complement_option_id) REFERENCES public.complement_options(id) ON DELETE CASCADE;
-
--- 4. Alterar product_ingredients para CASCADE
-ALTER TABLE public.product_ingredients
-  DROP CONSTRAINT IF EXISTS product_ingredients_product_id_fkey;
-ALTER TABLE public.product_ingredients
-  ADD CONSTRAINT product_ingredients_product_id_fkey
-    FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
-
--- 5. Alterar product_extra_links para CASCADE (se existir)
-ALTER TABLE public.product_extra_links
-  DROP CONSTRAINT IF EXISTS product_extra_links_product_id_fkey;
-ALTER TABLE public.product_extra_links
-  ADD CONSTRAINT product_extra_links_product_id_fkey
-    FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
-
-ALTER TABLE public.product_extra_links
-  DROP CONSTRAINT IF EXISTS product_extra_links_extra_id_fkey;
-ALTER TABLE public.product_extra_links
-  ADD CONSTRAINT product_extra_links_extra_id_fkey
-    FOREIGN KEY (extra_id) REFERENCES public.product_extras(id) ON DELETE CASCADE;
+has_tenant_role(auth.uid(), tenant_id, 'admin'::app_role)
 ```
 
-### Alteração nos Hooks
+Por:
+```sql
+(has_tenant_role(auth.uid(), tenant_id, 'admin'::app_role) OR is_tenant_owner(tenant_id))
+```
 
-Como o soft delete já está implementado, os hooks não precisam de alteração. A estratégia já é:
-1. Executar `update({ is_available: false })` ou `update({ is_active: false })`
-2. Isso não aciona CASCADE (é um UPDATE, não DELETE)
-3. O item fica oculto mas mantém todos os vínculos
+### Tabelas Afetadas
 
-No entanto, caso o administrador queira realmente excluir (não apenas desativar), o CASCADE funcionará corretamente.
+| Tabela | Policy Atual | Nova Policy |
+|--------|-------------|-------------|
+| `complement_groups` | admin only | admin OR owner |
+| `complement_options` | admin only | admin OR owner |
+| `products` | admin only | admin OR owner |
+| `categories` | admin only | admin OR owner |
+| `product_extras` | admin only | admin OR owner |
+| `product_variations` | admin only | admin OR owner |
+| `ingredients` | admin only | admin OR owner |
+| `kds_stations` | admin only | admin OR owner |
+| `print_sectors` | admin only | admin OR owner |
+| `kds_global_settings` | admin only | admin OR owner |
+
+## Migração SQL
+
+```sql
+-- Atualizar política de complement_groups
+DROP POLICY IF EXISTS "Tenant admins can manage complement groups" ON public.complement_groups;
+CREATE POLICY "Tenant admins can manage complement groups" ON public.complement_groups
+  FOR ALL USING (
+    belongs_to_tenant(tenant_id) AND 
+    (has_tenant_role(auth.uid(), tenant_id, 'admin'::app_role) OR is_tenant_owner(tenant_id))
+  )
+  WITH CHECK (
+    belongs_to_tenant(tenant_id) AND 
+    (has_tenant_role(auth.uid(), tenant_id, 'admin'::app_role) OR is_tenant_owner(tenant_id))
+  );
+
+-- Atualizar política de complement_options
+DROP POLICY IF EXISTS "Tenant admins can manage complement options" ON public.complement_options;
+CREATE POLICY "Tenant admins can manage complement options" ON public.complement_options
+  FOR ALL USING (
+    belongs_to_tenant(tenant_id) AND 
+    (has_tenant_role(auth.uid(), tenant_id, 'admin'::app_role) OR is_tenant_owner(tenant_id))
+  )
+  WITH CHECK (
+    belongs_to_tenant(tenant_id) AND 
+    (has_tenant_role(auth.uid(), tenant_id, 'admin'::app_role) OR is_tenant_owner(tenant_id))
+  );
+
+-- Atualizar política de products
+DROP POLICY IF EXISTS "Tenant admins can manage products" ON public.products;
+CREATE POLICY "Tenant admins can manage products" ON public.products
+  FOR ALL USING (
+    belongs_to_tenant(tenant_id) AND 
+    (has_tenant_role(auth.uid(), tenant_id, 'admin'::app_role) OR is_tenant_owner(tenant_id))
+  )
+  WITH CHECK (
+    belongs_to_tenant(tenant_id) AND 
+    (has_tenant_role(auth.uid(), tenant_id, 'admin'::app_role) OR is_tenant_owner(tenant_id))
+  );
+
+-- Mesma lógica para demais tabelas...
+```
+
+## Alternativa: Trigger para Auto-criar Role
+
+Como medida complementar, podemos criar um trigger que automaticamente insere uma role 'admin' na `user_roles` quando um `tenant_member` é criado com `is_owner = true`.
+
+```sql
+CREATE OR REPLACE FUNCTION auto_create_admin_role_for_owner()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.is_owner = TRUE THEN
+    INSERT INTO user_roles (user_id, role, tenant_id)
+    VALUES (NEW.user_id, 'admin', NEW.tenant_id)
+    ON CONFLICT (user_id, role, tenant_id) DO NOTHING;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trigger_auto_admin_for_owner
+AFTER INSERT ON tenant_members
+FOR EACH ROW
+EXECUTE FUNCTION auto_create_admin_role_for_owner();
+
+-- Backfill: criar roles para owners existentes
+INSERT INTO user_roles (user_id, role, tenant_id)
+SELECT tm.user_id, 'admin', tm.tenant_id
+FROM tenant_members tm
+WHERE tm.is_owner = TRUE
+ON CONFLICT DO NOTHING;
+```
 
 ## Resultado Esperado
 
-| Ação | Comportamento |
-|------|---------------|
-| Clicar "Excluir" produto | Executa soft delete (`is_available: false`) - produto fica oculto |
-| Clicar "Excluir" grupo | Executa soft delete (`is_active: false`) - grupo fica inativo |
-| Clicar "Excluir" opção | Executa soft delete (`is_active: false`) - opção fica inativa |
-| Exclusão real (se implementada) | CASCADE remove vínculos automaticamente |
+Após a migração:
+- Owners poderão gerenciar todos os dados do seu tenant
+- Admins (sem ser owner) continuarão funcionando normalmente
+- Novos owners terão role 'admin' criada automaticamente
 
 ## Arquivos a Modificar
 
 | Arquivo | Ação |
 |---------|------|
-| **Nova Migração SQL** | Alterar todas as FKs para CASCADE |
-| Nenhum hook | Já estão com soft delete |
-
+| **Nova Migração SQL** | Atualizar políticas RLS + criar trigger + backfill |
+| Nenhum código frontend | Não requer alterações |
