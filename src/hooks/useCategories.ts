@@ -78,19 +78,21 @@ export function useCategoryMutations() {
 
   const deleteCategory = useMutation({
     mutationFn: async (id: string) => {
+      // Usar soft delete direto para evitar problemas de FK e RLS
       const { error } = await supabase
         .from('categories')
-        .delete()
+        .update({ is_active: false })
         .eq('id', id);
       
       if (error) throw error;
+      return { softDeleted: true };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories'] });
-      toast({ title: 'Categoria excluída!' });
+      toast({ title: 'Categoria desativada com sucesso!' });
     },
     onError: (error: Error) => {
-      toast({ title: 'Erro ao excluir categoria', description: error.message, variant: 'destructive' });
+      toast({ title: 'Erro ao desativar categoria', description: error.message, variant: 'destructive' });
     },
   });
 

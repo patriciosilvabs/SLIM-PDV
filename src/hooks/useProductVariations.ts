@@ -79,35 +79,21 @@ export function useProductVariationsMutations() {
 
   const deleteVariation = useMutation({
     mutationFn: async (id: string) => {
+      // Usar soft delete direto para evitar problemas de FK e RLS
       const { error } = await supabase
         .from('product_variations')
-        .delete()
+        .update({ is_active: false })
         .eq('id', id);
       
-      if (error) {
-        if (error.code === '23503') {
-          const { error: softDeleteError } = await supabase
-            .from('product_variations')
-            .update({ is_active: false })
-            .eq('id', id);
-          
-          if (softDeleteError) throw softDeleteError;
-          return { softDeleted: true };
-        }
-        throw error;
-      }
-      return { softDeleted: false };
+      if (error) throw error;
+      return { softDeleted: true };
     },
-    onSuccess: (result) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-variations'] });
-      if (result?.softDeleted) {
-        toast({ title: 'Variação desativada', description: 'Não foi possível excluir pois está vinculada a pedidos.' });
-      } else {
-        toast({ title: 'Variação removida' });
-      }
+      toast({ title: 'Variação desativada com sucesso!' });
     },
     onError: (error) => {
-      toast({ title: 'Erro ao remover', description: error.message, variant: 'destructive' });
+      toast({ title: 'Erro ao desativar variação', description: error.message, variant: 'destructive' });
     }
   });
 
