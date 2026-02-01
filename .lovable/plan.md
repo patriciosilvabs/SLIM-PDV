@@ -1,179 +1,141 @@
 
-# Plano: Sistema de Ficha Técnica para Opções de Complemento
+# Plano: Corrigir Exclusão de Produtos, Complementos e Opções
 
-## Visão Geral
+## Diagnóstico
 
-Implementar vinculação de ingredientes (insumos porcionados) nas **Opções de Complemento** para que o sistema calcule a baixa exata de estoque quando uma pizza é vendida.
+A exclusão está sendo bloqueada por **chaves estrangeiras restritivas (NO ACTION/RESTRICT)** que impedem a remoção quando existem registros relacionados.
 
-**Exemplo concreto:**
-- Pizza Grande 1 Sabor = Produto base (consome **Massa**)
-- Sabor Calabresa = Opção de complemento (consome **Mussarela** + **Calabresa**)
-- Resultado: Venda baixa automaticamente 1 Massa + 1 Mussarela + 1 Calabresa
+### Tabelas Afetadas e Suas Dependências
 
-## Arquitetura da Solução
+| Tabela a Excluir | Tabela Dependente | Coluna | Regra Atual | Problema |
+|------------------|-------------------|--------|-------------|----------|
+| **products** | order_items | product_id | NO ACTION | Bloqueia se produto já foi vendido |
+| **products** | cardapioweb_product_mappings | local_product_id | NO ACTION | Bloqueia se mapeado com CardapioWeb |
+| **complement_options** | order_item_extras | extra_id | SET NULL | OK - apenas limpa referência |
+| **complement_groups** | order_item_sub_item_extras | group_id | SET NULL | OK - apenas limpa referência |
 
-```text
-┌──────────────────────────────────────────────────────────────────────────┐
-│                          FLUXO DE BAIXA DE ESTOQUE                       │
-├──────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  VENDA NO PDV                                                            │
-│       │                                                                  │
-│       ▼                                                                  │
-│  ┌─────────────────────┐                                                 │
-│  │ Pizza Grande 1 Sabor│ ──► product_ingredients ──► MASSA (1 porção)   │
-│  └─────────────────────┘                                                 │
-│       │                                                                  │
-│       ▼                                                                  │
-│  ┌─────────────────────┐                                                 │
-│  │ Sabor: Calabresa    │ ──► complement_option_ingredients              │
-│  └─────────────────────┘          ├── MUSSARELA (1 porção)              │
-│                                   └── CALABRESA (1 porção)              │
-│                                                                          │
-│       ▼                                                                  │
-│  ┌─────────────────────┐                                                 │
-│  │ TRIGGER DE BAIXA    │ ──► stock_movements                            │
-│  │ (order_item_extras) │          └── 3 movimentações de saída          │
-│  └─────────────────────┘                                                 │
-│                                                                          │
-│       ▼                                                                  │
-│  ┌─────────────────────┐                                                 │
-│  │ CPD VIA API        │ ◄── Consulta demanda em tempo real              │
-│  └─────────────────────┘                                                 │
-│                                                                          │
-└──────────────────────────────────────────────────────────────────────────┘
+## Solução
+
+### Estratégia: Soft Delete para Produtos (Recomendado)
+
+Como produtos já vendidos não podem ser deletados (integridade dos dados de vendas), implementar **soft delete** através do campo `is_available`:
+
+1. Ao "excluir" um produto, marcar como `is_available = false` ao invés de remover
+2. Filtrar produtos com `is_available = false` das listagens principais
+3. Opcionalmente, adicionar um campo `deleted_at` para registro de exclusão
+
+### Alternativa: Exclusão Real com Tratamento de Erros
+
+Se o cliente preferir exclusão real, tratar o erro e informar o motivo ao usuário.
+
+## Implementação
+
+### 1. Atualizar Hook de Produtos
+
+Modificar `useProducts.ts` para:
+- Tentar exclusão real primeiro
+- Se falhar por FK, perguntar ao usuário se deseja desativar
+- Ou implementar soft delete direto
+
+```typescript
+// Opção A: Soft Delete
+const deleteProduct = useMutation({
+  mutationFn: async (id: string) => {
+    const { error } = await supabase
+      .from('products')
+      .update({ is_available: false })  // Soft delete
+      .eq('id', id);
+    
+    if (error) throw error;
+  },
+  ...
+});
+
+// Opção B: Tentar real, fallback para soft
+const deleteProduct = useMutation({
+  mutationFn: async (id: string) => {
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id);
+    
+    if (error) {
+      if (error.code === '23503') { // FK violation
+        // Tentar soft delete
+        await supabase.from('products').update({ is_available: false }).eq('id', id);
+      } else {
+        throw error;
+      }
+    }
+  },
+  ...
+});
 ```
 
-## Etapas de Implementação
+### 2. Atualizar Hook de Complementos
 
-### 1. Banco de Dados
+Modificar `useComplementGroups.ts` e `useComplementOptions.ts` com a mesma estratégia:
+- Usar `is_active = false` como soft delete
+- Tratar erro de FK com mensagem clara
 
-**Nova Tabela: `complement_option_ingredients`**
+### 3. Atualizar Mensagens de Erro
 
-| Coluna | Tipo | Descrição |
-|--------|------|-----------|
-| id | uuid | Chave primária |
-| complement_option_id | uuid | FK para complement_options |
-| ingredient_id | uuid | FK para ingredients |
-| quantity | numeric | Quantidade consumida por unidade |
-| tenant_id | uuid | FK para tenants |
-| created_at | timestamp | Data de criação |
+Melhorar feedback ao usuário quando exclusão falhar:
 
-**Políticas RLS:**
-- Admins do tenant podem gerenciar
-- Membros do tenant podem visualizar
-
-**Nova Trigger: `auto_deduct_stock_for_extras`**
-- Dispara em INSERT na `order_item_extras`
-- Busca ingredientes da opção via `complement_option_ingredients`
-- Registra movimentação de saída em `stock_movements`
-
-### 2. Backend (Hooks)
-
-**Novo Hook: `useComplementOptionIngredients`**
-- `useComplementOptionIngredients(optionId)` - Lista ingredientes de uma opção
-- `useComplementOptionIngredientMutations()` - CRUD para vínculos
-
-**Funções:**
-- `addIngredient({ complement_option_id, ingredient_id, quantity })`
-- `updateIngredient({ id, quantity })`
-- `removeIngredient(id)`
-
-### 3. Interface do Usuário
-
-**Atualização: `ComplementOptionDialog.tsx`**
-
-Adicionar nova aba "Ficha Técnica" (ou seção expandível) com:
-- Lista de ingredientes vinculados à opção
-- Botão para adicionar ingrediente
-- Select para escolher ingrediente da lista
-- Input para quantidade
-- Botão para remover ingrediente
-
-```text
-┌──────────────────────────────────────────────────────────────────┐
-│ Editar opção: Calabresa                                          │
-├──────────────────────────────────────────────────────────────────┤
-│ [Imagem] [Nome] [Preço] [Descrição]                              │
-├──────────────────────────────────────────────────────────────────┤
-│ FICHA TÉCNICA (Insumos)                                          │
-│ ┌──────────────────────────────────────────────────────────────┐ │
-│ │ Mussarela      │ 0.150 kg  │ [Remover]                       │ │
-│ │ Calabresa      │ 0.100 kg  │ [Remover]                       │ │
-│ ├──────────────────────────────────────────────────────────────┤ │
-│ │ [Select ingrediente] [Qtd] [+ Adicionar]                     │ │
-│ └──────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────┘
+```typescript
+onError: (error: Error) => {
+  if (error.message.includes('violates foreign key constraint')) {
+    toast({ 
+      title: 'Não foi possível excluir', 
+      description: 'Este item está vinculado a pedidos ou outras configurações. Deseja desativá-lo?',
+      variant: 'destructive' 
+    });
+  } else {
+    toast({ title: 'Erro ao excluir', description: error.message, variant: 'destructive' });
+  }
+}
 ```
 
-### 4. Atualização da API de Produção
+### 4. Atualizar FKs no Banco (Opcional)
 
-**Endpoint: `production-api?action=demand`**
-
-Atualizar para considerar também os ingredientes das opções de complemento:
-- Atual: Só calcula demanda baseada em `product_ingredients`
-- Novo: Também consulta `complement_option_ingredients` para calcular demanda dos sabores
-
-## Detalhes Técnicos
-
-### Trigger de Baixa de Estoque para Extras
+Se preferir comportamento automático, alterar as constraints para `ON DELETE SET NULL`:
 
 ```sql
--- Pseudocódigo da trigger
-CREATE OR REPLACE FUNCTION auto_deduct_stock_for_extras()
-RETURNS trigger AS $$
-DECLARE
-  option_ingredient RECORD;
-  order_item_record RECORD;
-  ingredient_record RECORD;
-  deduction_quantity NUMERIC;
-BEGIN
-  -- Buscar order_item para obter tenant_id e quantity
-  SELECT oi.quantity, o.tenant_id, o.is_draft
-  INTO order_item_record
-  FROM order_items oi
-  JOIN orders o ON o.id = oi.order_id
-  WHERE oi.id = NEW.order_item_id;
-  
-  -- Só processar se não for rascunho
-  IF order_item_record.is_draft THEN
-    RETURN NEW;
-  END IF;
-  
-  -- Buscar ingredientes da opção de complemento
-  FOR option_ingredient IN
-    SELECT coi.ingredient_id, coi.quantity as recipe_quantity
-    FROM complement_option_ingredients coi
-    WHERE coi.complement_option_id = NEW.extra_id
-      AND coi.tenant_id = order_item_record.tenant_id
-  LOOP
-    -- Calcular e baixar estoque (similar à trigger existente)
-  END LOOP;
-  
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+-- Para products -> order_items (permite excluir produto, itens ficam órfãos)
+ALTER TABLE order_items 
+  DROP CONSTRAINT order_items_product_id_fkey,
+  ADD CONSTRAINT order_items_product_id_fkey 
+    FOREIGN KEY (product_id) 
+    REFERENCES products(id) 
+    ON DELETE SET NULL;
+
+-- Para products -> cardapioweb_product_mappings
+ALTER TABLE cardapioweb_product_mappings 
+  DROP CONSTRAINT cardapioweb_product_mappings_local_product_id_fkey,
+  ADD CONSTRAINT cardapioweb_product_mappings_local_product_id_fkey 
+    FOREIGN KEY (local_product_id) 
+    REFERENCES products(id) 
+    ON DELETE SET NULL;
 ```
 
-### Ordem das Operações
+**Nota:** Essa alteração no banco permite exclusão real, mas os dados históricos perdem referência ao produto original.
 
-1. **Venda no PDV** → Cria `order_items`
-2. **Trigger 1** (`auto_deduct_stock_for_order_item`) → Baixa ingredientes do produto base
-3. **Insert** em `order_item_extras` → Registra os sabores escolhidos
-4. **Trigger 2** (`auto_deduct_stock_for_extras`) → Baixa ingredientes dos sabores
-5. **CPD** via API → Consulta demanda atualizada
+## Arquivos a Modificar
 
-## Arquivos a Serem Criados/Modificados
+| Arquivo | Modificação |
+|---------|-------------|
+| `src/hooks/useProducts.ts` | Implementar soft delete ou tratamento de erro FK |
+| `src/hooks/useComplementGroups.ts` | Implementar soft delete ou tratamento de erro FK |
+| `src/hooks/useComplementOptions.ts` | Implementar soft delete ou tratamento de erro FK |
+| (Opcional) Migração SQL | Alterar constraints de FK para SET NULL |
 
-| Arquivo | Ação | Descrição |
-|---------|------|-----------|
-| **Migração SQL** | Criar | Tabela `complement_option_ingredients` + trigger |
-| `src/hooks/useComplementOptionIngredients.ts` | Criar | Hook para CRUD de ingredientes da opção |
-| `src/components/menu/ComplementOptionDialog.tsx` | Modificar | Adicionar seção de ficha técnica |
-| `supabase/functions/production-api/index.ts` | Modificar | Incluir demanda dos complementos |
+## Recomendação
 
-## Considerações de Segurança
+Recomendo a **Estratégia de Soft Delete** porque:
 
-- RLS garante isolamento por tenant
-- Trigger usa SECURITY DEFINER para operações cross-table
-- API valida permissões via API key
+1. **Preserva integridade dos dados** - Pedidos antigos mantêm referência ao produto
+2. **Relatórios precisos** - Histórico de vendas continua mostrando nomes corretos
+3. **Recuperação fácil** - Pode reativar produto se necessário
+4. **Sem alteração de schema** - Usa campos já existentes (`is_available`, `is_active`)
+
+Para produtos/opções desativados, podemos adicionar um filtro "Mostrar inativos" na interface.
