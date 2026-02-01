@@ -85,35 +85,21 @@ export function useComplementOptionsMutations() {
 
   const deleteOption = useMutation({
     mutationFn: async (id: string) => {
+      // Usar soft delete direto para evitar problemas de FK e RLS
       const { error } = await supabase
         .from('complement_options')
-        .delete()
+        .update({ is_active: false })
         .eq('id', id);
       
-      if (error) {
-        if (error.code === '23503') {
-          const { error: softDeleteError } = await supabase
-            .from('complement_options')
-            .update({ is_active: false })
-            .eq('id', id);
-          
-          if (softDeleteError) throw softDeleteError;
-          return { softDeleted: true };
-        }
-        throw error;
-      }
-      return { softDeleted: false };
+      if (error) throw error;
+      return { softDeleted: true };
     },
-    onSuccess: (result) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['complement-options'] });
-      if (result?.softDeleted) {
-        toast({ title: 'Opção desativada', description: 'Não foi possível excluir pois está vinculada a pedidos.' });
-      } else {
-        toast({ title: 'Opção removida' });
-      }
+      toast({ title: 'Opção desativada com sucesso!' });
     },
     onError: (error) => {
-      toast({ title: 'Erro ao remover', description: error.message, variant: 'destructive' });
+      toast({ title: 'Erro ao desativar opção', description: error.message, variant: 'destructive' });
     }
   });
 

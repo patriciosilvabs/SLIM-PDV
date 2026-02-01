@@ -95,37 +95,21 @@ export function useProductMutations() {
 
   const deleteProduct = useMutation({
     mutationFn: async (id: string) => {
-      // Tentar exclusão real primeiro
+      // Usar soft delete direto para evitar problemas de FK e RLS
       const { error } = await supabase
         .from('products')
-        .delete()
+        .update({ is_available: false })
         .eq('id', id);
       
-      if (error) {
-        // Se erro de FK (código 23503), fazer soft delete
-        if (error.code === '23503') {
-          const { error: softDeleteError } = await supabase
-            .from('products')
-            .update({ is_available: false })
-            .eq('id', id);
-          
-          if (softDeleteError) throw softDeleteError;
-          return { softDeleted: true };
-        }
-        throw error;
-      }
-      return { softDeleted: false };
+      if (error) throw error;
+      return { softDeleted: true };
     },
-    onSuccess: (result) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
-      if (result?.softDeleted) {
-        toast({ title: 'Produto desativado', description: 'Não foi possível excluir pois está vinculado a pedidos. O produto foi desativado.' });
-      } else {
-        toast({ title: 'Produto excluído!' });
-      }
+      toast({ title: 'Produto desativado com sucesso!' });
     },
     onError: (error: Error) => {
-      toast({ title: 'Erro ao excluir produto', description: error.message, variant: 'destructive' });
+      toast({ title: 'Erro ao desativar produto', description: error.message, variant: 'destructive' });
     },
   });
 
