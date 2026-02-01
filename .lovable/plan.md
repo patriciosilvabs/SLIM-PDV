@@ -1,141 +1,80 @@
 
-# Plano: Corrigir Exclusão de Produtos, Complementos e Opções
+
+# Plano: Corrigir Exclusão - Alterar Foreign Keys para SET NULL
 
 ## Diagnóstico
 
-A exclusão está sendo bloqueada por **chaves estrangeiras restritivas (NO ACTION/RESTRICT)** que impedem a remoção quando existem registros relacionados.
+O problema está nas **Foreign Keys com regra `NO ACTION`** na tabela `order_item_sub_item_extras`:
 
-### Tabelas Afetadas e Suas Dependências
+| FK | Regra Atual | Problema |
+|----|-------------|----------|
+| `order_item_sub_item_extras.group_id` → `complement_groups.id` | **NO ACTION** | Bloqueia exclusão |
+| `order_item_sub_item_extras.option_id` → `complement_options.id` | **NO ACTION** | Bloqueia exclusão |
 
-| Tabela a Excluir | Tabela Dependente | Coluna | Regra Atual | Problema |
-|------------------|-------------------|--------|-------------|----------|
-| **products** | order_items | product_id | NO ACTION | Bloqueia se produto já foi vendido |
-| **products** | cardapioweb_product_mappings | local_product_id | NO ACTION | Bloqueia se mapeado com CardapioWeb |
-| **complement_options** | order_item_extras | extra_id | SET NULL | OK - apenas limpa referência |
-| **complement_groups** | order_item_sub_item_extras | group_id | SET NULL | OK - apenas limpa referência |
+Quando você tenta excluir um grupo ou opção, o PostgreSQL retorna o erro `23503` porque existem 5+ registros na tabela `order_item_sub_item_extras` que referenciam esses itens.
 
 ## Solução
 
-### Estratégia: Soft Delete para Produtos (Recomendado)
+Alterar as Foreign Keys para `SET NULL` para que:
+1. Ao excluir um complement_group, o `group_id` nos registros históricos seja definido como `NULL`
+2. Ao excluir um complement_option, o `option_id` nos registros históricos seja definido como `NULL`
 
-Como produtos já vendidos não podem ser deletados (integridade dos dados de vendas), implementar **soft delete** através do campo `is_available`:
-
-1. Ao "excluir" um produto, marcar como `is_available = false` ao invés de remover
-2. Filtrar produtos com `is_available = false` das listagens principais
-3. Opcionalmente, adicionar um campo `deleted_at` para registro de exclusão
-
-### Alternativa: Exclusão Real com Tratamento de Erros
-
-Se o cliente preferir exclusão real, tratar o erro e informar o motivo ao usuário.
+Os registros históricos mantêm os campos `group_name` e `option_name` para preservar o histórico legível.
 
 ## Implementação
 
-### 1. Atualizar Hook de Produtos
+### Migração SQL
 
-Modificar `useProducts.ts` para:
-- Tentar exclusão real primeiro
-- Se falhar por FK, perguntar ao usuário se deseja desativar
-- Ou implementar soft delete direto
+```sql
+-- Alterar FK de group_id para SET NULL
+ALTER TABLE public.order_item_sub_item_extras
+  DROP CONSTRAINT IF EXISTS order_item_sub_item_extras_group_id_fkey;
 
-```typescript
-// Opção A: Soft Delete
-const deleteProduct = useMutation({
-  mutationFn: async (id: string) => {
-    const { error } = await supabase
-      .from('products')
-      .update({ is_available: false })  // Soft delete
-      .eq('id', id);
-    
-    if (error) throw error;
-  },
-  ...
-});
+ALTER TABLE public.order_item_sub_item_extras
+  ADD CONSTRAINT order_item_sub_item_extras_group_id_fkey
+    FOREIGN KEY (group_id)
+    REFERENCES public.complement_groups(id)
+    ON DELETE SET NULL;
 
-// Opção B: Tentar real, fallback para soft
-const deleteProduct = useMutation({
-  mutationFn: async (id: string) => {
-    const { error } = await supabase
-      .from('products')
-      .delete()
-      .eq('id', id);
-    
-    if (error) {
-      if (error.code === '23503') { // FK violation
-        // Tentar soft delete
-        await supabase.from('products').update({ is_available: false }).eq('id', id);
-      } else {
-        throw error;
-      }
-    }
-  },
-  ...
-});
+-- Alterar FK de option_id para SET NULL
+ALTER TABLE public.order_item_sub_item_extras
+  DROP CONSTRAINT IF EXISTS order_item_sub_item_extras_option_id_fkey;
+
+ALTER TABLE public.order_item_sub_item_extras
+  ADD CONSTRAINT order_item_sub_item_extras_option_id_fkey
+    FOREIGN KEY (option_id)
+    REFERENCES public.complement_options(id)
+    ON DELETE SET NULL;
 ```
 
-### 2. Atualizar Hook de Complementos
+## Resultado Esperado
 
-Modificar `useComplementGroups.ts` e `useComplementOptions.ts` com a mesma estratégia:
-- Usar `is_active = false` como soft delete
-- Tratar erro de FK com mensagem clara
+Após a migração:
 
-### 3. Atualizar Mensagens de Erro
+| Ação | Antes | Depois |
+|------|-------|--------|
+| Excluir complement_group vinculado | **ERRO 23503** | Sucesso (group_id vira NULL) |
+| Excluir complement_option vinculado | **ERRO 23503** | Sucesso (option_id vira NULL) |
+| Histórico de pedidos | - | Preservado (group_name, option_name mantidos) |
 
-Melhorar feedback ao usuário quando exclusão falhar:
+## Código (Já Implementado)
+
+Os hooks já têm a lógica de soft delete como fallback, portanto não precisam de alteração:
 
 ```typescript
-onError: (error: Error) => {
-  if (error.message.includes('violates foreign key constraint')) {
-    toast({ 
-      title: 'Não foi possível excluir', 
-      description: 'Este item está vinculado a pedidos ou outras configurações. Deseja desativá-lo?',
-      variant: 'destructive' 
-    });
-  } else {
-    toast({ title: 'Erro ao excluir', description: error.message, variant: 'destructive' });
-  }
+// useComplementGroups.ts - Lógica já existente
+if (error.code === '23503') {
+  await supabase.from('complement_groups').update({ is_active: false }).eq('id', id);
+  return { softDeleted: true };
 }
 ```
 
-### 4. Atualizar FKs no Banco (Opcional)
+Após a migração, a exclusão real funcionará diretamente, e o soft delete só será usado em casos extremos.
 
-Se preferir comportamento automático, alterar as constraints para `ON DELETE SET NULL`:
+## Arquivos
 
-```sql
--- Para products -> order_items (permite excluir produto, itens ficam órfãos)
-ALTER TABLE order_items 
-  DROP CONSTRAINT order_items_product_id_fkey,
-  ADD CONSTRAINT order_items_product_id_fkey 
-    FOREIGN KEY (product_id) 
-    REFERENCES products(id) 
-    ON DELETE SET NULL;
+| Arquivo | Ação |
+|---------|------|
+| **Migração SQL** | Alterar FKs de NO ACTION para SET NULL |
+| Hooks | Nenhuma alteração necessária |
 
--- Para products -> cardapioweb_product_mappings
-ALTER TABLE cardapioweb_product_mappings 
-  DROP CONSTRAINT cardapioweb_product_mappings_local_product_id_fkey,
-  ADD CONSTRAINT cardapioweb_product_mappings_local_product_id_fkey 
-    FOREIGN KEY (local_product_id) 
-    REFERENCES products(id) 
-    ON DELETE SET NULL;
-```
-
-**Nota:** Essa alteração no banco permite exclusão real, mas os dados históricos perdem referência ao produto original.
-
-## Arquivos a Modificar
-
-| Arquivo | Modificação |
-|---------|-------------|
-| `src/hooks/useProducts.ts` | Implementar soft delete ou tratamento de erro FK |
-| `src/hooks/useComplementGroups.ts` | Implementar soft delete ou tratamento de erro FK |
-| `src/hooks/useComplementOptions.ts` | Implementar soft delete ou tratamento de erro FK |
-| (Opcional) Migração SQL | Alterar constraints de FK para SET NULL |
-
-## Recomendação
-
-Recomendo a **Estratégia de Soft Delete** porque:
-
-1. **Preserva integridade dos dados** - Pedidos antigos mantêm referência ao produto
-2. **Relatórios precisos** - Histórico de vendas continua mostrando nomes corretos
-3. **Recuperação fácil** - Pode reativar produto se necessário
-4. **Sem alteração de schema** - Usa campos já existentes (`is_available`, `is_active`)
-
-Para produtos/opções desativados, podemos adicionar um filtro "Mostrar inativos" na interface.
