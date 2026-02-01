@@ -90,20 +90,25 @@ export function useComplementOptionsMutations() {
 
   const deleteOption = useMutation({
     mutationFn: async (id: string) => {
+      console.log('[deleteOption] Starting soft delete for id:', id);
       // Usar soft delete direto para evitar problemas de FK e RLS
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from('complement_options')
         .update({ is_active: false })
-        .eq('id', id);
+        .eq('id', id)
+        .select();
       
+      console.log('[deleteOption] Result:', { error, data });
       if (error) throw error;
       return { softDeleted: true };
     },
     onSuccess: () => {
+      console.log('[deleteOption] Success - invalidating queries');
       queryClient.invalidateQueries({ queryKey: ['complement-options'] });
       toast({ title: 'Opção desativada com sucesso!' });
     },
     onError: (error) => {
+      console.error('[deleteOption] Error:', error);
       toast({ title: 'Erro ao desativar opção', description: error.message, variant: 'destructive' });
     }
   });

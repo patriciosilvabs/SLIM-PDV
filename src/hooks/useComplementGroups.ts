@@ -92,20 +92,25 @@ export function useComplementGroupsMutations() {
 
   const deleteGroup = useMutation({
     mutationFn: async (id: string) => {
+      console.log('[deleteGroup] Starting soft delete for id:', id);
       // Usar soft delete direto para evitar problemas de FK e RLS
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from('complement_groups')
         .update({ is_active: false })
-        .eq('id', id);
+        .eq('id', id)
+        .select();
       
+      console.log('[deleteGroup] Result:', { error, data });
       if (error) throw error;
       return { softDeleted: true };
     },
     onSuccess: () => {
+      console.log('[deleteGroup] Success - invalidating queries');
       queryClient.invalidateQueries({ queryKey: ['complement-groups'] });
       toast({ title: 'Grupo desativado com sucesso!' });
     },
     onError: (error) => {
+      console.error('[deleteGroup] Error:', error);
       toast({ title: 'Erro ao desativar grupo', description: error.message, variant: 'destructive' });
     }
   });
