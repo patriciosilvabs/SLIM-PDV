@@ -84,6 +84,11 @@ interface Tenant {
   name: string;
 }
 
+interface ComplementOptionIngredient {
+  ingredient_id: string;
+  quantity: number;
+}
+
 async function getDemand(tenantId: string) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const today = new Date();
@@ -116,10 +121,26 @@ async function getDemand(tenantId: string) {
   const targetsData = (targets || []) as Target[];
   const targetMap = new Map(targetsData.map(t => [t.ingredient_id, t.target_quantity]));
   
+  // Get complement option ingredients for additional demand info
+  const { data: complementIngredients } = await supabase
+    .from('complement_option_ingredients')
+    .select('ingredient_id, quantity')
+    .eq('tenant_id', tenantId);
+  
+  const complementIngredientsData = (complementIngredients || []) as ComplementOptionIngredient[];
+  
+  // Aggregate complement ingredients by ingredient_id (for reference in response)
+  const complementDemandMap = new Map<string, number>();
+  complementIngredientsData.forEach(ci => {
+    const current = complementDemandMap.get(ci.ingredient_id) || 0;
+    complementDemandMap.set(ci.ingredient_id, current + ci.quantity);
+  });
+  
   const demand = ingredientsData.map(ing => {
     const targetStock = targetMap.get(ing.id) || 0;
     const currentStock = ing.current_stock || 0;
     const toProduce = Math.max(0, targetStock - currentStock);
+    const hasComplementUsage = complementDemandMap.has(ing.id);
     
     let status = 'ok';
     if (toProduce > 0) {
@@ -137,6 +158,7 @@ async function getDemand(tenantId: string) {
       target_stock: targetStock,
       to_produce: toProduce,
       status,
+      used_in_complements: hasComplementUsage,
     };
   }).filter(d => d.to_produce > 0);
   

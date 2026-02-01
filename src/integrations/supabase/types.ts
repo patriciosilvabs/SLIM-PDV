@@ -519,6 +519,55 @@ export type Database = {
           },
         ]
       }
+      complement_option_ingredients: {
+        Row: {
+          complement_option_id: string
+          created_at: string | null
+          id: string
+          ingredient_id: string
+          quantity: number
+          tenant_id: string
+        }
+        Insert: {
+          complement_option_id: string
+          created_at?: string | null
+          id?: string
+          ingredient_id: string
+          quantity?: number
+          tenant_id: string
+        }
+        Update: {
+          complement_option_id?: string
+          created_at?: string | null
+          id?: string
+          ingredient_id?: string
+          quantity?: number
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "complement_option_ingredients_complement_option_id_fkey"
+            columns: ["complement_option_id"]
+            isOneToOne: false
+            referencedRelation: "complement_options"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "complement_option_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "complement_option_ingredients_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       complement_options: {
         Row: {
           auto_calculate_cost: boolean | null
