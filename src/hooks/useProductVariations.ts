@@ -84,11 +84,27 @@ export function useProductVariationsMutations() {
         .delete()
         .eq('id', id);
       
-      if (error) throw error;
+      if (error) {
+        if (error.code === '23503') {
+          const { error: softDeleteError } = await supabase
+            .from('product_variations')
+            .update({ is_active: false })
+            .eq('id', id);
+          
+          if (softDeleteError) throw softDeleteError;
+          return { softDeleted: true };
+        }
+        throw error;
+      }
+      return { softDeleted: false };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['product-variations'] });
-      toast({ title: 'Variação removida' });
+      if (result?.softDeleted) {
+        toast({ title: 'Variação desativada', description: 'Não foi possível excluir pois está vinculada a pedidos.' });
+      } else {
+        toast({ title: 'Variação removida' });
+      }
     },
     onError: (error) => {
       toast({ title: 'Erro ao remover', description: error.message, variant: 'destructive' });
