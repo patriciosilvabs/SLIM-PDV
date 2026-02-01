@@ -100,26 +100,19 @@ export function useProductMutations() {
 
   const deleteProduct = useMutation({
     mutationFn: async (id: string) => {
-      console.log('[deleteProduct] Starting soft delete for id:', id);
-      // Usar soft delete direto para evitar problemas de FK e RLS
-      const { error, data } = await supabase
+      const { error } = await supabase
         .from('products')
-        .update({ is_available: false })
-        .eq('id', id)
-        .select();
+        .delete()
+        .eq('id', id);
       
-      console.log('[deleteProduct] Result:', { error, data });
       if (error) throw error;
-      return { softDeleted: true };
     },
     onSuccess: () => {
-      console.log('[deleteProduct] Success - invalidating queries');
       queryClient.invalidateQueries({ queryKey: ['products'] });
-      toast({ title: 'Produto desativado com sucesso!' });
+      toast({ title: 'Produto excluído com sucesso!' });
     },
     onError: (error: Error) => {
-      console.error('[deleteProduct] Error:', error);
-      toast({ title: 'Erro ao desativar produto', description: error.message, variant: 'destructive' });
+      toast({ title: 'Erro ao excluir produto', description: error.message, variant: 'destructive' });
     },
   });
 
