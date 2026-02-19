@@ -25,6 +25,7 @@ import { useOpenCashRegister, useCashRegisterMutations, PaymentMethod } from '@/
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { AccessDenied } from '@/components/auth/AccessDenied';
 import { ProductDetailDialog, SelectedComplement, SubItemComplement } from '@/components/order/ProductDetailDialog';
+import { PizzaFlavorCountDialog } from '@/components/order/PizzaFlavorCountDialog';
 import { CancelOrderDialog } from '@/components/order/CancelOrderDialog';
 import { printCustomerReceipt } from '@/components/receipt/CustomerReceipt';
 import { usePrinterOptional, SectorPrintItem } from '@/contexts/PrinterContext';
@@ -33,6 +34,7 @@ import { usePrintSectors } from '@/hooks/usePrintSectors';
 import { useProfile } from '@/hooks/useProfile';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateFullComplementsPrice, ComplementForCalc, SubItemForCalc } from '@/lib/complementPriceUtils';
+import { usePizzaProducts } from '@/hooks/usePizzaProducts';
 import { 
   Package, 
   ShoppingCart, 
@@ -127,6 +129,7 @@ export default function Counter() {
   const { data: openCashRegister } = useOpenCashRegister();
   const { createPayment } = useCashRegisterMutations();
   const isMobile = useIsMobile();
+  const { data: pizzaData } = usePizzaProducts();
   
   const canAddItems = hasPermission('counter_add_items');
   const canApplyDiscount = hasPermission('counter_apply_discount');
@@ -149,6 +152,10 @@ export default function Counter() {
   // ProductDetailDialog state
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
+  const [overrideUnitCount, setOverrideUnitCount] = useState<number | undefined>(undefined);
+  
+  // Pizza flavor count dialog state
+  const [flavorDialogOpen, setFlavorDialogOpen] = useState(false);
   
   // Customer search state
   const [customerSearch, setCustomerSearch] = useState('');
@@ -313,9 +320,20 @@ export default function Counter() {
     setShowCustomerDropdown(false);
   };
 
-  // Handle product click - open ProductDetailDialog
+  // Handle product click - check if pizza, then open appropriate dialog
   const handleProductClick = (product: any) => {
     setSelectedProduct(product);
+    
+    if (pizzaData?.pizzaProductIds.has(product.id)) {
+      setFlavorDialogOpen(true);
+    } else {
+      setOverrideUnitCount(undefined);
+      setProductDialogOpen(true);
+    }
+  };
+
+  const handleFlavorSelect = (count: number) => {
+    setOverrideUnitCount(count);
     setProductDialogOpen(true);
   };
 
@@ -1402,6 +1420,16 @@ export default function Counter() {
         </div>
       </div>
 
+      {/* Pizza flavor count dialog */}
+      <PizzaFlavorCountDialog
+        open={flavorDialogOpen}
+        onOpenChange={setFlavorDialogOpen}
+        productName={selectedProduct?.name || ''}
+        productPrice={selectedProduct?.is_promotion && selectedProduct?.promotion_price ? selectedProduct.promotion_price : selectedProduct?.price ?? 0}
+        maxFlavors={pizzaData?.maxFlavorsMap.get(selectedProduct?.id) ?? 2}
+        onSelect={handleFlavorSelect}
+      />
+
       {/* ProductDetailDialog for product selection with complements */}
       <ProductDetailDialog
         open={productDialogOpen}
@@ -1410,6 +1438,7 @@ export default function Counter() {
         onAdd={handleAddFromDialog}
         duplicateItems={duplicateItems}
         channel={orderType === 'delivery' ? 'delivery' : 'counter'}
+        overrideUnitCount={overrideUnitCount}
       />
 
       {/* Payment Modal */}
