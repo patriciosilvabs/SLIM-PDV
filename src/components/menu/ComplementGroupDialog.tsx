@@ -681,134 +681,22 @@ export function ComplementGroupDialog({
 
               {/* Quantidade de unidades - só aparece se applies_per_unit estiver ativado */}
               {form.applies_per_unit && (
-                <div className="space-y-4 pl-4 border-l-2 border-primary/20">
-                  <div className="space-y-2">
-                    <Label>Quantidade máxima de unidades</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={10}
-                      value={form.unit_count ?? 1}
-                      onChange={(e) => setForm({ ...form, unit_count: Math.max(1, parseInt(e.target.value) || 1) })}
-                      className="w-32"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Quantas unidades o cliente poderá configurar individualmente
-                    </p>
-                  </div>
-
-                  {/* Modal de seleção de sabores */}
-                  <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
-                    <div className="flex items-center gap-3">
-                      <Switch
-                        checked={form.flavor_modal_enabled ?? true}
-                        onCheckedChange={(checked) => setForm({ ...form, flavor_modal_enabled: checked })}
-                      />
-                      <div>
-                        <p className="font-medium">Modal de seleção de sabores</p>
-                        <p className="text-sm text-muted-foreground">
-                          Exibir tela para o cliente escolher quantos sabores deseja
-                        </p>
-                      </div>
-                    </div>
-
-                    {form.flavor_modal_enabled && (
-                      <div className="space-y-4 mt-3">
-                        {/* Canais do modal */}
-                        <div className="space-y-2">
-                          <Label className="text-sm">Exibir modal nos canais</Label>
-                          <div className="flex flex-wrap gap-2">
-                            {CHANNEL_OPTIONS.map(channel => (
-                              <Badge
-                                key={channel.value}
-                                variant={form.flavor_modal_channels?.includes(channel.value) ? 'default' : 'outline'}
-                                className="cursor-pointer"
-                                onClick={() => {
-                                  const current = form.flavor_modal_channels || [];
-                                  setForm({
-                                    ...form,
-                                    flavor_modal_channels: current.includes(channel.value)
-                                      ? current.filter(c => c !== channel.value)
-                                      : [...current, channel.value],
-                                  });
-                                }}
-                              >
-                                {channel.label}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Opções de sabores */}
-                        <div className="space-y-2">
-                          <Label className="text-sm">Opções do modal</Label>
-                          {(form.flavor_options || []).map((opt, idx) => (
-                            <div key={idx} className="flex items-center gap-2 p-2 border rounded">
-                              <Input
-                                type="number"
-                                min={1}
-                                value={opt.count}
-                                onChange={(e) => {
-                                  const newOptions = [...(form.flavor_options || [])];
-                                  newOptions[idx] = { ...opt, count: parseInt(e.target.value) || 1 };
-                                  setForm({ ...form, flavor_options: newOptions });
-                                }}
-                                className="w-16 h-8 text-center text-sm"
-                                placeholder="Qtd"
-                              />
-                              <Input
-                                value={opt.label}
-                                onChange={(e) => {
-                                  const newOptions = [...(form.flavor_options || [])];
-                                  newOptions[idx] = { ...opt, label: e.target.value };
-                                  setForm({ ...form, flavor_options: newOptions });
-                                }}
-                                className="flex-1 h-8 text-sm"
-                                placeholder="Título (ex: 1 Sabor)"
-                              />
-                              <Input
-                                value={opt.description}
-                                onChange={(e) => {
-                                  const newOptions = [...(form.flavor_options || [])];
-                                  newOptions[idx] = { ...opt, description: e.target.value };
-                                  setForm({ ...form, flavor_options: newOptions });
-                                }}
-                                className="flex-1 h-8 text-sm"
-                                placeholder="Descrição"
-                              />
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-destructive"
-                                onClick={() => {
-                                  const newOptions = (form.flavor_options || []).filter((_, i) => i !== idx);
-                                  setForm({ ...form, flavor_options: newOptions });
-                                }}
-                                disabled={(form.flavor_options || []).length <= 1}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              const options = form.flavor_options || [];
-                              const nextCount = options.length + 1;
-                              setForm({
-                                ...form,
-                                flavor_options: [...options, { count: nextCount, label: `${nextCount} Sabores`, description: '' }],
-                              });
-                            }}
-                          >
-                            <Plus className="h-4 w-4 mr-1" />
-                            Adicionar opção
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                <div className="space-y-2 pl-4 border-l-2 border-primary/20">
+                  <Label>Quantidade máxima de unidades</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={form.unit_count ?? 1}
+                    onChange={(e) => setForm({ ...form, unit_count: Math.max(1, parseInt(e.target.value) || 1) })}
+                    className="w-32"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Quantas unidades o cliente poderá configurar individualmente
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Configure o modal de sabores na aba <strong>TAMANHOS</strong> do cardápio.
+                  </p>
                 </div>
               )}
 
