@@ -310,7 +310,8 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
   const calculatePerUnitPrice = (): number => {
     let total = 0;
     for (const group of perUnitGroups) {
-      total += calculateGroupPrice(group.id, group.price_calculation_type);
+      const effectiveType = unitCount > 1 ? 'average' : group.price_calculation_type;
+      total += calculateGroupPrice(group.id, effectiveType);
     }
     return total;
   };
