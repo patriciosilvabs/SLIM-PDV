@@ -1,140 +1,91 @@
 
-# Plano: Exclusao Permanente de Produtos, Complementos e Opcoes
 
-## Resumo
+# Seletor de Quantidade de Sabores para Pizza
 
-Alterar o comportamento de exclusao de **soft delete** (inativacao) para **hard delete** (remocao completa) para produtos, grupos de complementos e opcoes de complemento.
+## Problema Atual
+Hoje, quando o cliente clica em uma pizza, o sistema usa o campo `unit_count` fixo do grupo de complementos para determinar quantas unidades (sabores) a pizza tem. Isso significa que para oferecer "1 sabor" e "2 sabores", seria necessario cadastrar dois produtos separados.
 
-## Analise de Dependencias
+## Solucao Proposta
+Adicionar um passo intermediario no fluxo de pedido: quando o cliente clicar em um produto que possui grupos de complemento com `applies_per_unit = true`, o sistema exibe primeiro um modal perguntando quantos sabores ele deseja. Depois, abre o ProductDetailDialog com o `unitCount` dinamico.
 
-A analise do banco de dados revela as seguintes restricoes de chave estrangeira:
-
-| Tabela Pai | Tabela Filha | Regra Atual |
-|------------|--------------|-------------|
-| `products` | `order_items` | NO ACTION (bloqueia) |
-| `products` | `product_variations` | CASCADE |
-| `products` | `product_ingredients` | CASCADE |
-| `products` | `product_extra_links` | CASCADE |
-| `products` | `product_complement_groups` | CASCADE |
-| `products` | `combo_items` | CASCADE |
-| `products` | `cardapioweb_product_mappings` | NO ACTION (bloqueia) |
-| `complement_groups` | `complement_group_options` | CASCADE |
-| `complement_groups` | `product_complement_groups` | CASCADE |
-| `complement_groups` | `order_item_sub_item_extras` | NO ACTION (bloqueia) |
-| `complement_options` | `complement_group_options` | CASCADE |
-| `complement_options` | `complement_option_ingredients` | CASCADE |
-| `complement_options` | `order_item_sub_item_extras` | NO ACTION (bloqueia) |
-
-### Problema Identificado
-
-As tabelas de historico (`order_items`, `order_item_sub_item_extras`, `cardapioweb_product_mappings`) usam **NO ACTION**, o que impediria a exclusao de itens ja vendidos.
-
-### Solucao
-
-Alterar essas FKs para **SET NULL** - assim os pedidos historicos continuam existindo mas sem referencia ao item excluido. Os pedidos ja armazenam `product_name`, `option_name` e `group_name` como texto, entao o historico nao sera afetado.
-
-## Alteracoes
-
-### 1. Migracao SQL
-
-Atualizar as foreign keys para permitir exclusao:
+## Fluxo do Cliente
 
 ```text
-+--------------------------------------------------+
-|     order_items.product_id -> SET NULL           |
-|     order_item_sub_item_extras.option_id -> SET NULL |
-|     order_item_sub_item_extras.group_id -> SET NULL  |
-|     cardapioweb_product_mappings.local_product_id -> SET NULL |
-+--------------------------------------------------+
+[Clica na Pizza]
+       |
+       v
++---------------------+
+| Quantos sabores?    |
+|                     |
+| [1 Sabor] [2 Sabores] |
++---------------------+
+       |
+       v
++---------------------+
+| ProductDetailDialog |
+| com N PizzaUnitCards|
++---------------------+
 ```
 
-### 2. Alteracoes nos Hooks
+## Mudancas Tecnicas
 
-| Arquivo | Alteracao |
-|---------|-----------|
-| `useProducts.ts` | Trocar `.update({ is_available: false })` por `.delete()` |
-| `useComplementGroups.ts` | Trocar `.update({ is_active: false })` por `.delete()` |
-| `useComplementOptions.ts` | Trocar `.update({ is_active: false })` por `.delete()` |
-| `useProductExtras.ts` | Trocar `.update({ is_active: false })` por `.delete()` |
-| `useProductVariations.ts` | Trocar `.update({ is_active: false })` por `.delete()` |
+### 1. Novo componente: `PizzaFlavorCountDialog`
+**Arquivo:** `src/components/order/PizzaFlavorCountDialog.tsx`
 
-### 3. Exemplo de Alteracao (useProducts.ts)
+- Modal simples com titulo "Quantos sabores?"
+- Botoes grandes e visuais: "1 Sabor" e "2 Sabores" (baseado no `max_unit_count` ou fixo em 2)
+- Ao selecionar, chama callback com o numero escolhido
+- Visual inspirado na imagem de referencia: cards com imagem e descricao
 
-**Antes:**
-```typescript
-const deleteProduct = useMutation({
-  mutationFn: async (id: string) => {
-    const { error, data } = await supabase
-      .from('products')
-      .update({ is_available: false })
-      .eq('id', id)
-      .select();
-    if (error) throw error;
-    return { softDeleted: true };
-  },
-  onSuccess: () => {
-    toast({ title: 'Produto desativado com sucesso!' });
-  }
-});
-```
+### 2. Modificar `ProductDetailDialog`
+**Arquivo:** `src/components/order/ProductDetailDialog.tsx`
 
-**Depois:**
-```typescript
-const deleteProduct = useMutation({
-  mutationFn: async (id: string) => {
-    const { error } = await supabase
-      .from('products')
-      .delete()
-      .eq('id', id);
-    if (error) throw error;
-  },
-  onSuccess: () => {
-    toast({ title: 'Produto excluído com sucesso!' });
-  }
-});
-```
+- Adicionar prop opcional `overrideUnitCount?: number`
+- Quando `overrideUnitCount` for passado, usar esse valor ao inves do `unit_count` do grupo de complementos
+- Isso permite que o dialog funcione com 1 ou 2 sabores sem alterar o cadastro
 
-## Detalhes Tecnicos
+### 3. Modificar fluxo no `Counter.tsx`
+**Arquivo:** `src/pages/Counter.tsx`
 
-### SQL da Migracao
+- Antes de abrir o `ProductDetailDialog`, verificar se o produto tem grupos com `applies_per_unit = true`
+- Se sim, abrir primeiro o `PizzaFlavorCountDialog`
+- Quando o usuario escolher, abrir o `ProductDetailDialog` passando `overrideUnitCount`
+- Se nao tem grupos per-unit, abrir direto o `ProductDetailDialog` (comportamento atual)
 
-```sql
--- Alterar FK order_items.product_id para SET NULL
-ALTER TABLE order_items 
-  DROP CONSTRAINT IF EXISTS order_items_product_id_fkey,
-  ADD CONSTRAINT order_items_product_id_fkey 
-    FOREIGN KEY (product_id) 
-    REFERENCES products(id) 
-    ON DELETE SET NULL;
+### 4. Modificar fluxo no `ProductSelector.tsx` (Mesas)
+**Arquivo:** `src/components/tables/ProductSelector.tsx`
 
--- Alterar FK order_item_sub_item_extras.option_id para SET NULL
-ALTER TABLE order_item_sub_item_extras 
-  DROP CONSTRAINT IF EXISTS order_item_sub_item_extras_option_id_fkey,
-  ADD CONSTRAINT order_item_sub_item_extras_option_id_fkey 
-    FOREIGN KEY (option_id) 
-    REFERENCES complement_options(id) 
-    ON DELETE SET NULL;
+- Mesma logica do Counter: interceptar clique em produto pizza
+- Mostrar `PizzaFlavorCountDialog` antes do `ProductDetailDialog`
 
--- Alterar FK order_item_sub_item_extras.group_id para SET NULL
-ALTER TABLE order_item_sub_item_extras 
-  DROP CONSTRAINT IF EXISTS order_item_sub_item_extras_group_id_fkey,
-  ADD CONSTRAINT order_item_sub_item_extras_group_id_fkey 
-    FOREIGN KEY (group_id) 
-    REFERENCES complement_groups(id) 
-    ON DELETE SET NULL;
+### 5. Hook auxiliar para detectar produto pizza
+- Usar o hook `useProductComplements` para verificar se o produto tem grupos `applies_per_unit`
+- Alternativa: fazer um pre-fetch leve dos grupos vinculados ao clicar no produto
 
--- Alterar FK cardapioweb_product_mappings.local_product_id para SET NULL
-ALTER TABLE cardapioweb_product_mappings 
-  DROP CONSTRAINT IF EXISTS cardapioweb_product_mappings_local_product_id_fkey,
-  ADD CONSTRAINT cardapioweb_product_mappings_local_product_id_fkey 
-    FOREIGN KEY (local_product_id) 
-    REFERENCES products(id) 
-    ON DELETE SET NULL;
-```
+## Detalhes de Implementacao
 
-## Resultado Esperado
+### PizzaFlavorCountDialog - Layout
+- Dialog com fundo escuro
+- Titulo: "Escolha o tipo de pizza" ou nome do produto
+- Dois cards lado a lado (similar a imagem de referencia):
+  - Card "1 Sabor" - com icone de pizza inteira
+  - Card "2 Sabores" - com icone de pizza dividida
+- Cada card mostra o preco base "A partir de R$ XX,XX"
 
-- Produtos, grupos e opcoes serao excluidos permanentemente do banco
-- Pedidos historicos manterao seus dados (nomes gravados como texto)
-- Referencias de FK serao anuladas (SET NULL) em vez de bloquear
-- Tabelas relacionadas com CASCADE serao limpas automaticamente (variacoes, ingredientes, links)
+### Logica de preco
+- Para 1 sabor: preco normal do produto + complemento escolhido
+- Para 2 sabores: preco do produto + calculo baseado no `price_calculation_type` do grupo (average = media dos dois sabores, highest = sabor mais caro)
+
+### Impacto no cadastro
+- Nenhuma mudanca no banco de dados
+- O cadastro do produto permanece unico
+- O campo `unit_count` do complement group pode ser usado como "maximo de sabores permitidos"
+- O sistema apenas varia dinamicamente quantos PizzaUnitCards exibir
+
+## Ordem de Implementacao
+1. Criar componente `PizzaFlavorCountDialog`
+2. Adicionar prop `overrideUnitCount` no `ProductDetailDialog`
+3. Integrar no `Counter.tsx`
+4. Integrar no `ProductSelector.tsx` (mesas)
+5. Testar fluxo completo
+
