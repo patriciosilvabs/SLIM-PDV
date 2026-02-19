@@ -166,7 +166,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
       setSelections({});
       setQuantity(1);
       setNotes('');
-      setSubItems([]);
+      // subItems are managed by the init effect above based on hasPerUnitGroups/unitCount
     }
   }, [product?.id, open]);
 
