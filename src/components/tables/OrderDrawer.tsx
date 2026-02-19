@@ -6,7 +6,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
 import { ProductDetailDialog, SelectedComplement, SubItemComplement } from '@/components/order/ProductDetailDialog';
+import { PizzaFlavorCountDialog } from '@/components/order/PizzaFlavorCountDialog';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
+import { usePizzaProducts } from '@/hooks/usePizzaProducts';
 import { calculateFullComplementsPrice, ComplementForCalc, SubItemForCalc } from '@/lib/complementPriceUtils';
 import { CartItem } from '@/components/order/AddOrderItemsModal';
 import { X, ShoppingCart, ChevronRight } from 'lucide-react';
@@ -38,10 +40,13 @@ export function OrderDrawer({
   const { data: products } = useProducts();
   const { data: categories } = useCategories();
   const { duplicateItems } = useOrderSettings();
+  const { data: pizzaData } = usePizzaProducts();
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
+  const [flavorDialogOpen, setFlavorDialogOpen] = useState(false);
+  const [overrideUnitCount, setOverrideUnitCount] = useState<number | undefined>(undefined);
 
   const activeCategories = useMemo(() => 
     categories?.filter(c => c.is_active !== false) || [], 
@@ -64,7 +69,20 @@ export function OrderDrawer({
   );
 
   const handleProductClick = (product: any) => {
-    setSelectedProduct(product);
+    const config = pizzaData?.configMap.get(product.id);
+    if (config && config.flavorModalEnabled && config.flavorModalChannels.includes('table')) {
+      setSelectedProduct(product);
+      setOverrideUnitCount(undefined);
+      setFlavorDialogOpen(true);
+    } else {
+      setSelectedProduct(product);
+      setOverrideUnitCount(undefined);
+      setProductDialogOpen(true);
+    }
+  };
+
+  const handleFlavorSelect = (count: number) => {
+    setOverrideUnitCount(count);
     setProductDialogOpen(true);
   };
 
@@ -265,6 +283,18 @@ export function OrderDrawer({
         </DrawerContent>
       </Drawer>
 
+      {selectedProduct && (
+        <PizzaFlavorCountDialog
+          open={flavorDialogOpen}
+          onOpenChange={setFlavorDialogOpen}
+          productName={selectedProduct.name}
+          productPrice={selectedProduct.is_promotion && selectedProduct.promotion_price ? selectedProduct.promotion_price : selectedProduct.price}
+          maxFlavors={pizzaData?.maxFlavorsMap.get(selectedProduct.id) ?? 2}
+          flavorOptions={pizzaData?.configMap.get(selectedProduct.id)?.flavorOptions}
+          onSelect={handleFlavorSelect}
+        />
+      )}
+
       <ProductDetailDialog
         open={productDialogOpen}
         onOpenChange={setProductDialogOpen}
@@ -272,6 +302,7 @@ export function OrderDrawer({
         onAdd={handleAddProduct}
         duplicateItems={duplicateItems}
         channel="table"
+        overrideUnitCount={overrideUnitCount}
       />
     </>
   );
