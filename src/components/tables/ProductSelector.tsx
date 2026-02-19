@@ -5,9 +5,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useProducts } from '@/hooks/useProducts';
 import { useCategories } from '@/hooks/useCategories';
 import { ProductDetailDialog, SelectedComplement, SubItemComplement } from '@/components/order/ProductDetailDialog';
+import { PizzaFlavorCountDialog } from '@/components/order/PizzaFlavorCountDialog';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { calculateFullComplementsPrice, ComplementForCalc, SubItemForCalc } from '@/lib/complementPriceUtils';
 import { CartItem } from '@/components/order/AddOrderItemsModal';
+import { usePizzaProducts } from '@/hooks/usePizzaProducts';
 import { cn } from '@/lib/utils';
 
 function formatCurrency(value: number) {
@@ -27,6 +29,9 @@ export function ProductSelector({ onAddItem, className }: ProductSelectorProps) 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
+  const [overrideUnitCount, setOverrideUnitCount] = useState<number | undefined>(undefined);
+  const [flavorDialogOpen, setFlavorDialogOpen] = useState(false);
+  const { data: pizzaData } = usePizzaProducts();
 
   const activeCategories = useMemo(() => 
     categories?.filter(c => c.is_active !== false) || [], 
@@ -50,6 +55,17 @@ export function ProductSelector({ onAddItem, className }: ProductSelectorProps) 
 
   const handleProductClick = (product: any) => {
     setSelectedProduct(product);
+    
+    if (pizzaData?.pizzaProductIds.has(product.id)) {
+      setFlavorDialogOpen(true);
+    } else {
+      setOverrideUnitCount(undefined);
+      setProductDialogOpen(true);
+    }
+  };
+
+  const handleFlavorSelect = (count: number) => {
+    setOverrideUnitCount(count);
     setProductDialogOpen(true);
   };
 
@@ -206,6 +222,15 @@ export function ProductSelector({ onAddItem, className }: ProductSelectorProps) 
         </div>
       </div>
 
+      <PizzaFlavorCountDialog
+        open={flavorDialogOpen}
+        onOpenChange={setFlavorDialogOpen}
+        productName={selectedProduct?.name || ''}
+        productPrice={selectedProduct?.is_promotion && selectedProduct?.promotion_price ? selectedProduct.promotion_price : selectedProduct?.price ?? 0}
+        maxFlavors={pizzaData?.maxFlavorsMap.get(selectedProduct?.id) ?? 2}
+        onSelect={handleFlavorSelect}
+      />
+
       <ProductDetailDialog
         open={productDialogOpen}
         onOpenChange={setProductDialogOpen}
@@ -213,6 +238,7 @@ export function ProductSelector({ onAddItem, className }: ProductSelectorProps) 
         onAdd={handleAddProduct}
         duplicateItems={duplicateItems}
         channel="table"
+        overrideUnitCount={overrideUnitCount}
       />
     </>
   );

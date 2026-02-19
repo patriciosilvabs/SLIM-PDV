@@ -82,9 +82,10 @@ interface ProductDetailDialogProps {
   ) => void;
   duplicateItems?: boolean;
   channel?: 'counter' | 'delivery' | 'table';
+  overrideUnitCount?: number;
 }
 
-export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplicateItems, channel }: ProductDetailDialogProps) {
+export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplicateItems, channel, overrideUnitCount }: ProductDetailDialogProps) {
   const [selections, setSelections] = useState<Record<string, SelectedComplement[]>>({});
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
@@ -128,11 +129,12 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
     return localGroups.some(g => g.applies_per_unit === true);
   }, [localGroups]);
 
-  // Get the number of units from the first per-unit group
+  // Get the number of units - use override if provided, otherwise from group config
   const unitCount = useMemo(() => {
+    if (overrideUnitCount !== undefined) return overrideUnitCount;
     const perUnitGroup = localGroups.find(g => g.applies_per_unit === true);
     return perUnitGroup?.unit_count ?? 1;
-  }, [localGroups]);
+  }, [localGroups, overrideUnitCount]);
 
   // Groups that apply per unit (for each pizza)
   const perUnitGroups = useMemo(() => {
