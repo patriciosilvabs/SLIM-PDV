@@ -331,6 +331,7 @@ export default function Menu() {
         flavor_modal_enabled: group.flavor_modal_enabled ?? true,
         flavor_modal_channels: group.flavor_modal_channels ?? ['delivery', 'counter', 'table'],
         flavor_options: group.flavor_options ?? [{ count: 1, label: '1 Sabor', description: 'Pizza inteira de um sabor' }, { count: 2, label: '2 Sabores', description: 'Pizza metade/metade' }],
+        applicable_flavor_counts: group.applicable_flavor_counts ?? [1, 2],
       };
       const newGroup = await createGroup.mutateAsync(newGroupData);
       

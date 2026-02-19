@@ -222,6 +222,7 @@ export function ComplementGroupDialog({
       { count: 1, label: '1 Sabor', description: 'Pizza inteira de um sabor' },
       { count: 2, label: '2 Sabores', description: 'Pizza metade/metade' },
     ],
+    applicable_flavor_counts: [1, 2],
   });
   const [selectedOptionIds, setSelectedOptionIds] = React.useState<string[]>([]);
   const [localOptions, setLocalOptions] = React.useState<ComplementOption[]>([]);
@@ -272,6 +273,7 @@ export function ComplementGroupDialog({
             { count: 1, label: '1 Sabor', description: 'Pizza inteira de um sabor' },
             { count: 2, label: '2 Sabores', description: 'Pizza metade/metade' },
           ],
+          applicable_flavor_counts: group.applicable_flavor_counts ?? [1, 2],
         });
         setIsAdvancedOpen(
           (group.price_calculation_type !== 'sum' && group.price_calculation_type !== null) ||
@@ -427,6 +429,34 @@ export function ComplementGroupDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+          {/* Applicable Flavor Counts */}
+          <div className="space-y-2">
+            <Label>Aparece quando o cliente escolher</Label>
+            <div className="flex gap-2">
+              {[1, 2].map(count => {
+                const isSelected = form.applicable_flavor_counts?.includes(count);
+                return (
+                  <Badge
+                    key={count}
+                    variant={isSelected ? 'default' : 'outline'}
+                    className="cursor-pointer"
+                    onClick={() => {
+                      const current = form.applicable_flavor_counts ?? [1, 2];
+                      const updated = current.includes(count)
+                        ? current.filter(c => c !== count)
+                        : [...current, count].sort();
+                      // Prevent empty selection
+                      if (updated.length === 0) return;
+                      setForm({ ...form, applicable_flavor_counts: updated });
+                    }}
+                  >
+                    {count === 1 ? '1 Sabor' : '2 Sabores'}
+                  </Badge>
+                );
+              })}
             </div>
           </div>
 

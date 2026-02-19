@@ -28,6 +28,7 @@ export interface ComplementGroup {
   flavor_modal_enabled: boolean | null;
   flavor_modal_channels: string[] | null;
   flavor_options: FlavorOption[] | null;
+  applicable_flavor_counts: number[] | null;
   created_at: string | null;
   updated_at: string | null;
 }
