@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -435,26 +436,27 @@ export function ComplementGroupDialog({
           {/* Applicable Flavor Counts */}
           <div className="space-y-2">
             <Label>Aparece quando o cliente escolher</Label>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2">
               {[1, 2].map(count => {
                 const isSelected = form.applicable_flavor_counts?.includes(count);
                 return (
-                  <Badge
-                    key={count}
-                    variant={isSelected ? 'default' : 'outline'}
-                    className="cursor-pointer"
-                    onClick={() => {
-                      const current = form.applicable_flavor_counts ?? [1, 2];
-                      const updated = current.includes(count)
-                        ? current.filter(c => c !== count)
-                        : [...current, count].sort();
-                      // Prevent empty selection
-                      if (updated.length === 0) return;
-                      setForm({ ...form, applicable_flavor_counts: updated });
-                    }}
-                  >
-                    {count === 1 ? '1 Sabor' : '2 Sabores'}
-                  </Badge>
+                  <div key={count} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`flavor-count-${count}`}
+                      checked={isSelected}
+                      onCheckedChange={(checked) => {
+                        const current = form.applicable_flavor_counts ?? [1, 2];
+                        const updated = checked
+                          ? [...current, count].sort()
+                          : current.filter(c => c !== count);
+                        if (updated.length === 0) return;
+                        setForm({ ...form, applicable_flavor_counts: updated });
+                      }}
+                    />
+                    <Label htmlFor={`flavor-count-${count}`} className="cursor-pointer font-normal">
+                      {count === 1 ? '1 Sabor' : '2 Sabores'}
+                    </Label>
+                  </div>
                 );
               })}
             </div>
