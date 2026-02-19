@@ -21,6 +21,7 @@ const ALL_CHANNELS = [
 ];
 
 interface GroupEditState {
+  unitCount: number;
   flavorModalEnabled: boolean;
   flavorModalChannels: string[];
   flavorOptions: FlavorOption[];
@@ -36,6 +37,7 @@ export function SizesTab({ complementGroups }: SizesTabProps) {
   const getState = (group: ComplementGroup): GroupEditState => {
     if (editStates[group.id]) return editStates[group.id];
     return {
+      unitCount: group.unit_count ?? 1,
       flavorModalEnabled: group.flavor_modal_enabled ?? true,
       flavorModalChannels: group.flavor_modal_channels ?? ['delivery', 'counter', 'table'],
       flavorOptions: group.flavor_options ?? [
@@ -58,6 +60,7 @@ export function SizesTab({ complementGroups }: SizesTabProps) {
     try {
       await updateGroup.mutateAsync({
         id: group.id,
+        unit_count: state.unitCount,
         flavor_modal_enabled: state.flavorModalEnabled,
         flavor_modal_channels: state.flavorModalChannels,
         flavor_options: state.flavorOptions,
@@ -167,6 +170,24 @@ export function SizesTab({ complementGroups }: SizesTabProps) {
               </Button>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Quantidade máxima de unidades */}
+              <div className="space-y-2">
+                <Label>Quantidade máxima de unidades</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={state.unitCount}
+                  onChange={e =>
+                    setState(group.id, prev => ({ ...prev, unitCount: Math.max(1, parseInt(e.target.value) || 1) }))
+                  }
+                  className="w-32"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Quantas unidades o cliente poderá configurar individualmente
+                </p>
+              </div>
+
               {/* Toggle modal */}
               <div className="flex items-center justify-between">
                 <div>
