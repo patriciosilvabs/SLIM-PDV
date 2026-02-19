@@ -665,41 +665,6 @@ export function ComplementGroupDialog({
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-3 space-y-4">
-              {/* Aplicar por unidade */}
-              <div className="flex items-center gap-3 p-4 border rounded-lg bg-muted/30">
-                <Switch
-                  checked={form.applies_per_unit ?? false}
-                  onCheckedChange={(checked) => setForm({ ...form, applies_per_unit: checked })}
-                />
-                <div className="flex-1">
-                  <p className="font-medium">Aplicar por unidade</p>
-                  <p className="text-sm text-muted-foreground">
-                    Permite configurar cada unidade individualmente (ex: cada pizza de um combo)
-                  </p>
-                </div>
-              </div>
-
-              {/* Quantidade de unidades - só aparece se applies_per_unit estiver ativado */}
-              {form.applies_per_unit && (
-                <div className="space-y-2 pl-4 border-l-2 border-primary/20">
-                  <Label>Quantidade máxima de unidades</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={form.unit_count ?? 1}
-                    onChange={(e) => setForm({ ...form, unit_count: Math.max(1, parseInt(e.target.value) || 1) })}
-                    className="w-32"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Quantas unidades o cliente poderá configurar individualmente
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Configure o modal de sabores na aba <strong>TAMANHOS</strong> do cardápio.
-                  </p>
-                </div>
-              )}
-
               {/* Tipo de cálculo de preço */}
               <div className="space-y-2">
                 <Label className="text-sm text-muted-foreground">O preço do complemento será:</Label>
