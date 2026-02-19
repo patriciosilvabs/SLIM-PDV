@@ -453,6 +453,7 @@ export type Database = {
       }
       complement_groups: {
         Row: {
+          applicable_flavor_counts: number[]
           applies_per_unit: boolean | null
           channels: string[] | null
           created_at: string | null
@@ -475,6 +476,7 @@ export type Database = {
           visibility: string | null
         }
         Insert: {
+          applicable_flavor_counts?: number[]
           applies_per_unit?: boolean | null
           channels?: string[] | null
           created_at?: string | null
@@ -497,6 +499,7 @@ export type Database = {
           visibility?: string | null
         }
         Update: {
+          applicable_flavor_counts?: number[]
           applies_per_unit?: boolean | null
           channels?: string[] | null
           created_at?: string | null
