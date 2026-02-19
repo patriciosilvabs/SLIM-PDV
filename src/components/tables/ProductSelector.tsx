@@ -56,7 +56,9 @@ export function ProductSelector({ onAddItem, className }: ProductSelectorProps) 
   const handleProductClick = (product: any) => {
     setSelectedProduct(product);
     
-    if (pizzaData?.pizzaProductIds.has(product.id)) {
+    const config = pizzaData?.configMap.get(product.id);
+    
+    if (config && config.flavorModalEnabled && config.flavorModalChannels.includes('table')) {
       setFlavorDialogOpen(true);
     } else {
       setOverrideUnitCount(undefined);
@@ -228,6 +230,7 @@ export function ProductSelector({ onAddItem, className }: ProductSelectorProps) 
         productName={selectedProduct?.name || ''}
         productPrice={selectedProduct?.is_promotion && selectedProduct?.promotion_price ? selectedProduct.promotion_price : selectedProduct?.price ?? 0}
         maxFlavors={pizzaData?.maxFlavorsMap.get(selectedProduct?.id) ?? 2}
+        flavorOptions={pizzaData?.configMap.get(selectedProduct?.id)?.flavorOptions}
         onSelect={handleFlavorSelect}
       />
 
