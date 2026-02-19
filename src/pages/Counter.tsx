@@ -324,7 +324,10 @@ export default function Counter() {
   const handleProductClick = (product: any) => {
     setSelectedProduct(product);
     
-    if (pizzaData?.pizzaProductIds.has(product.id)) {
+    const config = pizzaData?.configMap.get(product.id);
+    const currentChannel = orderType === 'delivery' ? 'delivery' : 'counter';
+    
+    if (config && config.flavorModalEnabled && config.flavorModalChannels.includes(currentChannel)) {
       setFlavorDialogOpen(true);
     } else {
       setOverrideUnitCount(undefined);
@@ -1427,6 +1430,7 @@ export default function Counter() {
         productName={selectedProduct?.name || ''}
         productPrice={selectedProduct?.is_promotion && selectedProduct?.promotion_price ? selectedProduct.promotion_price : selectedProduct?.price ?? 0}
         maxFlavors={pizzaData?.maxFlavorsMap.get(selectedProduct?.id) ?? 2}
+        flavorOptions={pizzaData?.configMap.get(selectedProduct?.id)?.flavorOptions}
         onSelect={handleFlavorSelect}
       />
 

@@ -327,6 +327,9 @@ export default function Menu() {
         price_calculation_type: group.price_calculation_type,
         applies_per_unit: group.applies_per_unit ?? false,
         unit_count: group.unit_count ?? 1,
+        flavor_modal_enabled: group.flavor_modal_enabled ?? true,
+        flavor_modal_channels: group.flavor_modal_channels ?? ['delivery', 'counter', 'table'],
+        flavor_options: group.flavor_options ?? [{ count: 1, label: '1 Sabor', description: 'Pizza inteira de um sabor' }, { count: 2, label: '2 Sabores', description: 'Pizza metade/metade' }],
       };
       const newGroup = await createGroup.mutateAsync(newGroupData);
       

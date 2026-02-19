@@ -457,6 +457,9 @@ export type Database = {
           channels: string[] | null
           created_at: string | null
           description: string | null
+          flavor_modal_channels: string[]
+          flavor_modal_enabled: boolean
+          flavor_options: Json
           id: string
           is_active: boolean | null
           is_required: boolean | null
@@ -476,6 +479,9 @@ export type Database = {
           channels?: string[] | null
           created_at?: string | null
           description?: string | null
+          flavor_modal_channels?: string[]
+          flavor_modal_enabled?: boolean
+          flavor_options?: Json
           id?: string
           is_active?: boolean | null
           is_required?: boolean | null
@@ -495,6 +501,9 @@ export type Database = {
           channels?: string[] | null
           created_at?: string | null
           description?: string | null
+          flavor_modal_channels?: string[]
+          flavor_modal_enabled?: boolean
+          flavor_options?: Json
           id?: string
           is_active?: boolean | null
           is_required?: boolean | null
@@ -1820,6 +1829,7 @@ export type Database = {
           group_id: string
           id: string
           product_id: string
+          skip_flavor_modal: boolean
           sort_order: number | null
           tenant_id: string | null
         }
@@ -1828,6 +1838,7 @@ export type Database = {
           group_id: string
           id?: string
           product_id: string
+          skip_flavor_modal?: boolean
           sort_order?: number | null
           tenant_id?: string | null
         }
@@ -1836,6 +1847,7 @@ export type Database = {
           group_id?: string
           id?: string
           product_id?: string
+          skip_flavor_modal?: boolean
           sort_order?: number | null
           tenant_id?: string | null
         }
