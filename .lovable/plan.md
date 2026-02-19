@@ -1,47 +1,37 @@
 
+# Integrar modal de sabores no OrderDrawer (mobile)
 
-# Nova aba "TAMANHOS" no Cardapio
+## Problema
+Ao clicar em um produto pizza no OrderDrawer (tela mobile), o sistema abre diretamente o ProductDetailDialog sem perguntar quantos sabores o cliente quer. O modal de selecao de sabores (PizzaFlavorCountDialog) so funciona no ProductSelector (desktop) e no Counter, mas nao no OrderDrawer.
 
-## Objetivo
-Criar uma nova aba "TAMANHOS" na pagina de Cardapio (Menu), posicionada entre "PRODUTOS" e "COMPLEMENTOS". Essa aba centralizara a configuracao do modal de selecao de sabores (1 sabor, 2 sabores, etc.) que hoje esta escondida dentro das configuracoes avancadas do grupo de complemento.
+## Solucao
+Adicionar a mesma logica de deteccao de pizza que existe no `ProductSelector.tsx` ao `OrderDrawer.tsx`:
 
-## O que muda para o gestor
-Hoje, para configurar as opcoes de sabores (textos, descricoes, canais, ativar/desativar), o gestor precisa entrar no grupo de complemento, abrir configuracoes avancadas e encontrar a secao "Modal de selecao de sabores". Com a nova aba, essa configuracao fica visivel e acessivel diretamente na tela principal do Cardapio.
+### Alteracoes em `src/components/tables/OrderDrawer.tsx`
 
-## Mudancas Tecnicas
+1. **Importar** `PizzaFlavorCountDialog` e `usePizzaProducts`
+2. **Adicionar estados**:
+   - `flavorDialogOpen` para controlar o modal de sabores
+   - `overrideUnitCount` para passar a quantidade escolhida ao ProductDetailDialog
+3. **Modificar `handleProductClick`**: verificar se o produto tem configuracao de pizza (`flavorModalEnabled` e canal `table`). Se sim, abrir o `PizzaFlavorCountDialog` em vez do `ProductDetailDialog`
+4. **Adicionar `handleFlavorSelect`**: ao escolher quantidade de sabores, definir `overrideUnitCount` e abrir o `ProductDetailDialog`
+5. **Renderizar** o componente `PizzaFlavorCountDialog` no JSX
+6. **Passar `overrideUnitCount`** e `channel="table"` ao `ProductDetailDialog`
 
-### 1. Adicionar aba "TAMANHOS" no Menu.tsx
-**Arquivo:** `src/pages/Menu.tsx`
+### Logica (copiada do ProductSelector)
 
-- Adicionar `<TabsTrigger value="sizes">TAMANHOS</TabsTrigger>` entre PRODUTOS e COMPLEMENTOS
-- Criar `<TabsContent value="sizes">` com a listagem de todos os grupos de complemento que tem `applies_per_unit = true`
-- Cada grupo sera exibido como um card editavel com:
-  - Nome do grupo
-  - Toggle ativar/desativar modal
-  - Canais onde o modal aparece (badges clicaveis: Delivery, Balcao, Mesa)
-  - Lista editavel de opcoes de sabores (quantidade, titulo, descricao)
-  - Botao para adicionar mais opcoes de sabor
-- Ao salvar, chamar `updateGroup` com os campos `flavor_modal_enabled`, `flavor_modal_channels` e `flavor_options`
+```text
+handleProductClick(product):
+  config = pizzaData.configMap.get(product.id)
+  if config AND config.flavorModalEnabled AND config.flavorModalChannels.includes('table'):
+    abrir PizzaFlavorCountDialog
+  else:
+    abrir ProductDetailDialog normalmente
 
-### 2. Filtrar grupos aplicaveis
-- Usar os dados ja carregados de `complementGroups` (hook `useComplementGroups`)
-- Filtrar apenas os que tem `applies_per_unit === true`
-- Se nenhum grupo tiver essa config, exibir mensagem orientando o gestor a ativar "Aplica por unidade" em um grupo de complemento
+handleFlavorSelect(count):
+  overrideUnitCount = count
+  abrir ProductDetailDialog
+```
 
-### 3. Layout da aba
-- Card principal com titulo "Tamanhos" e descricao "Configure as opcoes de tamanho/sabores que aparecem para o cliente"
-- Para cada grupo com `applies_per_unit`, exibir:
-  - Secao com nome do grupo (ex: "Sabores Pizza Grande")
-  - Toggle do modal + canais
-  - Tabela editavel das opcoes (mesma UI que ja existe no ComplementGroupDialog, linhas 700-811)
-  - Botao "Salvar" individual por grupo
-
-### 4. Sem mudancas no banco de dados
-- Todos os campos necessarios (`flavor_modal_enabled`, `flavor_modal_channels`, `flavor_options`) ja existem na tabela `complement_groups`
-- A aba apenas oferece uma interface mais acessivel para editar esses campos
-
-### Ordem de implementacao
-1. Adicionar a TabsTrigger e TabsContent no Menu.tsx
-2. Criar o conteudo da aba com listagem dos grupos `applies_per_unit`
-3. Implementar edicao inline dos campos de configuracao do modal de sabores
-4. Conectar com `updateGroup` para salvar alteracoes
+### Sem alteracoes no banco de dados
+Nenhuma mudanca de schema necessaria. Apenas alinhamento da UI mobile com a logica que ja existe no desktop.
