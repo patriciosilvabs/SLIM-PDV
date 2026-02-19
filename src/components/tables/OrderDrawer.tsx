@@ -283,17 +283,15 @@ export function OrderDrawer({
         </DrawerContent>
       </Drawer>
 
-      {selectedProduct && (
-        <PizzaFlavorCountDialog
-          open={flavorDialogOpen}
-          onOpenChange={setFlavorDialogOpen}
-          productName={selectedProduct.name}
-          productPrice={selectedProduct.is_promotion && selectedProduct.promotion_price ? selectedProduct.promotion_price : selectedProduct.price}
-          maxFlavors={pizzaData?.maxFlavorsMap.get(selectedProduct.id) ?? 2}
-          flavorOptions={pizzaData?.configMap.get(selectedProduct.id)?.flavorOptions}
-          onSelect={handleFlavorSelect}
-        />
-      )}
+      <PizzaFlavorCountDialog
+        open={flavorDialogOpen}
+        onOpenChange={setFlavorDialogOpen}
+        productName={selectedProduct?.name ?? ''}
+        productPrice={selectedProduct?.is_promotion && selectedProduct?.promotion_price ? selectedProduct.promotion_price : (selectedProduct?.price ?? 0)}
+        maxFlavors={selectedProduct ? (pizzaData?.maxFlavorsMap.get(selectedProduct.id) ?? 2) : 2}
+        flavorOptions={selectedProduct ? pizzaData?.configMap.get(selectedProduct.id)?.flavorOptions : undefined}
+        onSelect={handleFlavorSelect}
+      />
 
       <ProductDetailDialog
         open={productDialogOpen}
