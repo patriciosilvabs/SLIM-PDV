@@ -1,40 +1,51 @@
 
 
-# Unificar selecao de sabores em um unico grupo
+# Corrigir calculo de preco para pizza com multiplos sabores
 
-## Problema atual
-Quando o cliente escolhe "2 sabores", o sistema mostra dois cards separados ("Pizza 1" e "Pizza 2"), cada um com o grupo de complementos repetido e selecao individual (radio button, 1 sabor por card). Isso confunde o usuario.
+## Problema
+Quando o cliente escolhe 2 sabores, o sistema soma os precos dos dois sabores. O comportamento correto eh calcular a media: (preco sabor 1 + preco sabor 2) / 2.
 
-## Comportamento desejado
-Mostrar o grupo de complementos UMA UNICA VEZ, mas com checkboxes que permitem selecionar a quantidade de sabores escolhida (ex: 2 sabores = 2 checkboxes marcaveis). Se o cliente escolheu 1 sabor, usa radio button (selecao unica). Se escolheu 2 sabores, usa checkboxes com limite de 2 selecoes.
+Exemplo: Sabor A = R$40, Sabor B = R$50 --> Resultado esperado: R$45 (media), nao R$90 (soma).
 
-## Alteracoes
+## Causa raiz
+O grupo "Sabores" esta configurado com `price_calculation_type = 'sum'` no banco de dados. Porem, para grupos per-unit (sabores de pizza), quando ha mais de 1 unidade, o calculo deveria forcar o uso de media automaticamente.
 
-### `src/components/order/ProductDetailDialog.tsx`
+## Solucao
 
-1. **Remover os cards PizzaUnitCard** para grupos per-unit quando `unitCount > 0`
-2. **Substituir por uma unica secao** que renderiza o grupo de complementos uma vez, com `max_selections` ajustado para o `unitCount` (numero de sabores escolhido)
-3. **Usar checkboxes** quando `unitCount > 1` (multipla selecao) e **radio buttons** quando `unitCount === 1` (selecao unica)
-4. **Manter campo de observacoes** unico (em vez de um por pizza)
-5. **Adaptar o calculo de preco** e a validacao para funcionar com a selecao unificada
-6. **Adaptar o `handleAdd`** para gerar os `subItems` a partir das selecoes unificadas (cada sabor selecionado vira um sub-item para manter compatibilidade com o restante do sistema)
+### Alterar `src/components/order/ProductDetailDialog.tsx`
 
-### Logica simplificada
+Na funcao `calculatePerUnitPrice` (linha ~310), quando o `unitCount > 1`, forcar o calculo como **media** independentemente do `price_calculation_type` configurado no grupo. Isso porque, para pizza com multiplos sabores, o padrao de mercado eh cobrar a media dos sabores.
+
+Logica atualizada:
 
 ```text
-Se unitCount == 1:
-  Mostra grupo com radio button (selecao unica, como antes)
-  
-Se unitCount == 2:
-  Mostra grupo com checkboxes, limite de 2 selecoes
-  Label: "Escolha ate 2 sabores"
-  Contador: "0/2"
-
-Ao adicionar:
-  Cada sabor selecionado gera um sub_item separado para o pedido
-  (mantendo compatibilidade com impressao e KDS)
+calculatePerUnitPrice():
+  para cada grupo per-unit:
+    se unitCount > 1:
+      usar calculo 'average' (media dos sabores selecionados)
+    senao:
+      usar o price_calculation_type configurado no grupo (comportamento normal)
 ```
 
+### Detalhe tecnico
+
+Alterar a funcao `calculatePerUnitPrice` de:
+
+```
+total += calculateGroupPrice(group.id, group.price_calculation_type);
+```
+
+Para:
+
+```
+const effectiveType = unitCount > 1 ? 'average' : group.price_calculation_type;
+total += calculateGroupPrice(group.id, effectiveType);
+```
+
+Isso garante que:
+- Pizza de 1 sabor: usa o calculo normal do grupo
+- Pizza de 2+ sabores: sempre calcula a media dos precos
+
 ### Sem alteracoes no banco de dados
-Apenas mudanca visual/UX no `ProductDetailDialog`. A estrutura de dados enviada ao adicionar o item permanece compativel.
+Apenas uma mudanca de logica no componente. O `price_calculation_type` do grupo permanece como esta.
 
