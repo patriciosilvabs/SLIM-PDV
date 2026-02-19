@@ -1,37 +1,40 @@
 
-# Integrar modal de sabores no OrderDrawer (mobile)
 
-## Problema
-Ao clicar em um produto pizza no OrderDrawer (tela mobile), o sistema abre diretamente o ProductDetailDialog sem perguntar quantos sabores o cliente quer. O modal de selecao de sabores (PizzaFlavorCountDialog) so funciona no ProductSelector (desktop) e no Counter, mas nao no OrderDrawer.
+# Unificar selecao de sabores em um unico grupo
 
-## Solucao
-Adicionar a mesma logica de deteccao de pizza que existe no `ProductSelector.tsx` ao `OrderDrawer.tsx`:
+## Problema atual
+Quando o cliente escolhe "2 sabores", o sistema mostra dois cards separados ("Pizza 1" e "Pizza 2"), cada um com o grupo de complementos repetido e selecao individual (radio button, 1 sabor por card). Isso confunde o usuario.
 
-### Alteracoes em `src/components/tables/OrderDrawer.tsx`
+## Comportamento desejado
+Mostrar o grupo de complementos UMA UNICA VEZ, mas com checkboxes que permitem selecionar a quantidade de sabores escolhida (ex: 2 sabores = 2 checkboxes marcaveis). Se o cliente escolheu 1 sabor, usa radio button (selecao unica). Se escolheu 2 sabores, usa checkboxes com limite de 2 selecoes.
 
-1. **Importar** `PizzaFlavorCountDialog` e `usePizzaProducts`
-2. **Adicionar estados**:
-   - `flavorDialogOpen` para controlar o modal de sabores
-   - `overrideUnitCount` para passar a quantidade escolhida ao ProductDetailDialog
-3. **Modificar `handleProductClick`**: verificar se o produto tem configuracao de pizza (`flavorModalEnabled` e canal `table`). Se sim, abrir o `PizzaFlavorCountDialog` em vez do `ProductDetailDialog`
-4. **Adicionar `handleFlavorSelect`**: ao escolher quantidade de sabores, definir `overrideUnitCount` e abrir o `ProductDetailDialog`
-5. **Renderizar** o componente `PizzaFlavorCountDialog` no JSX
-6. **Passar `overrideUnitCount`** e `channel="table"` ao `ProductDetailDialog`
+## Alteracoes
 
-### Logica (copiada do ProductSelector)
+### `src/components/order/ProductDetailDialog.tsx`
+
+1. **Remover os cards PizzaUnitCard** para grupos per-unit quando `unitCount > 0`
+2. **Substituir por uma unica secao** que renderiza o grupo de complementos uma vez, com `max_selections` ajustado para o `unitCount` (numero de sabores escolhido)
+3. **Usar checkboxes** quando `unitCount > 1` (multipla selecao) e **radio buttons** quando `unitCount === 1` (selecao unica)
+4. **Manter campo de observacoes** unico (em vez de um por pizza)
+5. **Adaptar o calculo de preco** e a validacao para funcionar com a selecao unificada
+6. **Adaptar o `handleAdd`** para gerar os `subItems` a partir das selecoes unificadas (cada sabor selecionado vira um sub-item para manter compatibilidade com o restante do sistema)
+
+### Logica simplificada
 
 ```text
-handleProductClick(product):
-  config = pizzaData.configMap.get(product.id)
-  if config AND config.flavorModalEnabled AND config.flavorModalChannels.includes('table'):
-    abrir PizzaFlavorCountDialog
-  else:
-    abrir ProductDetailDialog normalmente
+Se unitCount == 1:
+  Mostra grupo com radio button (selecao unica, como antes)
+  
+Se unitCount == 2:
+  Mostra grupo com checkboxes, limite de 2 selecoes
+  Label: "Escolha ate 2 sabores"
+  Contador: "0/2"
 
-handleFlavorSelect(count):
-  overrideUnitCount = count
-  abrir ProductDetailDialog
+Ao adicionar:
+  Cada sabor selecionado gera um sub_item separado para o pedido
+  (mantendo compatibilidade com impressao e KDS)
 ```
 
 ### Sem alteracoes no banco de dados
-Nenhuma mudanca de schema necessaria. Apenas alinhamento da UI mobile com a logica que ja existe no desktop.
+Apenas mudanca visual/UX no `ProductDetailDialog`. A estrutura de dados enviada ao adicionar o item permanece compativel.
+
