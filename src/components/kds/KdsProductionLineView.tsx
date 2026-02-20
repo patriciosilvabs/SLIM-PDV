@@ -140,25 +140,23 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
     });
   }, [typedOrders]);
 
-  // Agrupar itens por praça
+  // Explodir itens individualmente por praça (cada item = 1 card separado)
   const itemsByStation = useMemo(() => {
-    const map = new Map<string, { order: Order; items: OrderItem[] }[]>();
+    const map = new Map<string, { order: Order; items: OrderItem[]; totalOrderItems: number }[]>();
     
     activeStations.forEach(station => {
       map.set(station.id, []);
     });
 
     filteredOrders.forEach(order => {
+      // Conta total de itens ativos do pedido nesta praça (para exibir "Item X de Y")
+      const allActiveItems = order.order_items?.filter(i => i.status !== 'cancelled') || [];
+      
       order.order_items?.forEach(item => {
         if (item.current_station_id && map.has(item.current_station_id)) {
           const stationItems = map.get(item.current_station_id)!;
-          const existingEntry = stationItems.find(e => e.order.id === order.id);
-          
-          if (existingEntry) {
-            existingEntry.items.push(item);
-          } else {
-            stationItems.push({ order, items: [item] });
-          }
+          // Cada item gera um card separado (para distribuição entre bancadas)
+          stationItems.push({ order, items: [item], totalOrderItems: allActiveItems.length });
         }
       });
     });
@@ -240,10 +238,14 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
     const stationOrders = itemsByStation.get(currentStation.id) || [];
     // Recalculate from filtered orders if not in map (station from overrideStations)
     const effectiveStationOrders = stationOrders.length > 0 ? stationOrders : (() => {
-      const result: { order: Order; items: OrderItem[] }[] = [];
+      const result: { order: Order; items: OrderItem[]; totalOrderItems: number }[] = [];
       filteredOrders.forEach(order => {
-        const items = order.order_items?.filter(item => item.current_station_id === currentStation.id) || [];
-        if (items.length > 0) result.push({ order, items });
+        const allActiveItems = order.order_items?.filter(i => i.status !== 'cancelled') || [];
+        const stationItems = order.order_items?.filter(item => item.current_station_id === currentStation.id) || [];
+        // Explodir: cada item vira um card separado
+        stationItems.forEach(item => {
+          result.push({ order, items: [item], totalOrderItems: allActiveItems.length });
+        });
       });
       return result;
     })();
@@ -331,9 +333,9 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {effectiveStationOrders.map(({ order, items }) => (
+                {effectiveStationOrders.map(({ order, items, totalOrderItems }) => (
                   <KdsStationCard
-                    key={`${order.id}-${currentStation.id}`}
+                    key={`${items[0]?.id}-${currentStation.id}`}
                     order={order}
                     items={items}
                     stationColor={currentStation.color}
@@ -345,6 +347,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
                     onSkipItem={(itemId) => handleSkipItem(itemId, currentStation.id)}
                     isProcessing={workflow.moveItemToNextStation.isPending}
                     overrideSettings={overrideSettings}
+                    totalOrderItems={totalOrderItems}
                   />
                 ))}
               </div>
@@ -433,9 +436,9 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {stationOrders.map(({ order, items }) => (
+                    {stationOrders.map(({ order, items, totalOrderItems }) => (
                       <KdsStationCard
-                        key={`${order.id}-${station.id}`}
+                        key={`${items[0]?.id}-${station.id}`}
                         order={order}
                         items={items}
                         stationColor={station.color}
@@ -447,6 +450,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
                       onSkipItem={(itemId) => handleSkipItem(itemId, station.id)}
                       isProcessing={workflow.moveItemToNextStation.isPending}
                       overrideSettings={overrideSettings}
+                      totalOrderItems={totalOrderItems}
                     />
                     ))}
                   </div>

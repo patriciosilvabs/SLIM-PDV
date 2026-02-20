@@ -112,6 +112,7 @@ interface KdsStationCardProps {
   isProcessing?: boolean;
   compact?: boolean;
   overrideSettings?: KdsStationCardOverrideSettings;
+  totalOrderItems?: number;
 }
 
 const STATION_ICONS = {
@@ -173,6 +174,7 @@ export function KdsStationCard({
   isProcessing,
   compact = false,
   overrideSettings,
+  totalOrderItems,
 }: KdsStationCardProps) {
   // Estado para debounce de cliques por item
   const [clickedItems, setClickedItems] = useState<Set<string>>(new Set());
@@ -325,9 +327,9 @@ export function KdsStationCard({
           <p className="text-xs text-primary font-medium mt-1">{order.customer_name}</p>
         )}
         
-        {!compact && <KdsItemCounter currentIndex={1} totalItems={items.length} />}
-        {compact && items.length > 1 && (
-          <span className="text-xs text-muted-foreground">{items.length} itens</span>
+        {!compact && <KdsItemCounter currentIndex={1} totalItems={totalOrderItems ?? items.length} />}
+        {compact && (totalOrderItems ?? items.length) > 1 && (
+          <span className="text-xs text-muted-foreground">Item de {totalOrderItems ?? items.length}</span>
         )}
       </CardHeader>
       
