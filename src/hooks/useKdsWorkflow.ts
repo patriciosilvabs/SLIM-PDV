@@ -31,33 +31,73 @@ export function useKdsWorkflow() {
   // IDs de todas as estações order_status para verificações
   const orderStatusStationIds = orderStatusStations?.map(s => s.id) || [];
 
-  // Mover item diretamente para a próxima estação (clique único) - OTIMIZADO
+  // Helper: find least-busy item_assembly station
+  const findLeastBusyPrepStation = async (): Promise<string | null> => {
+    const assemblyStations = activeStations.filter(s => s.station_type === 'item_assembly');
+    if (assemblyStations.length === 0) return null;
+    if (assemblyStations.length === 1) return assemblyStations[0].id;
+
+    let minCount = Infinity;
+    let leastBusyId = assemblyStations[0].id;
+
+    for (const station of assemblyStations) {
+      const { count } = await supabase
+        .from('order_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('current_station_id', station.id)
+        .in('station_status', ['waiting', 'in_progress']);
+
+      const itemCount = count || 0;
+      if (itemCount < minCount) {
+        minCount = itemCount;
+        leastBusyId = station.id;
+      }
+    }
+
+    return leastBusyId;
+  };
+
+  // Smart next station: borda → least-busy prep, prep → dispatch, otherwise sequential
+  const getSmartNextStation = async (currentStationId: string): Promise<{ id: string; type: string } | null> => {
+    const currentStation = activeStations.find(s => s.id === currentStationId);
+    if (!currentStation) return getNextStation(currentStationId) ? { id: getNextStation(currentStationId)!.id, type: getNextStation(currentStationId)!.station_type } : null;
+
+    if (currentStation.station_type === 'prep_start') {
+      // From borda → least-busy prep station
+      const prepId = await findLeastBusyPrepStation();
+      if (prepId) return { id: prepId, type: 'item_assembly' };
+      // No prep stations, go to order_status
+      if (orderStatusStation) return { id: orderStatusStation.id, type: 'order_status' };
+      return null;
+    }
+
+    if (currentStation.station_type === 'item_assembly') {
+      // From prep → dispatch/order_status
+      if (orderStatusStation) return { id: orderStatusStation.id, type: 'order_status' };
+      return null;
+    }
+
+    // Default: sequential
+    const next = getNextStation(currentStationId);
+    if (next) return { id: next.id, type: next.station_type };
+    if (orderStatusStation) return { id: orderStatusStation.id, type: 'order_status' };
+    return null;
+  };
+
+  // Mover item diretamente para a próxima estação (clique único) - COM ROTEAMENTO INTELIGENTE
   const moveItemToNextStation = useMutation({
     mutationFn: async ({ itemId, currentStationId }: { itemId: string; currentStationId: string }) => {
       const now = new Date().toISOString();
       
-      // Buscar próxima praça de produção
-      const nextStation = getNextStation(currentStationId);
-      const targetStationId = nextStation?.id || orderStatusStation?.id || null;
+      // Smart routing
+      const target = await getSmartNextStation(currentStationId);
+      const targetStationId = target?.id || null;
 
-      // CRÍTICO: Update primeiro (mais importante)
-      if (nextStation) {
+      if (targetStationId) {
         const { error } = await supabase
           .from('order_items')
           .update({
-            current_station_id: nextStation.id,
-            station_status: 'waiting',
-            station_started_at: null,
-            station_completed_at: now,
-          })
-          .eq('id', itemId);
-
-        if (error) throw error;
-      } else if (orderStatusStation) {
-        const { error } = await supabase
-          .from('order_items')
-          .update({
-            current_station_id: orderStatusStation.id,
+            current_station_id: targetStationId,
             station_status: 'waiting',
             station_started_at: null,
             station_completed_at: now,
@@ -66,7 +106,7 @@ export function useKdsWorkflow() {
 
         if (error) throw error;
       } else {
-        // Sem estação de status - marcar item como done
+        // No next station - mark as done
         const { error } = await supabase
           .from('order_items')
           .update({
@@ -80,7 +120,7 @@ export function useKdsWorkflow() {
         if (error) throw error;
       }
 
-      // Logs em paralelo (fire-and-forget, não bloqueiam)
+      // Logs em paralelo (fire-and-forget)
       Promise.all([
         logAction.mutateAsync({
           orderItemId: itemId,
@@ -94,8 +134,8 @@ export function useKdsWorkflow() {
         }).catch(() => {}) : Promise.resolve(),
       ]);
 
-      // Verificar se pedido está pronto - AGORA SÍNCRONO para garantir consistência
-      if (!nextStation) {
+      // Check if order is ready
+      if (!targetStationId || target?.type === 'order_status') {
         const { data: itemData } = await supabase
           .from('order_items')
           .select('order_id')
@@ -126,22 +166,18 @@ export function useKdsWorkflow() {
         }
       }
 
-      return { itemId, nextStationId: targetStationId, isComplete: !nextStation && !orderStatusStation };
+      return { itemId, nextStationId: targetStationId, isComplete: !targetStationId };
     },
     
-    // OPTIMISTIC UPDATE: Atualiza UI imediatamente
+    // OPTIMISTIC UPDATE
     onMutate: async ({ itemId, currentStationId }) => {
-      // Cancelar refetches em andamento
       await queryClient.cancelQueries({ queryKey: ['orders'] });
-      
-      // Salvar estado anterior para rollback
       const previousOrders = queryClient.getQueryData(['orders']);
       
-      // Calcular próxima estação
+      // For optimistic update, use sequential next (smart routing result will correct on settle)
       const nextStation = getNextStation(currentStationId);
       const targetStationId = nextStation?.id || orderStatusStation?.id || null;
       
-      // Atualizar cache otimisticamente
       queryClient.setQueryData(['orders'], (old: OrderData[] | undefined) => {
         if (!old) return old;
         return old.map(order => ({
@@ -163,7 +199,6 @@ export function useKdsWorkflow() {
     },
     
     onError: (error, variables, context) => {
-      // Rollback em caso de erro
       if (context?.previousOrders) {
         queryClient.setQueryData(['orders'], context.previousOrders);
       }
@@ -172,8 +207,8 @@ export function useKdsWorkflow() {
     },
     
     onSuccess: (result) => {
-      // Optimistic update + realtime já garantem sincronização
-      // Removido timeout de 2s que causava lentidão
+      // Refetch to get correct routing result
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
       if (result.isComplete) {
         toast.success('Item concluído!');
       }
