@@ -732,6 +732,27 @@ export default function KDS() {
         if (!oldData?.cancelled_at && newData?.cancelled_at) {
           console.log('[KDS] Item cancelado detectado:', newData.id);
           
+          // Só alertar se o item ainda estava em produção (não já concluído/despachado)
+          // Se station_status é 'done', o item já foi produzido - não faz sentido alertar
+          if (newData.station_status === 'done') {
+            console.log('[KDS] Item cancelado já estava concluído, ignorando alerta:', newData.id);
+            return;
+          }
+          
+          // Se o item está em uma estação order_status, já passou pela produção
+          if (newData.current_station_id) {
+            const { data: stationData } = await supabase
+              .from('kds_stations')
+              .select('station_type')
+              .eq('id', newData.current_station_id)
+              .single();
+            
+            if (stationData?.station_type === 'order_status') {
+              console.log('[KDS] Item cancelado já estava no despacho, ignorando alerta:', newData.id);
+              return;
+            }
+          }
+          
           // Buscar dados completos do item cancelado
           const { data: itemData } = await supabase
             .from('order_items')
