@@ -1,59 +1,89 @@
 
+# Correcao: Pedidos nao aparecem no KDS
 
-# Novo Sistema de Autenticacao KDS por Codigos
+## Problema identificado
 
-## Resumo
-Substituir o login por usuario/senha por um sistema de dois codigos gerados automaticamente ao cadastrar um dispositivo:
-- **Codigo Verificador** (6 digitos): vincula o dispositivo a conta do cliente (tenant)
-- **Codigo de Autenticacao** (6 digitos): faz o login do dispositivo para uso
+Existe uma falha na logica de atribuicao de estacoes KDS. O fluxo atual e:
 
-## Fluxo do Usuario
+1. Pedido e criado como **rascunho** (`is_draft: true`)
+2. Itens sao inseridos no pedido
+3. O trigger `auto_initialize_new_order_item` dispara, mas **ignora** itens de pedidos rascunho
+4. Pedido e marcado como **confirmado** (`is_draft: false`)
+5. Nenhum mecanismo reatribui os itens a primeira estacao KDS
 
-### Administrador (Configuracoes)
-1. Clica em "Novo Dispositivo"
-2. Preenche nome e praca (estacao)
-3. Sistema gera automaticamente os dois codigos
-4. Tela exibe os codigos para o admin anotar/compartilhar
-5. Admin pode regenerar codigos a qualquer momento
+Resultado: itens ficam com `current_station_id = NULL` e nunca aparecem em nenhum dispositivo KDS.
 
-### Operador (Tablet/KDS)
-1. Acessa `/kds`
-2. Digita o **Codigo Verificador** (6 digitos) - vincula ao tenant
-3. Digita o **Codigo de Autenticacao** (6 digitos) - faz login
-4. Dispositivo autenticado, exibe a linha de producao
+Isso afeta tanto a pagina de **Mesas** quanto o **Balcao**.
 
-## Mudancas Tecnicas
+## Solucao
 
-### 1. Migracao do Banco de Dados
-- Adicionar colunas `verification_code` (text) e `auth_code` (text) na tabela `kds_devices`
-- Criar indice unico em `(verification_code)` globalmente (para lookup sem tenant)
-- Remover obrigatoriedade de `username` e `password_hash` (manter para compatibilidade)
+Criar um trigger no banco de dados que detecta quando `is_draft` muda de `true` para `false` na tabela `orders`, e automaticamente atribui todos os itens (que ainda nao tem estacao) a primeira estacao KDS ativa do tenant.
 
-### 2. Edge Function (`supabase/functions/kds-device-auth/index.ts`)
-- Nova action `register`: gera 2 codigos aleatorios de 6 digitos ao criar dispositivo
-- Nova action `login_by_codes`: recebe os dois codigos, valida e retorna o dispositivo
-- Nova action `regenerate_codes`: gera novos codigos para um dispositivo existente
-- Remover logica de hash de senha (simplificar)
+## Detalhes tecnicos
 
-### 3. Tela de Login KDS (`src/components/kds/KdsDeviceLogin.tsx`)
-- Substituir campos usuario/senha por dois inputs de 6 digitos
-- Usar componente `InputOTP` (ja instalado) para entrada dos codigos
-- Primeiro campo: "Codigo Verificador"
-- Segundo campo: "Codigo de Autenticacao"
-- Manter botao "Voltar para Home"
+### 1. Novo trigger no banco: `assign_station_on_order_confirm`
 
-### 4. Configuracoes de Dispositivos (`src/components/settings/KdsDevicesSettings.tsx`)
-- Dialog de criacao: remover campos usuario/senha, manter nome e praca
-- Apos criar, exibir dialog com os dois codigos gerados (com opcao de copiar)
-- Na lista de dispositivos: mostrar botao para ver/regenerar codigos
-- Remover funcionalidade de "Redefinir Senha", substituir por "Regenerar Codigos"
+Sera criada uma funcao + trigger na tabela `orders` que:
 
-### 5. Tela de Auth (`src/pages/Auth.tsx`)
-- Manter o botao "Acessar KDS" ja adicionado (sem mudancas)
+- Dispara em UPDATE quando `is_draft` muda de `true` para `false`
+- Busca a primeira `kds_station` ativa (excluindo `order_status`) do mesmo `tenant_id`
+- Atualiza todos os `order_items` do pedido que ainda tem `current_station_id IS NULL` para apontar para essa estacao com `station_status = 'waiting'`
 
-## Formato dos Codigos
-- **Codigo Verificador**: 6 digitos numericos (ex: 482715)
-- **Codigo de Autenticacao**: 6 digitos numericos (ex: 936042)
-- Gerados aleatoriamente no servidor (edge function)
-- Verificador e unico globalmente para permitir lookup sem informar tenant
+```text
+orders UPDATE (is_draft: true -> false)
+       |
+       v
+  Buscar first_station (kds_stations WHERE tenant_id AND active AND !order_status)
+       |
+       v
+  UPDATE order_items SET current_station_id = first_station, station_status = 'waiting'
+  WHERE order_id = NEW.id AND current_station_id IS NULL
+```
 
+### 2. Migracao SQL
+
+```sql
+CREATE OR REPLACE FUNCTION public.assign_station_on_order_confirm()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  first_station_id UUID;
+BEGIN
+  -- Apenas quando is_draft muda de true para false
+  IF OLD.is_draft = TRUE AND NEW.is_draft = FALSE THEN
+    -- Buscar primeira estacao ativa do tenant
+    SELECT id INTO first_station_id
+    FROM kds_stations
+    WHERE is_active = TRUE 
+      AND station_type != 'order_status'
+      AND tenant_id = NEW.tenant_id
+    ORDER BY sort_order ASC
+    LIMIT 1;
+    
+    IF first_station_id IS NOT NULL THEN
+      -- Atribuir estacao a todos os itens sem estacao
+      UPDATE order_items
+      SET current_station_id = first_station_id,
+          station_status = 'waiting'
+      WHERE order_id = NEW.id
+        AND current_station_id IS NULL
+        AND (station_status IS NULL OR station_status = 'waiting');
+    END IF;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trigger_assign_station_on_confirm
+  AFTER UPDATE ON orders
+  FOR EACH ROW
+  EXECUTE FUNCTION public.assign_station_on_order_confirm();
+```
+
+### 3. Nenhuma alteracao no codigo frontend
+
+A correcao e 100% no banco de dados via trigger, garantindo que funcione independente de qual pagina criou o pedido (Mesas, Balcao, API externa, etc).
