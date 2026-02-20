@@ -291,27 +291,23 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
             </TabsList>
             <TabsContent value="ativos" className="flex-1 mt-0">
               <ScrollArea className="flex-1">
-                {effectiveStationOrders.length === 0 ? (
+                {readyOrdersInStatus.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
                     <Circle className="h-8 w-8 mb-2" style={{ color: currentStation.color }} />
-                    <p>Nenhum item nesta praça</p>
+                    <p>Nenhum pedido no despacho</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {effectiveStationOrders.map(({ order, items }) => (
-                      <KdsStationCard
-                        key={`${order.id}-${currentStation.id}`}
+                    {readyOrdersInStatus.map(({ order, items }) => (
+                      <KdsOrderStatusCard
+                        key={order.id}
                         order={order}
                         items={items}
                         stationColor={currentStation.color}
-                        stationName={currentStation.name}
-                        stationType={currentStation.station_type}
-                        isFirstStation={isFirstStation}
-                        isLastStation={isLastStation}
-                        onMoveToNext={(itemId, orderType) => handleMoveToNext(itemId, currentStation.id, orderType)}
-                        onSkipItem={(itemId) => handleSkipItem(itemId, currentStation.id)}
-                        isProcessing={workflow.moveItemToNextStation.isPending}
-                        overrideSettings={overrideSettings}
+                        orderStatusStationId={currentStation.id}
+                        onFinalize={handleFinalizeOrder}
+                        onServeItem={handleServeItem}
+                        isProcessing={workflow.finalizeOrderFromStatus.isPending || workflow.serveItem.isPending}
                       />
                     ))}
                   </div>
