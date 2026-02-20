@@ -352,8 +352,11 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
   const handleAdd = () => {
     if (!product || !canAdd) return;
     
-    // Shared complements
-    const sharedComplements = Object.values(selections).flat();
+    // Only shared group complements (exclude per-unit groups)
+    const perUnitGroupIds = new Set(perUnitGroups.map(g => g.id));
+    const sharedComplements = Object.entries(selections)
+      .filter(([groupId]) => !perUnitGroupIds.has(groupId))
+      .flatMap(([, sels]) => sels);
     
     // Build sub-items from unified selections: each selected flavor becomes a sub_item
     let subItemsData: SubItemComplement[] | undefined;
