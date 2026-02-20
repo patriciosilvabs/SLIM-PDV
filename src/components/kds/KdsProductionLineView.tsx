@@ -190,26 +190,25 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
     workflow.serveItem.mutate(itemId);
   };
 
-  // Pedidos prontos na estação de status (ou com todos itens em order_status)
-  // IMPORTANTE: Só mostra o pedido quando TODOS os itens chegaram ao despacho (reagrupamento)
+  // Pedidos no despacho - aparece quando QUALQUER item chega na estação order_status
+  // Mostra TODOS os itens do pedido (os que ainda estão em produção ficam opacos no card)
   const readyOrdersInStatus = useMemo(() => {
     if (!orderStatusStation) return [];
     
     return filteredOrders
       .filter(order => {
         const items = order.order_items || [];
-        // Ignorar itens cancelados
         const activeItems = items.filter(i => i.status !== 'cancelled');
         if (activeItems.length === 0) return false;
         
-        // Só mostra no despacho quando TODOS os itens ativos chegaram à estação order_status ou estão done
-        const allItemsReady = activeItems.every(
+        // Mostra se o pedido já está ready OU se pelo menos 1 item chegou ao order_status
+        if (order.status === 'ready') return true;
+        return activeItems.some(
           item => item.current_station_id === orderStatusStation.id || item.station_status === 'done'
         );
-        return allItemsReady;
       })
       .map(order => {
-        // Reagrupar: passa TODOS os itens ativos do pedido para o card
+        // Passa TODOS os itens ativos para o card (o card decide quais ficam opacos)
         const activeItems = (order.order_items || []).filter(i => i.status !== 'cancelled');
         return { order, items: activeItems };
       })
@@ -493,6 +492,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
                       order={order}
                       items={items}
                       stationColor={orderStatusStation.color}
+                      orderStatusStationId={orderStatusStation.id}
                       onFinalize={handleFinalizeOrder}
                       onServeItem={handleServeItem}
                       isProcessing={workflow.finalizeOrderFromStatus.isPending || workflow.serveItem.isPending}
