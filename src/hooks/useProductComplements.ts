@@ -14,6 +14,7 @@ export interface GroupWithOptions {
   price_calculation_type: string;
   visibility: string;
   channels: string[];
+  applicable_flavor_counts: number[] | null;
   options: {
     id: string;
     name: string;
@@ -135,6 +136,7 @@ export function useProductComplements(
             price_calculation_type: group.price_calculation_type ?? 'sum',
             visibility: group.visibility ?? 'visible',
             channels: group.channels ?? ['delivery', 'counter', 'table'],
+            applicable_flavor_counts: group.applicable_flavor_counts ?? null,
             options,
           };
         });
