@@ -135,11 +135,10 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
     return perUnitGroup?.unit_count ?? 1;
   }, [localGroups, overrideUnitCount]);
 
-  // Groups that apply per unit (for each pizza)
-  const perUnitGroups = useMemo(() => {
+  // All visible groups in original sort order, filtering per-unit by applicable_flavor_counts
+  const visibleGroups = useMemo(() => {
     return localGroups.filter(g => {
-      if (!g.applies_per_unit) return false;
-      // Filter by applicable_flavor_counts if configured
+      if (!g.applies_per_unit) return true;
       const group = groups.find(og => og.id === g.id);
       if (group?.applicable_flavor_counts && group.applicable_flavor_counts.length > 0 && unitCount > 0) {
         return group.applicable_flavor_counts.includes(unitCount);
@@ -148,10 +147,15 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
     });
   }, [localGroups, groups, unitCount]);
 
-  // Groups that apply to the whole item (shared)
+  // Groups that apply per unit (for validation/price)
+  const perUnitGroups = useMemo(() => {
+    return visibleGroups.filter(g => g.applies_per_unit === true);
+  }, [visibleGroups]);
+
+  // Groups that apply to the whole item (for validation/price)
   const sharedGroups = useMemo(() => {
-    return localGroups.filter(g => !g.applies_per_unit);
-  }, [localGroups]);
+    return visibleGroups.filter(g => !g.applies_per_unit);
+  }, [visibleGroups]);
 
   // Reset state when product changes
   useEffect(() => {
@@ -184,7 +188,6 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
     setSelections(prev => {
       const current = prev[group.id] || [];
       if (checked) {
-        // Check max selections
         if (current.length >= group.max_selections) return prev;
         return {
           ...prev,
@@ -221,7 +224,6 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
             [group.id]: current.filter(s => s.option_id !== option.id),
           };
         }
-        // Check total selections in group
         const totalOthers = current.filter(s => s.option_id !== option.id).reduce((sum, s) => sum + s.quantity, 0);
         if (totalOthers + newQty > group.max_selections) return prev;
         
@@ -394,6 +396,143 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
 
   if (!product) return null;
 
+  // Helper to render option list for any group
+  const renderGroupOptions = (group: LocalGroupWithOptions, isPerUnit: boolean) => {
+    const effectiveMax = group.selection_type === 'single' ? 1 : group.max_selections;
+
+    if (group.selection_type === 'single') {
+      return (
+        <RadioGroup
+          value={selections[group.id]?.[0]?.option_id || ''}
+          onValueChange={(value) => {
+            const option = group.options.find(o => o.id === value);
+            if (option) handleSingleSelect(group, option);
+          }}
+        >
+          {group.options.map(option => (
+            <div
+              key={option.id}
+              className={cn(
+                'flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors',
+                isOptionSelected(group.id, option.id)
+                  ? 'border-primary bg-primary/5'
+                  : 'hover:bg-muted/50'
+              )}
+              onClick={() => handleSingleSelect(group, option)}
+            >
+              <div className="flex items-center gap-3">
+                <RadioGroupItem value={option.id} />
+                {option.image_url && (
+                  <img src={option.image_url} alt={option.name} className="w-10 h-10 rounded object-cover" />
+                )}
+                <div>
+                  <p className="font-medium text-sm">{option.name}</p>
+                  {option.description && (
+                    <p className="text-xs text-muted-foreground">{option.description}</p>
+                  )}
+                </div>
+              </div>
+              {(option.price_override ?? option.price) > 0 && (
+                <span className="text-sm text-primary font-medium">
+                  +{formatCurrency(option.price_override ?? option.price)}
+                </span>
+              )}
+            </div>
+          ))}
+        </RadioGroup>
+      );
+    }
+
+    if (group.selection_type === 'multiple') {
+      return group.options.map(option => (
+        <div
+          key={option.id}
+          className={cn(
+            'flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors',
+            isOptionSelected(group.id, option.id)
+              ? 'border-primary bg-primary/5'
+              : 'hover:bg-muted/50'
+          )}
+          onClick={() => isPerUnit
+            ? handlePerUnitSelect(group, option, !isOptionSelected(group.id, option.id))
+            : handleMultipleSelect(group, option, !isOptionSelected(group.id, option.id))
+          }
+        >
+          <div className="flex items-center gap-3">
+            <Checkbox
+              checked={isOptionSelected(group.id, option.id)}
+              onCheckedChange={(checked) =>
+                isPerUnit
+                  ? handlePerUnitSelect(group, option, !!checked)
+                  : handleMultipleSelect(group, option, !!checked)
+              }
+            />
+            {option.image_url && (
+              <img src={option.image_url} alt={option.name} className="w-10 h-10 rounded object-cover" />
+            )}
+            <div>
+              <p className="font-medium text-sm">{option.name}</p>
+              {option.description && (
+                <p className="text-xs text-muted-foreground">{option.description}</p>
+              )}
+            </div>
+          </div>
+          {(option.price_override ?? option.price) > 0 && (
+            <span className="text-sm text-primary font-medium">
+              +{formatCurrency(option.price_override ?? option.price)}
+            </span>
+          )}
+        </div>
+      ));
+    }
+
+    // multiple_repeat
+    return group.options.map(option => {
+      const qty = getOptionQuantity(group.id, option.id);
+      return (
+        <div
+          key={option.id}
+          className={cn(
+            'flex items-center justify-between p-3 rounded-lg border transition-colors',
+            qty > 0 ? 'border-primary bg-primary/5' : ''
+          )}
+        >
+          <div className="flex items-center gap-3">
+            {option.image_url && (
+              <img src={option.image_url} alt={option.name} className="w-10 h-10 rounded object-cover" />
+            )}
+            <div>
+              <p className="font-medium text-sm">{option.name}</p>
+              {option.description && (
+                <p className="text-xs text-muted-foreground">{option.description}</p>
+              )}
+              {(option.price_override ?? option.price) > 0 && (
+                <span className="text-xs text-primary font-medium">
+                  +{formatCurrency(option.price_override ?? option.price)}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="icon" variant="outline" className="h-8 w-8"
+              onClick={() => handleRepeatQuantity(group, option, -1)}
+              disabled={qty === 0}
+            >
+              <Minus className="h-4 w-4" />
+            </Button>
+            <span className="w-6 text-center font-medium">{qty}</span>
+            <Button size="icon" variant="outline" className="h-8 w-8"
+              onClick={() => handleRepeatQuantity(group, option, 1)}
+              disabled={getSelectionCount(group.id) >= effectiveMax}
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      );
+    });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col p-0 overflow-hidden">
@@ -448,346 +587,60 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
               </div>
             ) : (
               <>
-                {/* Per-unit groups - Unified flavor selection */}
-                {hasPerUnitGroups && perUnitGroups.map(group => {
+                {/* All groups in their configured sort order */}
+                {visibleGroups.map((group, groupIndex) => {
+                  const isPerUnit = group.applies_per_unit === true;
                   const effectiveMax = group.selection_type === 'single' ? 1 : group.max_selections;
-                  return (
-                  <div key={group.id} className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold">{group.name}</h3>
-                          {group.is_required && (
-                            <Badge variant="destructive" className="text-xs">
-                              OBRIGATÓRIO
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {group.selection_type === 'single' 
-                            ? 'Escolha 1 opção' 
-                            : `Escolha até ${effectiveMax} opções`}
-                        </p>
-                      </div>
-                      <span className="text-sm text-muted-foreground">
-                        {getSelectionCount(group.id)}/{effectiveMax}
-                      </span>
-                    </div>
+                  // Show per-unit notes after the last per-unit group
+                  const showPerUnitNotes = isPerUnit && !visibleGroups.slice(groupIndex + 1).some(g => g.applies_per_unit);
 
-                    <div className="space-y-2">
-                      {group.selection_type === 'single' ? (
-                        <RadioGroup
-                          value={selections[group.id]?.[0]?.option_id || ''}
-                          onValueChange={(value) => {
-                            const option = group.options.find(o => o.id === value);
-                            if (option) handleSingleSelect(group, option);
-                          }}
-                        >
-                          {group.options.map(option => (
-                            <div
-                              key={option.id}
-                              className={cn(
-                                'flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors',
-                                isOptionSelected(group.id, option.id)
-                                  ? 'border-primary bg-primary/5'
-                                  : 'hover:bg-muted/50'
-                              )}
-                              onClick={() => handleSingleSelect(group, option)}
-                            >
-                              <div className="flex items-center gap-3">
-                                <RadioGroupItem value={option.id} />
-                                {option.image_url && (
-                                  <img src={option.image_url} alt={option.name} className="w-10 h-10 rounded object-cover" />
-                                )}
-                                <div>
-                                  <p className="font-medium text-sm">{option.name}</p>
-                                  {option.description && (
-                                    <p className="text-xs text-muted-foreground">{option.description}</p>
-                                  )}
-                                </div>
-                              </div>
-                              {(option.price_override ?? option.price) > 0 && (
-                                <span className="text-sm text-primary font-medium">
-                                  +{formatCurrency(option.price_override ?? option.price)}
-                                </span>
-                              )}
-                            </div>
-                          ))}
-                        </RadioGroup>
-                      ) : group.selection_type === 'multiple' ? (
-                        group.options.map(option => (
-                          <div
-                            key={option.id}
-                            className={cn(
-                              'flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors',
-                              isOptionSelected(group.id, option.id)
-                                ? 'border-primary bg-primary/5'
-                                : 'hover:bg-muted/50'
-                            )}
-                            onClick={() => handleMultipleSelect(group, option, !isOptionSelected(group.id, option.id))}
-                          >
-                            <div className="flex items-center gap-3">
-                              <Checkbox
-                                checked={isOptionSelected(group.id, option.id)}
-                                onCheckedChange={(checked) => handleMultipleSelect(group, option, !!checked)}
-                              />
-                              {option.image_url && (
-                                <img src={option.image_url} alt={option.name} className="w-10 h-10 rounded object-cover" />
-                              )}
-                              <div>
-                                <p className="font-medium text-sm">{option.name}</p>
-                                {option.description && (
-                                  <p className="text-xs text-muted-foreground">{option.description}</p>
-                                )}
-                              </div>
-                            </div>
-                            {(option.price_override ?? option.price) > 0 && (
-                              <span className="text-sm text-primary font-medium">
-                                +{formatCurrency(option.price_override ?? option.price)}
-                              </span>
+                  return (
+                    <div key={group.id} className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold">{group.name}</h3>
+                            {group.is_required && (
+                              <Badge variant="destructive" className="text-xs">
+                                OBRIGATÓRIO
+                              </Badge>
                             )}
                           </div>
-                        ))
-                      ) : (
-                        // multiple_repeat
-                        group.options.map(option => {
-                          const qty = getOptionQuantity(group.id, option.id);
-                          return (
-                            <div
-                              key={option.id}
-                              className={cn(
-                                'flex items-center justify-between p-3 rounded-lg border transition-colors',
-                                qty > 0 ? 'border-primary bg-primary/5' : ''
-                              )}
-                            >
-                              <div className="flex items-center gap-3">
-                                {option.image_url && (
-                                  <img src={option.image_url} alt={option.name} className="w-10 h-10 rounded object-cover" />
-                                )}
-                                <div>
-                                  <p className="font-medium text-sm">{option.name}</p>
-                                  {option.description && (
-                                    <p className="text-xs text-muted-foreground">{option.description}</p>
-                                  )}
-                                  {(option.price_override ?? option.price) > 0 && (
-                                    <span className="text-xs text-primary font-medium">
-                                      +{formatCurrency(option.price_override ?? option.price)}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  size="icon"
-                                  variant="outline"
-                                  className="h-8 w-8"
-                                  onClick={() => handleRepeatQuantity(group, option, -1)}
-                                  disabled={qty === 0}
-                                >
-                                  <Minus className="h-4 w-4" />
-                                </Button>
-                                <span className="w-6 text-center font-medium">{qty}</span>
-                                <Button
-                                  size="icon"
-                                  variant="outline"
-                                  className="h-8 w-8"
-                                  onClick={() => handleRepeatQuantity(group, option, 1)}
-                                  disabled={getSelectionCount(group.id) >= effectiveMax}
-                                >
-                                  <Plus className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          );
-                        })
+                          {isPerUnit ? (
+                            <p className="text-xs text-muted-foreground">
+                              {group.selection_type === 'single' 
+                                ? 'Escolha 1 opção' 
+                                : `Escolha até ${effectiveMax} opções`}
+                            </p>
+                          ) : group.description ? (
+                            <p className="text-xs text-muted-foreground">{group.description}</p>
+                          ) : null}
+                        </div>
+                        <span className="text-sm text-muted-foreground">
+                          {getSelectionCount(group.id)}/{effectiveMax}
+                        </span>
+                      </div>
+
+                      <div className="space-y-2">
+                        {renderGroupOptions(group, isPerUnit)}
+                      </div>
+
+                      {/* Notes field after the last per-unit group */}
+                      {showPerUnitNotes && (
+                        <div className="space-y-1 pt-1">
+                          <Label className="text-xs">Observações</Label>
+                          <Textarea
+                            placeholder="Ex: SEM CEBOLA, SEM MOLHO..."
+                            value={perUnitNotes}
+                            onChange={(e) => setPerUnitNotes(e.target.value.toUpperCase())}
+                            rows={2}
+                            className="uppercase text-sm"
+                          />
+                        </div>
                       )}
                     </div>
-
-                    {/* Notes for this pizza group */}
-                    <div className="space-y-1 pt-1">
-                      <Label className="text-xs">Observações</Label>
-                      <Textarea
-                        placeholder="Ex: SEM CEBOLA, SEM MOLHO..."
-                        value={perUnitNotes}
-                        onChange={(e) => setPerUnitNotes(e.target.value.toUpperCase())}
-                        rows={2}
-                        className="uppercase text-sm"
-                      />
-                    </div>
-                  </div>
                   );
                 })}
-
-                {/* Shared groups - apply to whole item */}
-                {sharedGroups.map(group => (
-                  <div key={group.id} className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold">{group.name}</h3>
-                          {group.is_required && (
-                            <Badge variant="destructive" className="text-xs">
-                              OBRIGATÓRIO
-                            </Badge>
-                          )}
-                        </div>
-                        {group.description && (
-                          <p className="text-xs text-muted-foreground">{group.description}</p>
-                        )}
-                      </div>
-                      <span className="text-sm text-muted-foreground">
-                        {getSelectionCount(group.id)}/{group.max_selections}
-                      </span>
-                    </div>
-
-                    <div className="space-y-2">
-                      {group.selection_type === 'single' ? (
-                        <RadioGroup
-                          value={selections[group.id]?.[0]?.option_id || ''}
-                          onValueChange={(value) => {
-                            const option = group.options.find(o => o.id === value);
-                            if (option) handleSingleSelect(group, option);
-                          }}
-                        >
-                          {group.options.map(option => (
-                            <div
-                              key={option.id}
-                              className={cn(
-                                'flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors',
-                                isOptionSelected(group.id, option.id)
-                                  ? 'border-primary bg-primary/5'
-                                  : 'hover:bg-muted/50'
-                              )}
-                              onClick={() => handleSingleSelect(group, option)}
-                            >
-                              <div className="flex items-center gap-3">
-                                <RadioGroupItem value={option.id} />
-                                {option.image_url && (
-                                  <img 
-                                    src={option.image_url} 
-                                    alt={option.name}
-                                    className="w-10 h-10 rounded object-cover"
-                                  />
-                                )}
-                                <div>
-                                  <p className="font-medium text-sm">{option.name}</p>
-                                  {option.description && (
-                                    <p className="text-xs text-muted-foreground">{option.description}</p>
-                                  )}
-                                </div>
-                              </div>
-                              {(option.price_override ?? option.price) > 0 && (
-                                <span className="text-sm text-primary font-medium">
-                                  +{formatCurrency(option.price_override ?? option.price)}
-                                </span>
-                              )}
-                            </div>
-                          ))}
-                        </RadioGroup>
-                      ) : group.selection_type === 'multiple' ? (
-                        group.options.map(option => (
-                          <div
-                            key={option.id}
-                            className={cn(
-                              'flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors',
-                              isOptionSelected(group.id, option.id)
-                                ? 'border-primary bg-primary/5'
-                                : 'hover:bg-muted/50'
-                            )}
-                            onClick={() => handleMultipleSelect(
-                              group, 
-                              option, 
-                              !isOptionSelected(group.id, option.id)
-                            )}
-                          >
-                            <div className="flex items-center gap-3">
-                              <Checkbox 
-                                checked={isOptionSelected(group.id, option.id)}
-                                onCheckedChange={(checked) => 
-                                  handleMultipleSelect(group, option, !!checked)
-                                }
-                              />
-                              {option.image_url && (
-                                <img 
-                                  src={option.image_url} 
-                                  alt={option.name}
-                                  className="w-10 h-10 rounded object-cover"
-                                />
-                              )}
-                              <div>
-                                <p className="font-medium text-sm">{option.name}</p>
-                                {option.description && (
-                                  <p className="text-xs text-muted-foreground">{option.description}</p>
-                                )}
-                              </div>
-                            </div>
-                            {(option.price_override ?? option.price) > 0 && (
-                              <span className="text-sm text-primary font-medium">
-                                +{formatCurrency(option.price_override ?? option.price)}
-                              </span>
-                            )}
-                          </div>
-                        ))
-                      ) : (
-                        // multiple_repeat
-                        group.options.map(option => {
-                          const qty = getOptionQuantity(group.id, option.id);
-                          return (
-                            <div
-                              key={option.id}
-                              className={cn(
-                                'flex items-center justify-between p-3 rounded-lg border transition-colors',
-                                qty > 0 ? 'border-primary bg-primary/5' : ''
-                              )}
-                            >
-                              <div className="flex items-center gap-3">
-                                {option.image_url && (
-                                  <img 
-                                    src={option.image_url} 
-                                    alt={option.name}
-                                    className="w-10 h-10 rounded object-cover"
-                                  />
-                                )}
-                                <div>
-                                  <p className="font-medium text-sm">{option.name}</p>
-                                  {option.description && (
-                                    <p className="text-xs text-muted-foreground">{option.description}</p>
-                                  )}
-                                  {(option.price_override ?? option.price) > 0 && (
-                                    <span className="text-xs text-primary font-medium">
-                                      +{formatCurrency(option.price_override ?? option.price)}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  size="icon"
-                                  variant="outline"
-                                  className="h-8 w-8"
-                                  onClick={() => handleRepeatQuantity(group, option, -1)}
-                                  disabled={qty === 0}
-                                >
-                                  <Minus className="h-4 w-4" />
-                                </Button>
-                                <span className="w-6 text-center font-medium">{qty}</span>
-                                <Button
-                                  size="icon"
-                                  variant="outline"
-                                  className="h-8 w-8"
-                                  onClick={() => handleRepeatQuantity(group, option, 1)}
-                                  disabled={getSelectionCount(group.id) >= group.max_selections}
-                                >
-                                  <Plus className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-                ))}
               </>
             )}
 
