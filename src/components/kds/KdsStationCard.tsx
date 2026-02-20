@@ -92,6 +92,13 @@ interface Order {
   updated_at: string;
 }
 
+interface KdsStationCardOverrideSettings {
+  highlightSpecialBorders?: boolean;
+  borderKeywords?: string[];
+  showPartySize?: boolean;
+  showWaiterName?: boolean;
+}
+
 interface KdsStationCardProps {
   order: Order;
   items: OrderItem[];
@@ -104,6 +111,7 @@ interface KdsStationCardProps {
   onSkipItem?: (itemId: string) => void;
   isProcessing?: boolean;
   compact?: boolean;
+  overrideSettings?: KdsStationCardOverrideSettings;
 }
 
 const STATION_ICONS = {
@@ -164,6 +172,7 @@ export function KdsStationCard({
   onSkipItem,
   isProcessing,
   compact = false,
+  overrideSettings,
 }: KdsStationCardProps) {
   // Estado para debounce de cliques por item
   const [clickedItems, setClickedItems] = useState<Set<string>>(new Set());
@@ -199,7 +208,16 @@ export function KdsStationCard({
     
     clickTimeouts.current.set(itemId, timeout);
   }, [clickedItems, onMoveToNext]);
-  const { hasSpecialBorder, settings } = useKdsSettings();
+  const { hasSpecialBorder: hookHasSpecialBorder, settings: hookSettings } = useKdsSettings();
+  
+  // Use overrideSettings when provided (device-only mode bypasses RLS)
+  const settings = overrideSettings ? { ...hookSettings, ...overrideSettings } : hookSettings;
+  const hasSpecialBorder = useCallback((text: string) => {
+    const keywords = overrideSettings?.borderKeywords ?? settings.borderKeywords;
+    if (!keywords || keywords.length === 0) return false;
+    const lowerText = text.toLowerCase();
+    return keywords.some(kw => lowerText.includes(kw.toLowerCase()));
+  }, [overrideSettings?.borderKeywords, settings.borderKeywords]);
   
   const StationIcon = STATION_ICONS[stationType as keyof typeof STATION_ICONS] || ChefHat;
   

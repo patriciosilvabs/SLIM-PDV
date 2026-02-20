@@ -40,11 +40,23 @@ interface Order {
   order_items?: OrderItem[];
 }
 
+interface OverrideSettings {
+  assignedStationId?: string | null;
+  highlightSpecialBorders?: boolean;
+  borderKeywords?: string[];
+  showPartySize?: boolean;
+  showWaiterName?: boolean;
+  compactMode?: boolean;
+  timerGreenMinutes?: number;
+  timerYellowMinutes?: number;
+}
+
 interface KdsProductionLineViewProps {
   orders: UseOrdersOrder[];
   isLoading: boolean;
   overrideTenantId?: string | null;
   overrideStations?: any[];
+  overrideSettings?: OverrideSettings;
   overrideWorkflow?: {
     moveItemToNextStation: { mutate: (params: { itemId: string; currentStationId: string }) => void; isPending: boolean };
     skipItemToNextStation: { mutate: (params: { itemId: string; currentStationId: string }) => void };
@@ -53,10 +65,16 @@ interface KdsProductionLineViewProps {
   };
 }
 
-export function KdsProductionLineView({ orders, isLoading, overrideTenantId, overrideStations, overrideWorkflow }: KdsProductionLineViewProps) {
+export function KdsProductionLineView({ orders, isLoading, overrideTenantId, overrideStations, overrideSettings, overrideWorkflow }: KdsProductionLineViewProps) {
   const { activeStations: hookActiveStations, productionStations: hookProductionStations, orderStatusStation: hookOrderStatusStation, isLoading: stationsLoading } = useKdsStations();
-  const { settings } = useKdsSettings(overrideTenantId);
+  const { settings: hookSettings } = useKdsSettings(overrideTenantId);
   const hookWorkflow = useKdsWorkflow();
+
+  // Use overrideSettings when provided (device-only mode bypasses RLS)
+  const settings = useMemo(() => {
+    if (!overrideSettings) return hookSettings;
+    return { ...hookSettings, ...overrideSettings };
+  }, [hookSettings, overrideSettings]);
 
   // Use override stations if provided (device-only mode), otherwise use hook data
   const hasOverrideStations = overrideStations && overrideStations.length > 0;
@@ -270,6 +288,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
                   onMoveToNext={(itemId) => handleMoveToNext(itemId, currentStation.id)}
                   onSkipItem={(itemId) => handleSkipItem(itemId, currentStation.id)}
                   isProcessing={workflow.moveItemToNextStation.isPending}
+                  overrideSettings={overrideSettings}
                 />
               ))}
             </div>
@@ -367,10 +386,11 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
                         stationType={station.station_type}
                         isFirstStation={isFirstStation}
                         isLastStation={isLastStation}
-                        onMoveToNext={(itemId) => handleMoveToNext(itemId, station.id)}
-                        onSkipItem={(itemId) => handleSkipItem(itemId, station.id)}
-                        isProcessing={workflow.moveItemToNextStation.isPending}
-                      />
+                      onMoveToNext={(itemId) => handleMoveToNext(itemId, station.id)}
+                      onSkipItem={(itemId) => handleSkipItem(itemId, station.id)}
+                      isProcessing={workflow.moveItemToNextStation.isPending}
+                      overrideSettings={overrideSettings}
+                    />
                     ))}
                   </div>
                 )}
