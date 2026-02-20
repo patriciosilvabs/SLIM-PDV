@@ -115,8 +115,26 @@ const STATION_ICONS = {
   custom: ChefHat,
 };
 
-// Extrair sabores dos extras (usa função do KdsItemBadges)
-const getFlavors = getFlavorsFromExtras;
+// Extrair sabores: primeiro tenta extras do item, depois sub_extras dos sub_items
+const getFlavors = (item: OrderItem): string[] => {
+  // Tentar sabores dos extras do item principal
+  const mainFlavors = getFlavorsFromExtras(item.extras);
+  if (mainFlavors.length > 0) return mainFlavors;
+  
+  // Fallback: extrair sabores dos sub_items (pizzas com múltiplos sabores)
+  if (item.sub_items && item.sub_items.length > 0) {
+    const subFlavors = item.sub_items
+      .flatMap(si => si.sub_extras || [])
+      .filter(se => se.kds_category === 'flavor')
+      .map(se => {
+        const parts = se.option_name.split(':');
+        return parts.length > 1 ? parts[1].trim() : se.option_name;
+      });
+    if (subFlavors.length > 0) return subFlavors;
+  }
+  
+  return [];
+};
 
 export function KdsStationCard({
   order,
@@ -198,7 +216,7 @@ export function KdsStationCard({
 
   // Renderização contextual de item baseada no tipo da estação
   const renderItemContent = (item: OrderItem, isInProgress: boolean = false) => {
-    const flavors = getFlavors(item.extras);
+    const flavors = getFlavors(item);
     
     // prep_start: Mostra nome, borda + observações
     if (stationType === 'prep_start') {
