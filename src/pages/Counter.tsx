@@ -129,7 +129,8 @@ export default function Counter() {
   const { data: openCashRegister } = useOpenCashRegister();
   const { createPayment } = useCashRegisterMutations();
   const isMobile = useIsMobile();
-  const { data: pizzaData } = usePizzaProducts();
+  const { data: pizzaData, isLoading: pizzaDataLoading } = usePizzaProducts();
+  const pendingProductRef = useRef<any>(null);
   
   const canAddItems = hasPermission('counter_add_items');
   const canApplyDiscount = hasPermission('counter_apply_discount');
@@ -297,6 +298,15 @@ export default function Counter() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Process pending product click once pizzaData loads
+  useEffect(() => {
+    if (!pizzaDataLoading && pendingProductRef.current) {
+      const product = pendingProductRef.current;
+      pendingProductRef.current = null;
+      processProductClick(product);
+    }
+  }, [pizzaDataLoading]);
+
   // Permission check AFTER all hooks
   if (!permissionsLoading && !hasPermission('counter_view')) {
     return <AccessDenied permission="counter_view" />;
@@ -320,10 +330,8 @@ export default function Counter() {
     setShowCustomerDropdown(false);
   };
 
-  // Handle product click - check if pizza, then open appropriate dialog
-  const handleProductClick = (product: any) => {
+  const processProductClick = (product: any) => {
     setSelectedProduct(product);
-    
     const config = pizzaData?.configMap.get(product.id);
     const currentChannel = orderType === 'delivery' ? 'delivery' : 'counter';
     
@@ -333,6 +341,16 @@ export default function Counter() {
       setOverrideUnitCount(undefined);
       setProductDialogOpen(true);
     }
+  };
+
+  // Handle product click - check if pizza, then open appropriate dialog
+  const handleProductClick = (product: any) => {
+    if (pizzaDataLoading) {
+      pendingProductRef.current = product;
+      setSelectedProduct(product);
+      return;
+    }
+    processProductClick(product);
   };
 
   const handleFlavorSelect = (count: number) => {
