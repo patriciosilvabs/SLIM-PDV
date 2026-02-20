@@ -28,6 +28,7 @@ export type SettingsSection =
   | 'tables' 
   | 'kds' 
   | 'kds-stations'
+  | 'kds-devices'
   | 'orders' 
   | 'printers' 
   | 'cash-register'
@@ -47,6 +48,7 @@ export const SECTION_INFO: Record<SettingsSection, { label: string; icon: Lucide
   tables: { label: 'Mesas', icon: UtensilsCrossed },
   kds: { label: 'KDS', icon: ChefHat },
   'kds-stations': { label: 'Praças', icon: Factory },
+  'kds-devices': { label: 'Dispositivos', icon: Smartphone },
   orders: { label: 'Pedidos', icon: ShoppingCart },
   printers: { label: 'Impressoras', icon: Printer },
   'cash-register': { label: 'Caixa', icon: Wallet },
@@ -79,6 +81,7 @@ const sections = [
       { id: 'tables' as const, label: 'Mesas', icon: UtensilsCrossed },
       { id: 'kds' as const, label: 'KDS', icon: ChefHat },
       { id: 'kds-stations' as const, label: 'Praças', icon: Factory },
+      { id: 'kds-devices' as const, label: 'Dispositivos', icon: Smartphone },
       { id: 'orders' as const, label: 'Pedidos', icon: ShoppingCart },
       { id: 'printers' as const, label: 'Impressoras', icon: Printer },
       { id: 'cash-register' as const, label: 'Caixa', icon: Wallet },

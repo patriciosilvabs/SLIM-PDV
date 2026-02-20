@@ -36,8 +36,9 @@ import { CardapioWebSettings } from '@/components/settings/CardapioWebSettings';
 import { ProductionTargetsSettings } from '@/components/settings/ProductionTargetsSettings';
 import { ProductionApiSettings } from '@/components/settings/ProductionApiSettings';
 import { StoresSettings } from '@/components/settings/StoresSettings';
+import { KdsDevicesSettings } from '@/components/settings/KdsDevicesSettings';
 
-const VALID_SECTIONS: SettingsSection[] = ['stores', 'tables', 'kds', 'kds-stations', 'orders', 'printers', 'cash-register', 'production-targets', 'production-api', 'notifications', 'announcements', 'push', 'users', 'roles', 'invitations', 'integrations'];
+const VALID_SECTIONS: SettingsSection[] = ['stores', 'tables', 'kds', 'kds-stations', 'kds-devices', 'orders', 'printers', 'cash-register', 'production-targets', 'production-api', 'notifications', 'announcements', 'push', 'users', 'roles', 'invitations', 'integrations'];
 
 // Hook to check if system has any admins
 function useHasAdmins() {
@@ -166,6 +167,8 @@ export default function Settings() {
         return <KdsSettingsSection />;
       case 'kds-stations':
         return <KdsStationsSettings />;
+      case 'kds-devices':
+        return <KdsDevicesSettings />;
       case 'orders':
         return <OrderSettingsSection />;
       case 'printers':
@@ -251,6 +254,7 @@ export default function Settings() {
                   <option value="tables">Mesas</option>
                   <option value="kds">KDS</option>
                   <option value="kds-stations">Praças</option>
+                  <option value="kds-devices">Dispositivos</option>
                   <option value="orders">Pedidos</option>
                   <option value="printers">Impressoras</option>
                   <option value="cash-register">Caixa</option>
