@@ -160,12 +160,12 @@ const parseBottleneckSettings = (dbSettings: unknown): BottleneckSettings => {
   };
 };
 
-export function useKdsSettings() {
+export function useKdsSettings(overrideTenantId?: string | null) {
   const queryClient = useQueryClient();
   const [deviceSettings, setDeviceSettings] = useState<KdsDeviceSettings>(getDeviceSettings);
 
   // Get tenant_id for current user
-  const { data: tenantId } = useQuery({
+  const { data: userTenantId } = useQuery({
     queryKey: ['user-tenant-id'],
     queryFn: async () => {
       const { data, error } = await supabase.rpc('get_user_tenant_id');
@@ -174,6 +174,9 @@ export function useKdsSettings() {
     },
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
+
+  // Use override tenant ID (from device auth) as fallback
+  const tenantId = userTenantId || overrideTenantId || null;
 
   // Fetch global settings from database filtered by tenant
   const { data: dbSettings, isLoading } = useQuery({

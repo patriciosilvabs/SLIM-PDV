@@ -108,7 +108,7 @@ export default function KDS() {
     }
   });
   const { playKdsNewOrderSound, playMaxWaitAlertSound, playOrderCancelledSound, playStationChangeSound, settings } = useAudioNotification();
-  const { settings: kdsSettings, hasSpecialBorder, updateSettings: updateKdsSettings, updateDeviceSettings } = useKdsSettings();
+  const { settings: kdsSettings, hasSpecialBorder, updateSettings: updateKdsSettings, updateDeviceSettings } = useKdsSettings(deviceAuth?.tenantId);
   const { activeStations, productionStations } = useKdsStations();
   
   // Bottleneck alerts for production line mode
@@ -780,6 +780,7 @@ export default function KDS() {
             deviceId: device.device_id,
             deviceName: device.name,
             stationId: device.station_id,
+            tenantId: device.tenant_id || null,
           });
         }}
       />
