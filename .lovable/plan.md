@@ -1,25 +1,19 @@
 
-# Plano: Botao "PRONTO!" no Despacho
+# Plano: Despacho com Agrupamento
 
-## Resumo
+## Implementado
 
-Alterar o texto do botao na estacao de despacho para sempre exibir **"PRONTO!"**, independentemente do tipo de pedido (Mesa, Delivery ou Retirada). Atualmente, pedidos de mesa mostram "Servir Mesa" e o card de reagrupamento mostra "Finalizar Pedido".
+### 1. KdsProductionLineView.tsx - Single station view
+- Quando a praça atribuída é `order_status`, usa `KdsOrderStatusCard` em vez de `KdsStationCard`
+- Usa `readyOrdersInStatus` (dados reagrupados com todos os itens) em vez de `effectiveStationOrders`
 
-## Mudancas
-
-### 1. KdsStationCard.tsx (linha 363-367)
-
-Remover a condicao especial para `dine_in` na estacao `order_status`. O botao da estacao de despacho passara a mostrar sempre "Pronto" em vez de "Servir Mesa".
-
-### 2. KdsOrderStatusCard.tsx (linhas 279-282)
-
-Alterar o texto do botao de finalizacao do card reagrupado:
-- De: "Finalizar Pedido" / "Servir X itens restantes"
-- Para: **"PRONTO!"** quando todos os itens chegaram e foram servidos
-- Manter "Aguardando X itens..." quando ainda ha itens em producao
-- Manter "Servir X itens restantes" quando itens chegaram mas nao foram marcados
+### 2. KdsOrderStatusCard.tsx - Botão DESPACHAR
+- Botão "DESPACHAR" grande no topo do card, perto do timer
+- Botão fica opaco (`opacity-40`) e desabilitado até todos os itens do pedido chegarem
+- Itens em produção aparecem opacos com badge "em produção"
+- Itens que chegaram mostram badge "Chegou"
+- Removido botão "Servir" individual por item (agora é apenas visual)
 
 ### Arquivos modificados
-
-- `src/components/kds/KdsStationCard.tsx`
+- `src/components/kds/KdsProductionLineView.tsx`
 - `src/components/kds/KdsOrderStatusCard.tsx`

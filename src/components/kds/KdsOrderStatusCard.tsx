@@ -167,6 +167,26 @@ export function KdsOrderStatusCard({
           </div>
         )}
 
+        {/* BOTÃO DESPACHAR - no topo, perto do timer */}
+        <Button
+          size={compact ? "sm" : "lg"}
+          onClick={() => onFinalize(order.id)}
+          disabled={isProcessing || !allArrived}
+          className={cn(
+            "w-full font-bold text-lg",
+            compact && "h-8 text-sm",
+            !allArrived && "opacity-40 cursor-not-allowed"
+          )}
+          style={{ backgroundColor: allArrived ? stationColor : undefined }}
+          variant={allArrived ? "default" : "outline"}
+        >
+          <Package className={cn("h-5 w-5 mr-2", compact && "h-4 w-4 mr-1")} />
+          {!allArrived 
+            ? `Aguardando ${pendingCount} ${pendingCount === 1 ? 'item' : 'itens'}...`
+            : 'DESPACHAR'
+          }
+        </Button>
+
         {/* Indicador de itens pendentes em produção */}
         {pendingCount > 0 && (
           <div className="flex items-center justify-center gap-2 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
@@ -232,19 +252,17 @@ export function KdsOrderStatusCard({
                     {format(new Date(item.served_at), 'HH:mm')}
                   </Badge>
                 ) : arrived ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onServeItem?.(item.id)}
-                    disabled={isProcessing}
+                  <Badge 
+                    variant="outline" 
                     className={cn(
-                      "shrink-0 h-7 px-2 text-xs",
-                      compact && "h-6 px-1.5 text-[10px]"
+                      "shrink-0",
+                      compact && "text-xs"
                     )}
                     style={{ borderColor: stationColor, color: stationColor }}
                   >
-                    Servir
-                  </Button>
+                    <Check className={cn("h-3 w-3 mr-1", compact && "h-2.5 w-2.5")} />
+                    Chegou
+                  </Badge>
                 ) : (
                   <Clock className="h-4 w-4 text-muted-foreground/50 shrink-0 animate-pulse" />
                 )}
@@ -260,28 +278,6 @@ export function KdsOrderStatusCard({
             <span>{order.customer_name}</span>
           </div>
         )}
-
-        {/* Botão finalizar pedido - só ativa quando todos chegaram E foram servidos */}
-        <Button
-          size={compact ? "sm" : "default"}
-          onClick={() => onFinalize(order.id)}
-          disabled={isProcessing || !allServed || !allArrived}
-          className={cn(
-            "w-full",
-            compact && "h-8 text-xs",
-            (!allServed || !allArrived) && "opacity-50"
-          )}
-          style={{ backgroundColor: allServed && allArrived ? stationColor : undefined }}
-          variant={allServed && allArrived ? "default" : "outline"}
-        >
-          <Package className={cn("h-4 w-4 mr-2", compact && "h-3 w-3 mr-1")} />
-          {!allArrived 
-            ? `Aguardando ${pendingCount} ${pendingCount === 1 ? 'item' : 'itens'}...`
-            : allServed 
-              ? 'PRONTO!' 
-              : `Servir ${totalCount - servedCount} itens restantes`
-          }
-        </Button>
       </CardContent>
     </Card>
   );
