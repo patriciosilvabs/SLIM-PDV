@@ -193,6 +193,40 @@ serve(async (req) => {
 
       if (error) throw error;
 
+      // If codes are missing (legacy device), generate them
+      if (!device.verification_code || !device.auth_code) {
+        let verification_code = "";
+        for (let i = 0; i < 10; i++) {
+          const candidate = generateCode();
+          const { data: existing } = await supabase
+            .from("kds_devices")
+            .select("id")
+            .eq("verification_code", candidate)
+            .maybeSingle();
+          if (!existing) {
+            verification_code = candidate;
+            break;
+          }
+        }
+        if (!verification_code) {
+          return new Response(
+            JSON.stringify({ error: "Não foi possível gerar código único." }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        const auth_code = generateCode();
+
+        await supabase
+          .from("kds_devices")
+          .update({ verification_code, auth_code })
+          .eq("id", device_id);
+
+        return new Response(
+          JSON.stringify({ success: true, verification_code, auth_code }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       return new Response(
         JSON.stringify({ success: true, verification_code: device.verification_code, auth_code: device.auth_code }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
