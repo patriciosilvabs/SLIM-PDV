@@ -57,6 +57,10 @@ export function KdsDevicesSettings() {
   const [codesData, setCodesData] = useState<{ verification_code: string; auth_code: string; deviceName: string } | null>(null);
   const [isLoadingCodes, setIsLoadingCodes] = useState(false);
 
+  // Inline codes visibility per device
+  const [visibleCodesDeviceId, setVisibleCodesDeviceId] = useState<string | null>(null);
+  const [inlineCodes, setInlineCodes] = useState<Record<string, { verification_code: string; auth_code: string }>>({});
+
   const createDeviceMutation = useMutation({
     mutationFn: async (params: { name: string; station_id: string | null }) => {
       const { data, error } = await supabase.functions.invoke('kds-device-auth', {
@@ -148,6 +152,31 @@ export function KdsDevicesSettings() {
       toast.error(error.message || 'Erro ao regenerar códigos');
     },
   });
+
+  const handleToggleInlineCodes = async (device: KdsDevice) => {
+    if (visibleCodesDeviceId === device.id) {
+      setVisibleCodesDeviceId(null);
+      return;
+    }
+    if (inlineCodes[device.id]) {
+      setVisibleCodesDeviceId(device.id);
+      return;
+    }
+    setIsLoadingCodes(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('kds-device-auth', {
+        body: { action: 'get_codes', device_id: device.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setInlineCodes(prev => ({ ...prev, [device.id]: { verification_code: data.verification_code, auth_code: data.auth_code } }));
+      setVisibleCodesDeviceId(device.id);
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao buscar códigos');
+    } finally {
+      setIsLoadingCodes(false);
+    }
+  };
 
   const handleViewCodes = async (device: KdsDevice) => {
     setIsLoadingCodes(true);
@@ -268,78 +297,113 @@ export function KdsDevicesSettings() {
                   const isCurrentDevice = currentDevice?.id === dev.id;
 
                   return (
-                    <div
-                      key={dev.id}
-                      className={cn(
-                        "flex items-center gap-3 p-3 rounded-lg border transition-all",
-                        online ? "bg-card" : "bg-muted/30 opacity-70",
-                        isCurrentDevice && "ring-2 ring-primary/30"
-                      )}
-                    >
-                      <div className={cn(
-                        "h-10 w-10 rounded-full flex items-center justify-center",
-                        online ? "bg-green-500/10" : "bg-muted"
-                      )}>
-                        {online ? (
-                          <Wifi className="h-5 w-5 text-green-600" />
-                        ) : (
-                          <WifiOff className="h-5 w-5 text-muted-foreground" />
+                    <div key={dev.id} className="space-y-0">
+                      <div
+                        className={cn(
+                          "flex items-center gap-3 p-3 rounded-lg border transition-all",
+                          online ? "bg-card" : "bg-muted/30 opacity-70",
+                          isCurrentDevice && "ring-2 ring-primary/30"
                         )}
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium truncate">{dev.name}</span>
-                          {isCurrentDevice && (
-                            <Badge variant="outline" className="text-[10px] px-1.5">
-                              Este dispositivo
-                            </Badge>
-                          )}
-                          <Badge variant={online ? 'default' : 'secondary'} className="text-[10px] px-1.5">
-                            {online ? 'Online' : 'Offline'}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
-                          {station ? (
-                            <span className="flex items-center gap-1">
-                              <Circle className="h-2.5 w-2.5" style={{ color: station.color, fill: station.color }} />
-                              {station.name}
-                            </span>
-                          ) : (
-                            <span className="text-amber-600">Sem praça atribuída</span>
-                          )}
-                          {dev.last_seen_at && (
-                            <span className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {formatDistanceToNow(new Date(dev.last_seen_at), { locale: ptBR, addSuffix: true })}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Actions */}
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(dev)} title="Editar">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleViewCodes(dev)}
-                        title="Ver códigos"
-                        disabled={isLoadingCodes}
                       >
-                        <KeyRound className="h-4 w-4" />
-                      </Button>
-                      {!isCurrentDevice && (
+                        <div className={cn(
+                          "h-10 w-10 rounded-full flex items-center justify-center shrink-0",
+                          online ? "bg-green-500/10" : "bg-muted"
+                        )}>
+                          {online ? (
+                            <Wifi className="h-5 w-5 text-green-600" />
+                          ) : (
+                            <WifiOff className="h-5 w-5 text-muted-foreground" />
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium truncate">{dev.name}</span>
+                            {isCurrentDevice && (
+                              <Badge variant="outline" className="text-[10px] px-1.5">
+                                Este dispositivo
+                              </Badge>
+                            )}
+                            <Badge variant={online ? 'default' : 'secondary'} className="text-[10px] px-1.5">
+                              {online ? 'Online' : 'Offline'}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
+                            {station ? (
+                              <span className="flex items-center gap-1">
+                                <Circle className="h-2.5 w-2.5" style={{ color: station.color, fill: station.color }} />
+                                {station.name}
+                              </span>
+                            ) : (
+                              <span className="text-amber-600">Sem praça atribuída</span>
+                            )}
+                            {dev.last_seen_at && (
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {formatDistanceToNow(new Date(dev.last_seen_at), { locale: ptBR, addSuffix: true })}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <Button variant="ghost" size="icon" onClick={() => openEdit(dev)} title="Editar">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => setDeleteConfirmId(dev.id)}
-                          title="Excluir"
+                          onClick={() => handleToggleInlineCodes(dev)}
+                          title="Ver códigos"
+                          disabled={isLoadingCodes}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <KeyRound className={cn("h-4 w-4", visibleCodesDeviceId === dev.id && "text-primary")} />
                         </Button>
+                        {!isCurrentDevice && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => setDeleteConfirmId(dev.id)}
+                            title="Excluir"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                      {/* Inline codes */}
+                      {visibleCodesDeviceId === dev.id && inlineCodes[dev.id] && (
+                        <div className="flex items-center gap-4 px-3 py-2 ml-13 text-sm border border-t-0 rounded-b-lg bg-muted/20">
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">Verificador:</span>
+                            <span className="font-mono font-bold tracking-wider">{inlineCodes[dev.id].verification_code}</span>
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(inlineCodes[dev.id].verification_code, 'Código verificador')}>
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">Autenticação:</span>
+                            <span className="font-mono font-bold tracking-wider">{inlineCodes[dev.id].auth_code}</span>
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(inlineCodes[dev.id].auth_code, 'Código de autenticação')}>
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs gap-1 ml-auto"
+                            onClick={() => {
+                              regenerateCodesMutation.mutate(dev.id);
+                              // Clear cached codes so they get refetched
+                              setInlineCodes(prev => { const copy = { ...prev }; delete copy[dev.id]; return copy; });
+                              setVisibleCodesDeviceId(null);
+                            }}
+                            disabled={regenerateCodesMutation.isPending}
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                            Regenerar
+                          </Button>
+                        </div>
                       )}
                     </div>
                   );
