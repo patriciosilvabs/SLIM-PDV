@@ -459,6 +459,13 @@ export function useKdsWorkflow() {
     mutationFn: async (itemId: string) => {
       const now = new Date().toISOString();
 
+      // Buscar dados do item para obter station_id
+      const { data: itemData } = await supabase
+        .from('order_items')
+        .select('current_station_id')
+        .eq('id', itemId)
+        .single();
+
       const { error } = await supabase
         .from('order_items')
         .update({
@@ -467,6 +474,16 @@ export function useKdsWorkflow() {
         .eq('id', itemId);
 
       if (error) throw error;
+
+      // Registrar log de servido no histórico
+      if (itemData?.current_station_id) {
+        logAction.mutateAsync({
+          orderItemId: itemId,
+          stationId: itemData.current_station_id,
+          action: 'completed',
+          notes: 'Item servido',
+        }).catch(() => {});
+      }
 
       return { itemId, servedAt: now };
     },
@@ -497,6 +514,9 @@ export function useKdsWorkflow() {
       console.error(error);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['kds-station-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['kds-all-stations-metrics'] });
       toast.success('Item servido!');
     },
   });
@@ -552,6 +572,8 @@ export function useKdsWorkflow() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['kds-station-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['kds-all-stations-metrics'] });
       toast.success('Pedido entregue!');
     },
     onError: (error) => {
