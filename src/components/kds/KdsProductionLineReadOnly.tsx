@@ -456,16 +456,26 @@ export function KdsProductionLineReadOnly({
   }, [filteredOrders, activeStations]);
 
   // Ready orders in status station
+  // IMPORTANTE: Só mostra o pedido quando TODOS os itens chegaram ao despacho (reagrupamento)
   const readyOrdersInStatus = useMemo(() => {
     if (!orderStatusStation) return [];
     
     return filteredOrders
-      .filter(order => order.status === 'ready')
+      .filter(order => {
+        if (order.status !== 'ready') return false;
+        const items = order.order_items || [];
+        const activeItems = items.filter(i => i.status !== 'cancelled');
+        if (activeItems.length === 0) return false;
+        
+        // Só mostra quando TODOS os itens ativos estão na estação order_status ou done
+        const allItemsReady = activeItems.every(
+          item => item.current_station_id === orderStatusStation.id || item.station_status === 'done'
+        );
+        return allItemsReady;
+      })
       .map(order => {
-        const itemsInStation = order.order_items?.filter(
-          item => item.current_station_id === orderStatusStation.id
-        ) || [];
-        return { order, items: itemsInStation };
+        const activeItems = (order.order_items || []).filter(i => i.status !== 'cancelled');
+        return { order, items: activeItems };
       })
       .filter(entry => entry.items.length > 0);
   }, [filteredOrders, orderStatusStation]);
