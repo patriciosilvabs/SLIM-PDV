@@ -77,6 +77,7 @@ export function useComplementGroupsMutations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['complement-groups'] });
+      queryClient.invalidateQueries({ queryKey: ['product-complements'] });
       toast({ title: 'Grupo de complemento criado' });
     },
     onError: (error) => {
@@ -103,6 +104,7 @@ export function useComplementGroupsMutations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['complement-groups'] });
+      queryClient.invalidateQueries({ queryKey: ['product-complements'] });
       toast({ title: 'Grupo atualizado' });
     },
     onError: (error) => {
@@ -121,6 +123,7 @@ export function useComplementGroupsMutations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['complement-groups'] });
+      queryClient.invalidateQueries({ queryKey: ['product-complements'] });
       toast({ title: 'Grupo excluído com sucesso!' });
     },
     onError: (error) => {
