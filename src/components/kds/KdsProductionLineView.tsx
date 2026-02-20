@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { useKdsStations } from '@/hooks/useKdsStations';
+import { useKdsStations, type KdsStation } from '@/hooks/useKdsStations';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { useKdsWorkflow } from '@/hooks/useKdsWorkflow';
 import { KdsStationCard } from './KdsStationCard';
@@ -44,17 +44,39 @@ interface KdsProductionLineViewProps {
   orders: UseOrdersOrder[];
   isLoading: boolean;
   overrideTenantId?: string | null;
+  overrideStations?: any[];
+  overrideWorkflow?: {
+    moveItemToNextStation: { mutate: (params: { itemId: string; currentStationId: string }) => void; isPending: boolean };
+    skipItemToNextStation: { mutate: (params: { itemId: string; currentStationId: string }) => void };
+    finalizeOrderFromStatus: { mutate: (orderId: string) => void; isPending: boolean };
+    serveItem: { mutate: (itemId: string) => void; isPending: boolean };
+  };
 }
 
-export function KdsProductionLineView({ orders, isLoading, overrideTenantId }: KdsProductionLineViewProps) {
-  const { activeStations, productionStations, orderStatusStation, isLoading: stationsLoading } = useKdsStations();
+export function KdsProductionLineView({ orders, isLoading, overrideTenantId, overrideStations, overrideWorkflow }: KdsProductionLineViewProps) {
+  const { activeStations: hookActiveStations, productionStations: hookProductionStations, orderStatusStation: hookOrderStatusStation, isLoading: stationsLoading } = useKdsStations();
   const { settings } = useKdsSettings(overrideTenantId);
-  const { 
-    moveItemToNextStation,
-    skipItemToNextStation,
-    finalizeOrderFromStatus,
-    serveItem
-  } = useKdsWorkflow();
+  const hookWorkflow = useKdsWorkflow();
+
+  // Use override stations if provided (device-only mode), otherwise use hook data
+  const hasOverrideStations = overrideStations && overrideStations.length > 0;
+  const activeStations = hasOverrideStations
+    ? overrideStations.filter((s: any) => s.is_active)
+    : hookActiveStations;
+  const productionStations = hasOverrideStations
+    ? overrideStations.filter((s: any) => s.is_active && s.station_type !== 'order_status')
+    : hookProductionStations;
+  const orderStatusStation = hasOverrideStations
+    ? overrideStations.find((s: any) => s.is_active && s.station_type === 'order_status') || null
+    : hookOrderStatusStation;
+
+  // Use override workflow if provided (device-only mode)
+  const workflow = overrideWorkflow || {
+    moveItemToNextStation: hookWorkflow.moveItemToNextStation,
+    skipItemToNextStation: hookWorkflow.skipItemToNextStation,
+    finalizeOrderFromStatus: hookWorkflow.finalizeOrderFromStatus,
+    serveItem: hookWorkflow.serveItem,
+  };
 
   // Cast orders to local type for internal use
   const typedOrders = orders as unknown as Order[];
@@ -130,19 +152,19 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId }: K
     : null;
 
   const handleMoveToNext = (itemId: string, stationId: string) => {
-    moveItemToNextStation.mutate({ itemId, currentStationId: stationId });
+    workflow.moveItemToNextStation.mutate({ itemId, currentStationId: stationId });
   };
 
   const handleSkipItem = (itemId: string, stationId: string) => {
-    skipItemToNextStation.mutate({ itemId, currentStationId: stationId });
+    workflow.skipItemToNextStation.mutate({ itemId, currentStationId: stationId });
   };
 
   const handleFinalizeOrder = (orderId: string) => {
-    finalizeOrderFromStatus.mutate(orderId);
+    workflow.finalizeOrderFromStatus.mutate(orderId);
   };
 
   const handleServeItem = (itemId: string) => {
-    serveItem.mutate(itemId);
+    workflow.serveItem.mutate(itemId);
   };
 
   // Pedidos prontos na estação de status (ou com todos itens em order_status)
@@ -175,7 +197,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId }: K
       .filter(entry => entry.items.length > 0);
   }, [filteredOrders, orderStatusStation]);
 
-  if (stationsLoading || isLoading) {
+  if ((hasOverrideStations ? false : stationsLoading) || isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" />
@@ -247,7 +269,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId }: K
                   isLastStation={isLastStation}
                   onMoveToNext={(itemId) => handleMoveToNext(itemId, currentStation.id)}
                   onSkipItem={(itemId) => handleSkipItem(itemId, currentStation.id)}
-                  isProcessing={moveItemToNextStation.isPending}
+                  isProcessing={workflow.moveItemToNextStation.isPending}
                 />
               ))}
             </div>
@@ -347,7 +369,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId }: K
                         isLastStation={isLastStation}
                         onMoveToNext={(itemId) => handleMoveToNext(itemId, station.id)}
                         onSkipItem={(itemId) => handleSkipItem(itemId, station.id)}
-                        isProcessing={moveItemToNextStation.isPending}
+                        isProcessing={workflow.moveItemToNextStation.isPending}
                       />
                     ))}
                   </div>
@@ -391,7 +413,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId }: K
                       stationColor={orderStatusStation.color}
                       onFinalize={handleFinalizeOrder}
                       onServeItem={handleServeItem}
-                      isProcessing={finalizeOrderFromStatus.isPending || serveItem.isPending}
+                      isProcessing={workflow.finalizeOrderFromStatus.isPending || workflow.serveItem.isPending}
                     />
                   ))}
                 </div>

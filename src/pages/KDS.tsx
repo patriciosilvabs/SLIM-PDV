@@ -1728,7 +1728,54 @@ export default function KDS() {
           <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : kdsSettings.operationMode === 'production_line' ? (
-        <KdsProductionLineView orders={orders} isLoading={isLoading} overrideTenantId={deviceAuth?.tenantId} />
+        <KdsProductionLineView 
+          orders={orders} 
+          isLoading={isLoading} 
+          overrideTenantId={deviceAuth?.tenantId}
+          overrideStations={isDeviceOnlyMode ? deviceData.stations : undefined}
+          overrideWorkflow={isDeviceOnlyMode ? {
+            moveItemToNextStation: {
+              mutate: ({ itemId, currentStationId }: { itemId: string; currentStationId: string }) => {
+                // Find next station in device stations
+                const prodStations = deviceData.stations.filter((s: any) => s.is_active && s.station_type !== 'order_status');
+                const orderStatusSt = deviceData.stations.find((s: any) => s.is_active && s.station_type === 'order_status');
+                const currentIdx = prodStations.findIndex((s: any) => s.id === currentStationId);
+                const nextStation = currentIdx >= 0 && currentIdx < prodStations.length - 1 ? prodStations[currentIdx + 1] : null;
+                const targetId = nextStation?.id || orderStatusSt?.id || null;
+                
+                deviceData.updateItemStation.mutate({
+                  itemId,
+                  stationId: targetId,
+                  stationStatus: targetId ? 'waiting' : 'done',
+                });
+              },
+              isPending: deviceData.updateItemStation.isPending,
+            },
+            skipItemToNextStation: {
+              mutate: ({ itemId, currentStationId }: { itemId: string; currentStationId: string }) => {
+                const prodStations = deviceData.stations.filter((s: any) => s.is_active && s.station_type !== 'order_status');
+                const currentIdx = prodStations.findIndex((s: any) => s.id === currentStationId);
+                const nextStation = currentIdx >= 0 && currentIdx < prodStations.length - 1 ? prodStations[currentIdx + 1] : null;
+                if (nextStation) {
+                  deviceData.updateItemStation.mutate({ itemId, stationId: nextStation.id, stationStatus: 'waiting' });
+                }
+              },
+            },
+            finalizeOrderFromStatus: {
+              mutate: (orderId: string) => {
+                deviceData.updateOrderStatus.mutate({ orderId, status: 'delivered' });
+              },
+              isPending: deviceData.updateOrderStatus.isPending,
+            },
+            serveItem: {
+              mutate: (_itemId: string) => {
+                // Serve is not critical for device mode, just refetch
+                deviceData.refetch();
+              },
+              isPending: false,
+            },
+          } : undefined}
+        />
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {kdsSettings.showPendingColumn && (
