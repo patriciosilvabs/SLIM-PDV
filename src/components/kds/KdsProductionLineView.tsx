@@ -202,8 +202,14 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
 
   // Pedidos no despacho - aparece quando QUALQUER item chega na estação order_status
   // Mostra TODOS os itens do pedido (os que ainda estão em produção ficam opacos no card)
+  // Pedidos no despacho - usa a estação atribuída (currentStation) se for order_status,
+  // senão usa a primeira orderStatusStation (visão geral)
   const readyOrdersInStatus = useMemo(() => {
-    if (!orderStatusStation) return [];
+    const targetStationId = (currentStation?.station_type === 'order_status')
+      ? currentStation.id
+      : orderStatusStation?.id;
+    
+    if (!targetStationId) return [];
     
     return filteredOrders
       .filter(order => {
@@ -211,19 +217,18 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
         const activeItems = items.filter(i => i.status !== 'cancelled');
         if (activeItems.length === 0) return false;
         
-        // Mostra se o pedido já está ready OU se pelo menos 1 item chegou ao order_status
-        if (order.status === 'ready') return true;
+        // Mostra se o pedido já está ready OU se pelo menos 1 item chegou a ESTA estação order_status
+        if (order.status === 'ready' && activeItems.some(item => item.current_station_id === targetStationId)) return true;
         return activeItems.some(
-          item => item.current_station_id === orderStatusStation.id || item.station_status === 'done'
+          item => item.current_station_id === targetStationId
         );
       })
       .map(order => {
-        // Passa TODOS os itens ativos para o card (o card decide quais ficam opacos)
         const activeItems = (order.order_items || []).filter(i => i.status !== 'cancelled');
         return { order, items: activeItems };
       })
       .filter(entry => entry.items.length > 0);
-  }, [filteredOrders, orderStatusStation]);
+  }, [filteredOrders, orderStatusStation, currentStation]);
 
   if ((hasOverrideStations ? false : stationsLoading) || isLoading) {
     return (
