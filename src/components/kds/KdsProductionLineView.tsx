@@ -191,31 +191,27 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
   };
 
   // Pedidos prontos na estação de status (ou com todos itens em order_status)
+  // IMPORTANTE: Só mostra o pedido quando TODOS os itens chegaram ao despacho (reagrupamento)
   const readyOrdersInStatus = useMemo(() => {
     if (!orderStatusStation) return [];
     
     return filteredOrders
       .filter(order => {
-        // Pedido já está ready
-        if (order.status === 'ready') return true;
+        const items = order.order_items || [];
+        // Ignorar itens cancelados
+        const activeItems = items.filter(i => i.status !== 'cancelled');
+        if (activeItems.length === 0) return false;
         
-        // OU todos os itens estão na estação order_status (pedido deveria ser ready)
-        const allItemsInOrderStatus = order.order_items?.every(
+        // Só mostra no despacho quando TODOS os itens ativos chegaram à estação order_status ou estão done
+        const allItemsReady = activeItems.every(
           item => item.current_station_id === orderStatusStation.id || item.station_status === 'done'
         );
-        return allItemsInOrderStatus && (order.order_items?.length ?? 0) > 0;
+        return allItemsReady;
       })
       .map(order => {
-        const itemsInStation = order.order_items?.filter(
-          item => item.current_station_id === orderStatusStation.id
-        ) || [];
-        
-        // Se não houver itens na estação (já foram done), mostrar todos os itens
-        if (itemsInStation.length === 0) {
-          return { order, items: order.order_items || [] };
-        }
-        
-        return { order, items: itemsInStation };
+        // Reagrupar: passa TODOS os itens ativos do pedido para o card
+        const activeItems = (order.order_items || []).filter(i => i.status !== 'cancelled');
+        return { order, items: activeItems };
       })
       .filter(entry => entry.items.length > 0);
   }, [filteredOrders, orderStatusStation]);
