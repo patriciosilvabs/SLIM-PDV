@@ -137,8 +137,16 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
 
   // Groups that apply per unit (for each pizza)
   const perUnitGroups = useMemo(() => {
-    return localGroups.filter(g => g.applies_per_unit === true);
-  }, [localGroups]);
+    return localGroups.filter(g => {
+      if (!g.applies_per_unit) return false;
+      // Filter by applicable_flavor_counts if configured
+      const group = groups.find(og => og.id === g.id);
+      if (group?.applicable_flavor_counts && group.applicable_flavor_counts.length > 0 && unitCount > 0) {
+        return group.applicable_flavor_counts.includes(unitCount);
+      }
+      return true;
+    });
+  }, [localGroups, groups, unitCount]);
 
   // Groups that apply to the whole item (shared)
   const sharedGroups = useMemo(() => {
