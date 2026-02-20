@@ -4,6 +4,25 @@ import { useToast } from '@/hooks/use-toast';
 import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTenant } from './useTenant';
 
+// Global set of item IDs recently moved via optimistic update — skip Realtime for these
+const recentlyMovedItems = new Map<string, number>();
+
+export function markItemAsRecentlyMoved(itemId: string) {
+  recentlyMovedItems.set(itemId, Date.now());
+  // Auto-cleanup after 5s
+  setTimeout(() => recentlyMovedItems.delete(itemId), 5000);
+}
+
+function isRecentlyMoved(itemId: string): boolean {
+  const ts = recentlyMovedItems.get(itemId);
+  if (!ts) return false;
+  if (Date.now() - ts > 5000) {
+    recentlyMovedItems.delete(itemId);
+    return false;
+  }
+  return true;
+}
+
 export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
 export type OrderType = 'dine_in' | 'takeaway' | 'delivery';
 
@@ -247,6 +266,12 @@ export function useOrders(status?: OrderStatus[]) {
           status?: string;
           served_at?: string | null;
         };
+        
+        // Skip Realtime updates for items recently moved via optimistic update
+        // to prevent the "disappear and reappear" loop
+        if (isRecentlyMoved(updatedItem.id)) {
+          return;
+        }
         
         // Se mudou de estação, buscar dados completos da nova estação
         let currentStation: OrderItemStation | null = null;

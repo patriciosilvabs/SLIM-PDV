@@ -4,6 +4,7 @@ import { useKdsStations } from './useKdsStations';
 import { useKdsStationLogs } from './useKdsStationLogs';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { markItemAsRecentlyMoved } from './useOrders';
 
 interface OrderItem {
   id: string;
@@ -171,6 +172,9 @@ export function useKdsWorkflow() {
     
     // OPTIMISTIC UPDATE
     onMutate: async ({ itemId, currentStationId }) => {
+      // Mark item as recently moved to prevent Realtime from reverting the optimistic update
+      markItemAsRecentlyMoved(itemId);
+      
       await queryClient.cancelQueries({ queryKey: ['orders'] });
       const previousOrders = queryClient.getQueryData(['orders']);
       
@@ -207,8 +211,10 @@ export function useKdsWorkflow() {
     },
     
     onSuccess: (result) => {
-      // Refetch to get correct routing result
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      // Delay refetch to avoid conflicting with the Realtime cooldown
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['orders'] });
+      }, 2000);
       if (result.isComplete) {
         toast.success('Item concluído!');
       }
