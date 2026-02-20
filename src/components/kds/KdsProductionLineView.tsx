@@ -1,13 +1,15 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useKdsStations, type KdsStation } from '@/hooks/useKdsStations';
 import { useKdsSettings } from '@/hooks/useKdsSettings';
 import { useKdsWorkflow } from '@/hooks/useKdsWorkflow';
 import { KdsStationCard } from './KdsStationCard';
 import { KdsOrderStatusCard } from './KdsOrderStatusCard';
+import { KdsStationHistory } from './KdsStationHistory';
 import { cn } from '@/lib/utils';
-import { Factory, Circle, CheckCircle, Clock, Hourglass } from 'lucide-react';
+import { Factory, Circle, CheckCircle, Clock, Hourglass, History } from 'lucide-react';
 import type { Order as UseOrdersOrder } from '@/hooks/useOrders';
 
 // Extend the order item type with optional station fields
@@ -254,6 +256,8 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
     const isFirstStation = stationIndex <= 0;
     const isLastStation = stationIndex === activeStations.length - 1 || stationIndex === -1;
 
+    const isOrderStatusStation = currentStation.station_type === 'order_status';
+
     return (
       <div className="h-full flex flex-col">
         {/* Header da praça */}
@@ -278,34 +282,84 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
           </Badge>
         </div>
 
-        {/* Itens nesta praça */}
-        <ScrollArea className="flex-1">
-          {effectiveStationOrders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
-              <Circle className="h-8 w-8 mb-2" style={{ color: currentStation.color }} />
-              <p>Nenhum item nesta praça</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {effectiveStationOrders.map(({ order, items }) => (
-                <KdsStationCard
-                  key={`${order.id}-${currentStation.id}`}
-                  order={order}
-                  items={items}
-                  stationColor={currentStation.color}
-                  stationName={currentStation.name}
-                  stationType={currentStation.station_type}
-                  isFirstStation={isFirstStation}
-                  isLastStation={isLastStation}
-                  onMoveToNext={(itemId, orderType) => handleMoveToNext(itemId, currentStation.id, orderType)}
-                  onSkipItem={(itemId) => handleSkipItem(itemId, currentStation.id)}
-                  isProcessing={workflow.moveItemToNextStation.isPending}
-                  overrideSettings={overrideSettings}
-                />
-              ))}
-            </div>
-          )}
-        </ScrollArea>
+        {isOrderStatusStation ? (
+          <Tabs defaultValue="ativos" className="flex-1 flex flex-col">
+            <TabsList className="w-fit mb-3">
+              <TabsTrigger value="ativos" className="gap-1.5">
+                <Circle className="h-3.5 w-3.5" />
+                Ativos
+              </TabsTrigger>
+              <TabsTrigger value="historico" className="gap-1.5">
+                <History className="h-3.5 w-3.5" />
+                Histórico
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="ativos" className="flex-1 mt-0">
+              <ScrollArea className="flex-1">
+                {effectiveStationOrders.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
+                    <Circle className="h-8 w-8 mb-2" style={{ color: currentStation.color }} />
+                    <p>Nenhum item nesta praça</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {effectiveStationOrders.map(({ order, items }) => (
+                      <KdsStationCard
+                        key={`${order.id}-${currentStation.id}`}
+                        order={order}
+                        items={items}
+                        stationColor={currentStation.color}
+                        stationName={currentStation.name}
+                        stationType={currentStation.station_type}
+                        isFirstStation={isFirstStation}
+                        isLastStation={isLastStation}
+                        onMoveToNext={(itemId, orderType) => handleMoveToNext(itemId, currentStation.id, orderType)}
+                        onSkipItem={(itemId) => handleSkipItem(itemId, currentStation.id)}
+                        isProcessing={workflow.moveItemToNextStation.isPending}
+                        overrideSettings={overrideSettings}
+                      />
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </TabsContent>
+            <TabsContent value="historico" className="flex-1 mt-0">
+              <KdsStationHistory
+                stationId={currentStation.id}
+                stationColor={currentStation.color}
+                tenantId={overrideTenantId}
+              />
+            </TabsContent>
+          </Tabs>
+        ) : (
+          <ScrollArea className="flex-1">
+            {effectiveStationOrders.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
+                <Circle className="h-8 w-8 mb-2" style={{ color: currentStation.color }} />
+                <p>Nenhum item nesta praça</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {effectiveStationOrders.map(({ order, items }) => (
+                  <KdsStationCard
+                    key={`${order.id}-${currentStation.id}`}
+                    order={order}
+                    items={items}
+                    stationColor={currentStation.color}
+                    stationName={currentStation.name}
+                    stationType={currentStation.station_type}
+                    isFirstStation={isFirstStation}
+                    isLastStation={isLastStation}
+                    onMoveToNext={(itemId, orderType) => handleMoveToNext(itemId, currentStation.id, orderType)}
+                    onSkipItem={(itemId) => handleSkipItem(itemId, currentStation.id)}
+                    isProcessing={workflow.moveItemToNextStation.isPending}
+                    overrideSettings={overrideSettings}
+                  />
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        )}
       </div>
     );
   }
