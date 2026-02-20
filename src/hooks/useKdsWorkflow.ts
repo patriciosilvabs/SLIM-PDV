@@ -560,36 +560,85 @@ export function useKdsWorkflow() {
     },
   });
 
-  // Iniciar novo pedido no modo linha de produção
+  // Iniciar novo pedido no modo linha de produção (com distribuição inteligente)
   const initializeOrderForProductionLine = useMutation({
     mutationFn: async (orderId: string) => {
-      const firstStation = activeStations[0];
-      if (!firstStation) throw new Error('Nenhuma praça ativa configurada');
+      if (activeStations.length === 0) throw new Error('Nenhuma praça ativa configurada');
 
-      // Buscar itens do pedido
+      // Buscar itens do pedido sem estação atribuída, incluindo extras para verificar borda
       const { data: items, error: fetchError } = await supabase
         .from('order_items')
-        .select('id')
+        .select('id, notes, extras:order_item_extras(extra_name, kds_category), sub_items:order_item_sub_items(sub_extras:order_item_sub_item_extras(option_name, kds_category))')
         .eq('order_id', orderId)
         .is('current_station_id', null);
 
       if (fetchError) throw fetchError;
 
-      // Mover todos os itens para a primeira praça
+      // Load border keywords from settings
+      const { data: kdsSettings } = await supabase
+        .from('kds_global_settings')
+        .select('border_keywords')
+        .limit(1)
+        .maybeSingle();
+
+      const borderKws = kdsSettings?.border_keywords || ['borda', 'recheada', 'chocolate', 'catupiry', 'cheddar'];
+
+      const firstStation = activeStations[0]; // prep_start / borda station
+      const assemblyStations = activeStations.filter(s => s.station_type === 'item_assembly');
+
+      // Track load counts for balancing
+      const loadCounts: Record<string, number> = {};
+      for (const s of assemblyStations) {
+        const { count } = await supabase
+          .from('order_items')
+          .select('id', { count: 'exact', head: true })
+          .eq('current_station_id', s.id)
+          .in('station_status', ['waiting', 'in_progress']);
+        loadCounts[s.id] = count || 0;
+      }
+
       for (const item of items || []) {
+        // Check if item has border
+        const extrasText = ((item as any).extras || []).map((e: any) => e.extra_name?.toLowerCase() || '').join(' ');
+        const borderExtrasText = ((item as any).sub_items || [])
+          .flatMap((si: any) => (si.sub_extras || []).filter((se: any) => se.kds_category === 'border'))
+          .map((se: any) => se.option_name?.toLowerCase() || '').join(' ');
+        const combinedText = `${(item as any).notes || ''} ${extrasText} ${borderExtrasText}`.toLowerCase();
+
+        const hasBorder = borderKws.some((kw: string) => combinedText.includes(kw.toLowerCase()));
+
+        let targetStationId: string;
+
+        if (hasBorder || assemblyStations.length === 0) {
+          // Item com borda → primeira estação (prep_start)
+          targetStationId = firstStation.id;
+        } else {
+          // Item sem borda → bancada item_assembly menos ocupada
+          let leastBusyId = assemblyStations[0].id;
+          let minCount = loadCounts[leastBusyId] ?? Infinity;
+          for (const s of assemblyStations) {
+            if ((loadCounts[s.id] ?? 0) < minCount) {
+              minCount = loadCounts[s.id] ?? 0;
+              leastBusyId = s.id;
+            }
+          }
+          targetStationId = leastBusyId;
+          loadCounts[leastBusyId] = (loadCounts[leastBusyId] || 0) + 1;
+        }
+
         await supabase
           .from('order_items')
           .update({
-            current_station_id: firstStation.id,
+            current_station_id: targetStationId,
             station_status: 'waiting',
           })
           .eq('id', item.id);
 
         await logAction.mutateAsync({
           orderItemId: item.id,
-          stationId: firstStation.id,
+          stationId: targetStationId,
           action: 'entered',
-        });
+        }).catch(() => {});
       }
 
       // Atualizar status do pedido para preparing
