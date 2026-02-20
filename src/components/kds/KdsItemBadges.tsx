@@ -100,24 +100,22 @@ export function KdsItemBadges({ notes, extras, compact = false }: KdsItemBadgesP
     : "px-2 py-1 text-xs";
 
   return (
-    <div className={cn("flex flex-wrap gap-1", compact ? "mt-0.5" : "mt-1")}>
+    <div className={cn("flex flex-col gap-1", compact ? "mt-0.5" : "mt-1")}>
       {showBorder && borderInfo && (
         <span className={cn(
-          "inline-flex rounded font-bold relative overflow-hidden animate-pulse",
-          sizeClasses
+          "inline-flex items-center rounded font-bold animate-pulse bg-orange-600 text-white",
+          compact ? "px-2 py-0.5 text-[10px]" : "px-3 py-1 text-sm"
         )}>
-          <span className={cn("absolute inset-0", borderColors.bg)}></span>
-          <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo.text}</span>
+          🟡 {borderInfo.text}
         </span>
       )}
       
       {notes && (
         <span className={cn(
-          "inline-flex rounded font-bold relative overflow-hidden animate-pulse",
-          sizeClasses
+          "inline-flex items-center rounded font-bold animate-pulse bg-red-600 text-white",
+          compact ? "px-2 py-0.5 text-[10px]" : "px-3 py-1 text-sm"
         )}>
-          <span className={cn("absolute inset-0", notesColors.bg)}></span>
-          <span className={cn("relative z-10", notesColors.text)}>📝 {notes}</span>
+          ⚠️ OBS: {notes}
         </span>
       )}
     </div>
@@ -143,11 +141,10 @@ export function KdsBorderOnlyBadge({ extras, compact = false }: { extras?: Order
 
   return (
     <span className={cn(
-      "inline-flex rounded font-bold relative overflow-hidden animate-pulse",
-      sizeClasses
+      "inline-flex items-center rounded font-bold animate-pulse bg-orange-600 text-white",
+      compact ? "px-2 py-0.5 text-[10px]" : "px-3 py-1 text-sm"
     )}>
-      <span className={cn("absolute inset-0", borderColors.bg)}></span>
-      <span className={cn("relative z-10", borderColors.text)}>🟡 {borderInfo.text}</span>
+      🟡 {borderInfo.text}
     </span>
   );
 }
@@ -170,11 +167,10 @@ export function KdsNotesOnlyBadge({ notes, compact = false }: { notes?: string |
 
   return (
     <span className={cn(
-      "inline-flex rounded font-bold relative overflow-hidden animate-pulse",
-      sizeClasses
+      "inline-flex items-center rounded font-bold animate-pulse bg-red-600 text-white",
+      compact ? "px-2 py-0.5 text-[10px]" : "px-3 py-1 text-sm"
     )}>
-      <span className={cn("absolute inset-0", notesColors.bg)}></span>
-      <span className={cn("relative z-10", notesColors.text)}>📝 {notes}</span>
+      ⚠️ OBS: {notes}
     </span>
   );
 }

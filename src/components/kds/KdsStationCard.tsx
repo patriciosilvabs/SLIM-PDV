@@ -117,11 +117,9 @@ const STATION_ICONS = {
 
 // Extrair sabores: primeiro tenta extras do item, depois sub_extras dos sub_items
 const getFlavors = (item: OrderItem): string[] => {
-  // Tentar sabores dos extras do item principal
   const mainFlavors = getFlavorsFromExtras(item.extras);
   if (mainFlavors.length > 0) return mainFlavors;
   
-  // Fallback: extrair sabores dos sub_items (pizzas com múltiplos sabores)
   if (item.sub_items && item.sub_items.length > 0) {
     const subFlavors = item.sub_items
       .flatMap(si => si.sub_extras || [])
@@ -134,6 +132,24 @@ const getFlavors = (item: OrderItem): string[] => {
   }
   
   return [];
+};
+
+// Extrair complementos (extras que não são sabor nem borda)
+const getComplements = (item: OrderItem): string[] => {
+  const complements: string[] = [];
+  item.extras?.filter(e => 
+    e.kds_category !== 'flavor' && e.kds_category !== 'border'
+  ).forEach(e => {
+    const parts = e.extra_name.split(':');
+    complements.push(parts.length > 1 ? parts[1].trim() : e.extra_name);
+  });
+  item.sub_items?.flatMap(si => si.sub_extras || [])
+    .filter(se => se.kds_category !== 'flavor' && se.kds_category !== 'border')
+    .forEach(se => {
+      const parts = se.option_name.split(':');
+      complements.push(parts.length > 1 ? parts[1].trim() : se.option_name);
+    });
+  return complements;
 };
 
 export function KdsStationCard({
@@ -215,81 +231,39 @@ export function KdsStationCard({
   };
 
   // Renderização contextual de item baseada no tipo da estação
-  const renderItemContent = (item: OrderItem, isInProgress: boolean = false) => {
+  const renderItemContent = (item: OrderItem) => {
     const flavors = getFlavors(item);
+    const complements = getComplements(item);
+    const itemNotes = getItemNotes(item);
     
-    // prep_start: Mostra nome, borda + observações
-    if (stationType === 'prep_start') {
-      return (
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className="font-bold text-primary">{item.quantity}x</span>
-            <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
-            {item.variation?.name && (
-              <span className="text-xs text-muted-foreground">({item.variation.name})</span>
-            )}
-          </div>
-          <KdsItemBadges notes={getItemNotes(item)} extras={item.extras} />
-        </div>
-      );
-    }
-    
-    // item_assembly: Mostra sabores + borda + observações
-    if (stationType === 'item_assembly') {
-      return (
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className="font-bold text-primary">{item.quantity}x</span>
-            <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
-            {item.variation?.name && (
-              <span className="text-xs text-muted-foreground">({item.variation.name})</span>
-            )}
-          </div>
-          <KdsItemBadges notes={getItemNotes(item)} extras={item.extras} />
-          {flavors.length > 0 && (
-            <p className="text-sm text-blue-600 mt-0.5">
-              🍕 {flavors.join(' + ')}
-            </p>
-          )}
-        </div>
-      );
-    }
-    
-    // oven_expedite: Mostra sabores + borda + observações
-    if (stationType === 'oven_expedite') {
-      return (
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className="font-bold text-primary">{item.quantity}x</span>
-            <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
-            {item.variation?.name && (
-              <span className="text-xs text-muted-foreground">({item.variation.name})</span>
-            )}
-          </div>
-          <KdsItemBadges notes={getItemNotes(item)} extras={item.extras} />
-          {flavors.length > 0 && (
-            <p className="text-sm text-blue-600 mt-0.5">
-              🍕 {flavors.join(' + ')}
-            </p>
-          )}
-        </div>
-      );
-    }
-    
-    // Outros tipos de estação: Mostra tudo
     return (
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 space-y-1">
+        {/* Quantidade + Produto (texto menor) */}
         <div className="flex items-center gap-1.5">
           <span className="font-bold text-primary">{item.quantity}x</span>
-          <span className="font-medium truncate">{item.product?.name || 'Produto'}</span>
+          <span className="font-medium text-sm truncate">{item.product?.name || 'Produto'}</span>
           {item.variation?.name && (
             <span className="text-xs text-muted-foreground">({item.variation.name})</span>
           )}
         </div>
-        <KdsItemBadges notes={getItemNotes(item)} extras={item.extras} />
+        
+        {/* SABORES em texto GRANDE e BOLD */}
         {flavors.length > 0 && (
-          <p className="text-sm text-blue-600 mt-0.5">
-            🍕 {flavors.join(' + ')}
+          <p className={cn(
+            "font-bold text-foreground",
+            compact ? "text-lg" : "text-2xl"
+          )}>
+            {flavors.join(' + ')}
+          </p>
+        )}
+        
+        {/* Borda + Observações (badges piscantes) */}
+        <KdsItemBadges notes={itemNotes} extras={item.extras} compact={compact} />
+        
+        {/* Complementos em texto normal */}
+        {complements.length > 0 && (
+          <p className="text-sm text-muted-foreground">
+            {complements.join(', ')}
           </p>
         )}
       </div>
