@@ -15,6 +15,7 @@ import { PrinterStatusIndicator } from '@/components/PrinterStatusIndicator';
 import { TenantSwitcher } from '@/components/TenantSwitcher';
 import { Loader2, LayoutDashboard, UtensilsCrossed, ShoppingBag, Package, CreditCard, BarChart3, Settings, LogOut, Menu, X, Store, Users, Kanban, ChefHat, History, Target, UserCircle, Pizza, RotateCcw, Shield, Ban, Crown, Factory } from 'lucide-react';
 import logoSlim from '@/assets/logo-slim.png';
+import { APP_VERSION } from '@/lib/appVersion';
 
 interface NavItem {
   name: string;
@@ -233,6 +234,7 @@ export default function PDVLayout({ children }: { children: React.ReactNode }) {
               <LogOut className="h-4 w-4 mr-2" />
               Sair
             </Button>
+            <p className="text-[10px] text-sidebar-foreground/40 text-center mt-2">v{APP_VERSION}</p>
           </div>
         </div>
       </aside>

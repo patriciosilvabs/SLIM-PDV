@@ -16,6 +16,7 @@ import { AccessDenied } from '@/components/auth/AccessDenied';
 import { supabase } from '@/integrations/supabase/client';
 import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp, Ban, History, Trash2, CalendarDays, LogOut, Layers, Circle, Check } from 'lucide-react';
 import logoSlim from '@/assets/logo-slim.png';
+import { APP_VERSION } from '@/lib/appVersion';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
@@ -1426,7 +1427,7 @@ export default function KDS() {
         <div className="flex items-center gap-3">
           <ChefHat className={cn("text-primary", isFullscreen ? "h-10 w-10" : "h-7 w-7")} />
           <div>
-            <h1 className={cn("font-bold", isFullscreen ? "text-3xl" : "text-2xl")}>KDS - Cozinha</h1>
+            <h1 className={cn("font-bold", isFullscreen ? "text-3xl" : "text-2xl")}>KDS - Cozinha <span className="text-xs font-normal text-muted-foreground">v{APP_VERSION}</span></h1>
             <p className="text-muted-foreground text-sm">
               {activeOrders.length} pedido{activeOrders.length !== 1 ? 's' : ''} ativo{activeOrders.length !== 1 ? 's' : ''}
               {orderTypeFilter !== 'all' && ` (filtrado)`}
@@ -1842,6 +1843,7 @@ export default function KDS() {
             alt="Logo" 
             className="h-8 object-contain" 
           />
+          <span className="text-[10px] text-muted-foreground">v{APP_VERSION}</span>
           
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
