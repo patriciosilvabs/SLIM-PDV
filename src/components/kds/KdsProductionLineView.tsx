@@ -7,7 +7,7 @@ import { useKdsWorkflow } from '@/hooks/useKdsWorkflow';
 import { KdsStationCard } from './KdsStationCard';
 import { KdsOrderStatusCard } from './KdsOrderStatusCard';
 import { cn } from '@/lib/utils';
-import { Factory, Circle, CheckCircle } from 'lucide-react';
+import { Factory, Circle, CheckCircle, Clock, Hourglass } from 'lucide-react';
 import type { Order as UseOrdersOrder } from '@/hooks/useOrders';
 
 // Extend the order item type with optional station fields
@@ -83,6 +83,19 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
       );
     });
   }, [typedOrders, settings.assignedStationId]);
+
+  // Pedidos no buffer (aguardando - sem current_station_id ou com status pendente sem praça)
+  const bufferOrders = useMemo(() => {
+    const nonDraftOrders = typedOrders.filter(o => (o as any).is_draft !== true);
+    return nonDraftOrders.filter(order => {
+      if (order.status === 'pending') {
+        // Pedido pending que não tem nenhum item com station
+        const hasStationItems = order.order_items?.some(item => item.current_station_id !== null);
+        return !hasStationItems && (order.order_items?.length ?? 0) > 0;
+      }
+      return false;
+    });
+  }, [typedOrders]);
 
   // Agrupar itens por praça
   const itemsByStation = useMemo(() => {
@@ -246,6 +259,43 @@ export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineVi
   // Visão geral de todas as praças (quando não tem praça atribuída)
   return (
     <div className="space-y-6">
+      {/* Buffer de Espera */}
+      {bufferOrders.length > 0 && (
+        <div className="p-4 rounded-lg border-2 border-dashed border-amber-500/50 bg-amber-500/5">
+          <div className="flex items-center gap-2 mb-3">
+            <Hourglass className="h-5 w-5 text-amber-600 animate-pulse" />
+            <span className="font-semibold text-amber-700 dark:text-amber-400">
+              Buffer de Espera
+            </span>
+            <Badge variant="secondary" className="ml-auto">
+              {bufferOrders.length} pedido{bufferOrders.length !== 1 ? 's' : ''}
+            </Badge>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {bufferOrders.map((order) => (
+              <div key={order.id} className="p-3 bg-background rounded-lg border shadow-sm">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-mono text-xs text-muted-foreground">
+                    #{order.id.slice(-4).toUpperCase()}
+                  </span>
+                  <Badge variant="outline" className="text-[10px]">
+                    {order.order_type === 'delivery' ? 'DELIVERY' : 
+                     order.order_type === 'takeaway' ? 'BALCÃO' : 
+                     `MESA ${order.table?.number || '?'}`}
+                  </Badge>
+                </div>
+                {order.customer_name && (
+                  <p className="text-sm font-medium truncate">{order.customer_name}</p>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  {order.order_items?.length || 0} itens aguardando
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Colunas por praça de produção */}
       <div className={cn(
         "grid gap-6",
