@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTenant } from './useTenant';
 
 export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
@@ -88,17 +88,20 @@ export interface Order {
 
 export function useOrders(status?: OrderStatus[]) {
   const queryClient = useQueryClient();
+  // Stabilize status array reference to prevent infinite re-render loops
+  const statusKey = status?.join(',');
+  const stableStatus = useMemo(() => status, [statusKey]);
 
   const query = useQuery({
-    queryKey: ['orders', status],
+    queryKey: ['orders', stableStatus],
     queryFn: async () => {
       let q = supabase
         .from('orders')
         .select('*, table:tables(number), order_items(*, added_by, product:products(name, image_url), variation:product_variations(name), extras:order_item_extras(extra_name, price), current_station:kds_stations(id, name, station_type, color, icon, sort_order), sub_items:order_item_sub_items(id, sub_item_index, notes, sub_extras:order_item_sub_item_extras(id, group_name, option_name, price, quantity)))')
         .order('created_at', { ascending: false });
       
-      if (status && status.length > 0) {
-        q = q.in('status', status);
+      if (stableStatus && stableStatus.length > 0) {
+        q = q.in('status', stableStatus);
       }
       
       const { data: ordersData, error } = await q;
@@ -220,7 +223,7 @@ export function useOrders(status?: OrderStatus[]) {
               : order
           );
         });
-        queryClient.setQueryData(['orders', status], (old: Order[] | undefined) => {
+        queryClient.setQueryData(['orders', stableStatus], (old: Order[] | undefined) => {
           if (!old) return old;
           return old.map(order => 
             order.id === payload.new.id 
@@ -277,7 +280,7 @@ export function useOrders(status?: OrderStatus[]) {
         };
         
         queryClient.setQueryData(['orders'], updateFn);
-        queryClient.setQueryData(['orders', status], updateFn);
+        queryClient.setQueryData(['orders', stableStatus], updateFn);
       })
       .subscribe();
 
@@ -287,7 +290,7 @@ export function useOrders(status?: OrderStatus[]) {
       }
       supabase.removeChannel(channel);
     };
-  }, [queryClient, debouncedInvalidate, status]);
+  }, [queryClient, debouncedInvalidate, stableStatus]);
 
   return query;
 }
