@@ -1739,7 +1739,7 @@ export default function KDS() {
           overrideTenantId={deviceAuth?.tenantId}
           overrideStations={isDeviceOnlyMode ? deviceData.stations : undefined}
           overrideSettings={isDeviceOnlyMode ? {
-            assignedStationId: kdsSettings.assignedStationId,
+            assignedStationId: deviceAuth?.stationId || kdsSettings.assignedStationId,
             highlightSpecialBorders: kdsSettings.highlightSpecialBorders,
             borderKeywords: kdsSettings.borderKeywords,
             showPartySize: kdsSettings.showPartySize,

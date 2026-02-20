@@ -165,8 +165,11 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
   }, [filteredOrders, activeStations]);
 
   // Praça atual baseada na configuração do dispositivo
+  // Busca primeiro em activeStations, depois em overrideStations como fallback
   const currentStation = settings.assignedStationId 
-    ? activeStations.find(s => s.id === settings.assignedStationId)
+    ? (activeStations.find(s => s.id === settings.assignedStationId) 
+       || overrideStations?.find((s: any) => s.id === settings.assignedStationId)
+       || null)
     : null;
 
   const handleMoveToNext = (itemId: string, stationId: string) => {
@@ -238,9 +241,18 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
   // Se tiver praça atribuída, mostra apenas ela
   if (currentStation) {
     const stationOrders = itemsByStation.get(currentStation.id) || [];
+    // Recalculate from filtered orders if not in map (station from overrideStations)
+    const effectiveStationOrders = stationOrders.length > 0 ? stationOrders : (() => {
+      const result: { order: Order; items: OrderItem[] }[] = [];
+      filteredOrders.forEach(order => {
+        const items = order.order_items?.filter(item => item.current_station_id === currentStation.id) || [];
+        if (items.length > 0) result.push({ order, items });
+      });
+      return result;
+    })();
     const stationIndex = activeStations.findIndex(s => s.id === currentStation.id);
-    const isFirstStation = stationIndex === 0;
-    const isLastStation = stationIndex === activeStations.length - 1;
+    const isFirstStation = stationIndex <= 0;
+    const isLastStation = stationIndex === activeStations.length - 1 || stationIndex === -1;
 
     return (
       <div className="h-full flex flex-col">
@@ -262,20 +274,20 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
             <p className="text-sm text-muted-foreground">{currentStation.description}</p>
           </div>
           <Badge variant="outline" className="ml-auto">
-            {stationOrders.reduce((acc, o) => acc + o.items.length, 0)} itens
+            {effectiveStationOrders.reduce((acc, o) => acc + o.items.length, 0)} itens
           </Badge>
         </div>
 
         {/* Itens nesta praça */}
         <ScrollArea className="flex-1">
-          {stationOrders.length === 0 ? (
+          {effectiveStationOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
               <Circle className="h-8 w-8 mb-2" style={{ color: currentStation.color }} />
               <p>Nenhum item nesta praça</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {stationOrders.map(({ order, items }) => (
+              {effectiveStationOrders.map(({ order, items }) => (
                 <KdsStationCard
                   key={`${order.id}-${currentStation.id}`}
                   order={order}
