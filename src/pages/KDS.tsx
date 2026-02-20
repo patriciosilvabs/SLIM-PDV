@@ -1498,7 +1498,7 @@ export default function KDS() {
             title="Sair do KDS e trocar dispositivo"
           >
             <LogOut className="h-4 w-4" />
-            <span className="hidden sm:inline">Sair KDS</span>
+            <span className="hidden sm:inline">{deviceAuth?.deviceName ? `${deviceAuth.deviceName} — Sair` : 'Sair KDS'}</span>
           </Button>
         </div>
       </div>
@@ -1724,7 +1724,7 @@ export default function KDS() {
               </span>
             </div>
             <span className="text-sm text-muted-foreground hidden sm:block">
-              {user?.user_metadata?.name || user?.email?.split('@')[0] || 'Usuário'}
+              {deviceAuth?.deviceName || user?.user_metadata?.name || user?.email?.split('@')[0] || 'Dispositivo'}
             </span>
             <Button 
               variant="ghost" 
