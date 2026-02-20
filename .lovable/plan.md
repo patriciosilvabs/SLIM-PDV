@@ -1,74 +1,103 @@
 
 
-# Classificacao Inteligente de Complementos no KDS via Codigo de Grupo
+# Plano: Aplicar Visual do KDS do "Janela de Pedidos" na Nossa Aplicacao
 
-## Problema Atual
+## Resumo
 
-O KDS identifica o que e sabor, borda ou complemento usando **busca por palavras** no texto do `extra_name` (ex: procura "borda", "massa", "sabor"). Isso e fragil: se o nome mudar (ex: "Recheio de Borda" para "Stuffed Crust"), o sistema para de funcionar.
+O sistema de referencia (janeladepedidos) tem uma hierarquia visual clara e eficiente nos cards do KDS que facilita a leitura rapida pela cozinha. Vamos adaptar esse estilo visual ao nosso sistema, mantendo nossa arquitetura de estacoes/pracas.
 
-## Solucao Proposta
+## Diferencas Principais Identificadas
 
-Adicionar um campo **`kds_category`** na tabela `complement_groups` com valores pre-definidos:
+| Aspecto | Referencia (janeladepedidos) | Nosso Sistema Atual |
+|---------|------------------------------|---------------------|
+| Sabores | **Texto grande e bold (text-2xl)** | Texto pequeno azul com emoji |
+| Borda | **Tarja LARANJA piscante** (bg-orange-600, texto branco) | Badge configuravel (pequeno) |
+| Observacoes | **Tarja VERMELHA piscante** com icone de alerta | Badge configuravel (pequeno) |
+| Complementos | Lista simples em texto | Misturado nos badges |
+| Nome produto | Texto pequeno (xs) acima dos sabores | Texto medio como foco principal |
 
-- `flavor` -- Sabores (ex: Calabresa, Margherita)
-- `border` -- Bordas (ex: Borda de Chocolate)
-- `complement` -- Complementos gerais (ex: Bacon extra)
+## O Que Vai Mudar
 
-O KDS usara esse campo para classificar corretamente cada item, em vez de adivinhar pelo nome.
+### 1. Hierarquia Visual nos Cards (KdsStationCard.tsx)
 
-## Como vai funcionar para voce
+Reordenar e redimensionar os elementos de cada item seguindo o padrao da referencia:
 
-1. Na tela de edicao de cada **grupo de complementos**, aparecera um novo campo "Categoria KDS" com as opcoes acima
-2. O KDS automaticamente mostrara:
-   - Sabores em azul com icone de sabor
-   - Bordas com destaque piscante (como ja funciona hoje, mas sem depender do nome)
-   - Complementos normais como extras simples
-3. Observacoes do item continuam aparecendo como ja aparecem (campo `notes`)
+```text
++-----------------------------------------+
+| 2x Pizza Grande                         |  <- Quantidade + Produto (texto menor)
+|                                         |
+| Calabresa + Mussarela                   |  <- SABORES em texto GRANDE e BOLD
+|                                         |
+| [  BORDA DE CHOCOLATE  ]  (piscante)    |  <- Tarja LARANJA piscante
+|                                         |
+| Massa fina, Azeitona extra              |  <- Complementos em texto normal
+|                                         |
+| [ OBS: SEM CEBOLA ]  (piscante)        |  <- Tarja VERMELHA piscante
+|                                         |
+|  [ PROXIMO >>> ]                        |  <- Botao de acao
++-----------------------------------------+
+```
+
+### 2. Componente KdsItemBadges.tsx
+
+Atualizar os badges para usar o estilo visual da referencia:
+- **Borda**: fundo laranja solido (bg-orange-600), texto branco, bold, animate-pulse
+- **Observacoes**: fundo vermelho solido (bg-red-600), texto branco, bold, animate-pulse, com icone de alerta
+
+### 3. Sabores com Destaque
+
+Mudar a exibicao de sabores de `text-sm text-blue-600` para `text-2xl font-bold text-foreground` - tornando os sabores o elemento de maior destaque visual no card (como na referencia).
+
+### 4. Complementos Separados
+
+Extrair e exibir complementos (extras com `kds_category === 'complement'` ou sem categoria) como texto simples abaixo dos sabores, separados das badges de borda/observacoes.
 
 ## Detalhes Tecnicos
 
-### 1. Migracao de banco de dados
-Adicionar coluna `kds_category` na tabela `complement_groups`:
-- Tipo: `text`
-- Default: `'complement'`
-- Valores permitidos: `flavor`, `border`, `complement`
+### Arquivos a Modificar
 
-### 2. Propagacao da categoria no pedido
-Quando um pedido e salvo, a tabela `order_item_extras` atualmente recebe apenas `extra_name` e `price`. A alteracao sera:
-- Adicionar coluna `kds_category` em `order_item_extras` (texto, default `'complement'`)
-- Adicionar coluna `kds_category` em `order_item_sub_item_extras` (texto, default `'complement'`)
-- No momento da criacao do pedido (Counter.tsx, Tables.tsx), incluir a `kds_category` do grupo junto com os extras
+1. **`src/components/kds/KdsStationCard.tsx`**
+   - Refatorar `renderItemContent()` para seguir a nova hierarquia visual
+   - Sabores: `text-2xl font-bold` (era `text-sm text-blue-600`)
+   - Adicionar secao de complementos (extras que nao sao sabor nem borda)
+   - Manter logica existente de extracoes (getFlavors, getItemNotes)
 
-### 3. Atualizacao do KDS
-Substituir toda a logica de string matching nos componentes KDS:
-- `KdsItemBadges.tsx` -- usar `kds_category` em vez de buscar "borda"/"massa" no nome
-- `KdsStationCard.tsx` -- usar `kds_category` para classificar sabores
-- `KdsReadOnlyOrderCard.tsx` -- idem
-- `KdsKanbanReadOnly.tsx` -- idem
-- `KdsProductionLineReadOnly.tsx` -- idem
+2. **`src/components/kds/KdsItemBadges.tsx`**
+   - Borda: `bg-orange-600 text-white font-bold animate-pulse` (estilo solido)
+   - Observacoes: `bg-red-600 text-white font-bold animate-pulse` com `⚠️ OBS:` prefixo
+   - Remover fundo semi-transparente, usar cores solidas como na referencia
 
-### 4. Interface de configuracao
-No dialogo de edicao do grupo de complementos (`ComplementGroupDialog.tsx`), adicionar um Select com as opcoes:
-- Sabor (flavor)
-- Borda (border)
-- Complemento (complement)
+3. **`src/components/kds/KdsReadOnlyOrderCard.tsx`** (se existir renderizacao similar)
+   - Aplicar mesma hierarquia visual para consistencia
 
-### 5. Impressao de cozinha
-Atualizar `KitchenReceipt.tsx` e `escpos.ts` para usar a categoria ao formatar o ticket, mostrando sabores e bordas de forma diferenciada.
+### Logica de Extracao de Complementos (nova)
 
-### Arquivos que serao modificados
-- `complement_groups` (migracao SQL)
-- `order_item_extras` (migracao SQL)
-- `order_item_sub_item_extras` (migracao SQL)
-- `src/components/menu/ComplementGroupDialog.tsx`
-- `src/hooks/useProductComplements.ts`
-- `src/hooks/useOrders.ts`
-- `src/pages/Counter.tsx`
-- `src/pages/Tables.tsx`
-- `src/components/kds/KdsItemBadges.tsx`
-- `src/components/kds/KdsStationCard.tsx`
-- `src/components/kds/KdsReadOnlyOrderCard.tsx`
-- `src/components/kds/KdsKanbanReadOnly.tsx`
-- `src/components/kds/KdsProductionLineReadOnly.tsx`
-- `src/components/kitchen/KitchenReceipt.tsx`
+```typescript
+const getComplements = (item: OrderItem): string[] => {
+  const complements: string[] = [];
+  // Extras que nao sao sabor nem borda
+  item.extras?.filter(e => 
+    e.kds_category !== 'flavor' && e.kds_category !== 'border'
+  ).forEach(e => {
+    const parts = e.extra_name.split(':');
+    complements.push(parts.length > 1 ? parts[1].trim() : e.extra_name);
+  });
+  // Sub_items complementos
+  item.sub_items?.flatMap(si => si.sub_extras || [])
+    .filter(se => se.kds_category !== 'flavor' && se.kds_category !== 'border')
+    .forEach(se => {
+      const parts = se.option_name.split(':');
+      complements.push(parts.length > 1 ? parts[1].trim() : se.option_name);
+    });
+  return complements;
+};
+```
+
+## O Que NAO Muda
+
+- Arquitetura de estacoes/pracas (stations) - permanece igual
+- Fluxo de movimentacao de itens (useKdsWorkflow) - permanece igual
+- Logica de extracao de sabores e bordas (getFlavors, getBorderInfo) - permanece igual
+- Modo kanban vs linha de producao - permanece igual
+- Configuracoes de KDS (cores, sons, etc) - permanecem iguais
 
