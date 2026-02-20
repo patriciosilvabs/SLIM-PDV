@@ -19,7 +19,7 @@ import logoSlim from '@/assets/logo-slim.png';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAudioNotification } from '@/hooks/useAudioNotification';
-import { useKdsSettings } from '@/hooks/useKdsSettings';
+import { useKdsSettings, type KdsGlobalSettings, type KdsOperationMode, type OrderManagementViewMode, type KanbanColumn, type BottleneckSettings } from '@/hooks/useKdsSettings';
 import { useKdsStations } from '@/hooks/useKdsStations';
 import { useScheduledAnnouncements } from '@/hooks/useScheduledAnnouncements';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
@@ -32,6 +32,7 @@ import { KdsMetricsDashboard } from '@/components/kds/KdsMetricsDashboard';
 import { KdsBottleneckIndicator } from '@/components/kds/KdsBottleneckIndicator';
 import { useBottleneckAlerts } from '@/hooks/useBottleneckAlerts';
 import { useItemDelayAlert } from '@/hooks/useItemDelayAlert';
+import { useKdsDeviceData } from '@/hooks/useKdsDeviceData';
 
 type OrderTypeFilter = 'all' | 'table' | 'takeaway' | 'delivery';
 
@@ -86,13 +87,28 @@ const formatTimeDisplay = (minutes: number): string => {
 export default function KDS() {
   // Device authentication state
   const [deviceAuth, setDeviceAuth] = useState(() => getStoredDeviceAuth());
+  const { user } = useAuth();
+  
+  // Determine if we're in device-only mode (no user session)
+  const isDeviceOnlyMode = !!deviceAuth?.tenantId && !!deviceAuth?.deviceId && !user;
   
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const { isAdmin } = useUserRole();
-  const isManager = isAdmin; // Admin/proprietário vê interface completa
-  const { data: orders = [], isLoading, refetch } = useOrders(['pending', 'preparing', 'ready', 'delivered', 'cancelled']);
+  const isManager = isDeviceOnlyMode ? false : isAdmin; // Device-only mode = not a manager
+  
+  // Regular data hooks (will return empty when no user session due to RLS)
+  const { data: userOrders = [], isLoading: userOrdersLoading, refetch: userRefetch } = useOrders(['pending', 'preparing', 'ready', 'delivered', 'cancelled']);
   const { updateOrder, updateOrderItem } = useOrderMutations();
+  
+  // Device-only data hook (fetches via edge function, bypassing RLS)
+  const deviceData = useKdsDeviceData(isDeviceOnlyMode ? deviceAuth : null);
+  
+  // Use device data when in device-only mode, otherwise use regular hooks
+  const orders = isDeviceOnlyMode ? deviceData.orders : userOrders;
+  const isLoading = isDeviceOnlyMode ? deviceData.isLoading : userOrdersLoading;
+  const refetch = isDeviceOnlyMode ? deviceData.refetch : userRefetch;
+  
   const queryClient = useQueryClient();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -108,8 +124,50 @@ export default function KDS() {
     }
   });
   const { playKdsNewOrderSound, playMaxWaitAlertSound, playOrderCancelledSound, playStationChangeSound, settings } = useAudioNotification();
-  const { settings: kdsSettings, hasSpecialBorder, updateSettings: updateKdsSettings, updateDeviceSettings } = useKdsSettings(deviceAuth?.tenantId);
-  const { activeStations, productionStations } = useKdsStations();
+  const { settings: kdsSettingsFromHook, hasSpecialBorder, updateSettings: updateKdsSettings, updateDeviceSettings } = useKdsSettings(deviceAuth?.tenantId);
+  const { activeStations: userActiveStations, productionStations: userProductionStations } = useKdsStations();
+  
+  // Override settings and stations from device data when in device-only mode
+  const kdsSettings = useMemo(() => {
+    if (!isDeviceOnlyMode || !deviceData.settings) return kdsSettingsFromHook;
+    
+    const dbSettings = deviceData.settings;
+    return {
+      ...kdsSettingsFromHook,
+      operationMode: (dbSettings.operation_mode || 'traditional') as KdsOperationMode,
+      orderManagementViewMode: (dbSettings.order_management_view_mode || 'follow_kds') as OrderManagementViewMode,
+      kanbanVisibleColumns: (dbSettings.kanban_visible_columns || ['pending', 'preparing', 'ready', 'delivered_today']) as KanbanColumn[],
+      slaGreenMinutes: dbSettings.sla_green_minutes ?? 8,
+      slaYellowMinutes: dbSettings.sla_yellow_minutes ?? 12,
+      showPendingColumn: dbSettings.show_pending_column ?? true,
+      cancellationAlertInterval: dbSettings.cancellation_alert_interval ?? 3,
+      cancellationAlertsEnabled: dbSettings.cancellation_alerts_enabled ?? true,
+      autoPrintCancellations: dbSettings.auto_print_cancellations ?? true,
+      highlightSpecialBorders: dbSettings.highlight_special_borders ?? true,
+      borderKeywords: dbSettings.border_keywords || [],
+      showPartySize: dbSettings.show_party_size ?? true,
+      compactMode: dbSettings.compact_mode ?? false,
+      timerGreenMinutes: dbSettings.timer_green_minutes ?? 5,
+      timerYellowMinutes: dbSettings.timer_yellow_minutes ?? 10,
+      delayAlertEnabled: dbSettings.delay_alert_enabled ?? true,
+      delayAlertMinutes: dbSettings.delay_alert_minutes ?? 10,
+      notesBlinkAllStations: dbSettings.notes_blink_all_stations ?? false,
+      showWaiterName: dbSettings.show_waiter_name ?? true,
+      borderBadgeColor: dbSettings.border_badge_color || 'amber',
+      notesBadgeColor: dbSettings.notes_badge_color || 'orange',
+      columnNamePending: dbSettings.column_name_pending || 'PENDENTE',
+      columnNamePreparing: dbSettings.column_name_preparing || 'EM PREPARO',
+      columnNameReady: dbSettings.column_name_ready || 'PRONTO',
+      columnNameDelivered: dbSettings.column_name_delivered || 'ENTREGUES HOJE',
+    };
+  }, [isDeviceOnlyMode, deviceData.settings, kdsSettingsFromHook]);
+  
+  const activeStations = isDeviceOnlyMode && deviceData.stations.length > 0
+    ? deviceData.stations.filter((s: any) => s.is_active)
+    : userActiveStations;
+  const productionStations = isDeviceOnlyMode && deviceData.stations.length > 0
+    ? deviceData.stations.filter((s: any) => s.is_active && s.station_type !== 'order_status')
+    : userProductionStations;
   
   // Bottleneck alerts for production line mode
   const isProductionLineMode = kdsSettings.operationMode === 'production_line';

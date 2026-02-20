@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.kds-device-auth]
 verify_jwt = false
+
+[functions.kds-data]
+verify_jwt = false
