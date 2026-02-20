@@ -859,6 +859,7 @@ export type Database = {
       }
       kds_devices: {
         Row: {
+          auth_code: string | null
           created_at: string | null
           device_id: string
           id: string
@@ -870,8 +871,10 @@ export type Database = {
           station_id: string | null
           tenant_id: string | null
           username: string | null
+          verification_code: string | null
         }
         Insert: {
+          auth_code?: string | null
           created_at?: string | null
           device_id: string
           id?: string
@@ -883,8 +886,10 @@ export type Database = {
           station_id?: string | null
           tenant_id?: string | null
           username?: string | null
+          verification_code?: string | null
         }
         Update: {
+          auth_code?: string | null
           created_at?: string | null
           device_id?: string
           id?: string
@@ -896,6 +901,7 @@ export type Database = {
           station_id?: string | null
           tenant_id?: string | null
           username?: string | null
+          verification_code?: string | null
         }
         Relationships: [
           {
