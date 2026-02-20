@@ -1,86 +1,55 @@
 
 
-# Correcao: Dispositivos KDS mostrando Kanban em vez de Linha de Producao e sem filtrar por praca
+# Roteamento Inteligente KDS - Implementado
 
-## Problema
-
-Existem dois problemas conectados:
-
-1. **Layout errado**: Dispositivos mostram Kanban (PENDENTE, EM PREPARO, PRONTO) em vez da "Linha de Producao" configurada
-2. **Sem filtragem por praca**: Cada dispositivo deveria mostrar apenas os itens da sua praca atribuida (ex: BORDAS ve apenas itens de borda, BANCADA A ve apenas seus itens)
-
-## Causa raiz
-
-No modo device-only (login por codigo), o `useKdsSettings` tenta buscar configuracoes via query direta ao banco, mas o RLS bloqueia (sem sessao de usuario). Mesmo com o override no KDS.tsx, ha dois pontos de falha:
-
-1. **Dentro do `KdsProductionLineView`**: O componente chama `useKdsSettings(overrideTenantId)` internamente. Mesmo com `overrideTenantId`, a query ao `kds_global_settings` falha por RLS (sem `auth.uid()`), fazendo o `operationMode` voltar para `'traditional'`
-2. **Settings do dispositivo**: O `assignedStationId` vem do localStorage e funciona, mas como o componente nunca e renderizado (pois o KDS page ve `'traditional'` antes do deviceData carregar), a filtragem nunca acontece
-
-## Solucao
-
-### 1. Garantir que `kdsSettings.operationMode` use dados do Edge Function imediatamente
-
-No `KDS.tsx`, o memo `kdsSettings` (linhas 131-163) ja faz o override correto, mas existe uma condicao de corrida: quando `deviceData.settings` ainda e `null` (carregando), volta para defaults. Vamos adicionar um estado de loading para nao renderizar o view errado enquanto os dados carregam.
-
-### 2. Passar settings ja resolvidas para `KdsProductionLineView`
-
-Em vez de deixar o componente chamar `useKdsSettings` internamente (que falha por RLS), passar as settings ja resolvidas como prop. O componente ja recebe `overrideTenantId`, mas isso nao resolve o problema do RLS.
-
-### 3. Adicionar prop `overrideSettings` ao `KdsProductionLineView`
-
-O componente recebera as settings completas (com `assignedStationId` e `operationMode` corretos) vindas do KDS page, eliminando a dependencia do hook que falha por RLS.
-
-## Detalhes tecnicos
-
-### Arquivo: `src/pages/KDS.tsx`
-
-- Adicionar guarda de loading: enquanto `isDeviceOnlyMode && !deviceData.settings`, mostrar spinner em vez de renderizar Kanban
-- Passar `kdsSettings` (ja com override) como prop para `KdsProductionLineView`
-
-### Arquivo: `src/components/kds/KdsProductionLineView.tsx`
-
-- Adicionar prop `overrideSettings` com as settings pre-resolvidas
-- Quando `overrideSettings` estiver presente, usar em vez de chamar `useKdsSettings`
-- Manter `assignedStationId` do localStorage como fallback
-
-### Arquivo: `src/components/kds/KdsStationCard.tsx`
-
-- `KdsStationCard` tambem chama `useKdsSettings()` internamente (linha 202) para `hasSpecialBorder` e `settings.showPartySize`
-- Passar essas configs como props em vez de depender do hook bloqueado por RLS
-
-### Fluxo corrigido
+## Fluxo de Roteamento
 
 ```text
-Dispositivo faz login por codigo
+Pedido confirmado (is_draft → false)
   |
   v
-KDS.tsx detecta isDeviceOnlyMode
+Trigger verifica cada item:
   |
-  v
-useKdsDeviceData busca orders + settings + stations via Edge Function
-  |
-  v
-kdsSettings memo combina deviceData.settings + localStorage
-  |
-  v
-operationMode = 'production_line' (do Edge Function)
-assignedStationId = station_id do dispositivo (do localStorage)
-  |
-  v
-Renderiza KdsProductionLineView com overrideSettings
-  |
-  v
-Componente filtra itens pela praca do dispositivo
-  |
-  v
-BORDAS ve so itens na praca "Preparando Massa e Borda"
-BANCADA A ve so itens na praca "Preparando Recheio"
-DESPACHO ve so pedidos prontos
+  ├── Item COM borda? → Praça "Preparando Massa e Borda"
+  │                        |
+  │                        v (operador aperta "Próximo")
+  │                        → Praça de preparo com MENOR FILA (A ou B)
+  │
+  └── Item SEM borda? → Praça de preparo com MENOR FILA (A ou B) direto
+                           |
+                           v (operador aperta "Próximo")
+                           → Despacho (order_status)
 ```
 
-### Arquivos alterados
+## O que foi feito
 
-1. **src/pages/KDS.tsx** - Guarda de loading + passar settings como prop
-2. **src/components/kds/KdsProductionLineView.tsx** - Aceitar `overrideSettings` prop
-3. **src/components/kds/KdsStationCard.tsx** - Receber configs relevantes como props em vez de chamar useKdsSettings internamente
+### 1. Banco de dados
+- Dividiu "Preparando Recheio" em "Preparando Recheio A" e "Preparando Recheio B"
+- Atualizou BANCADA B para apontar para a nova praça B
+- Trigger `assign_station_on_order_confirm` agora faz roteamento inteligente:
+  - Verifica border_keywords nos extras/notes do item
+  - Itens com borda → praça de borda (prep_start)
+  - Itens sem borda → praça de preparo com menor fila (item_assembly)
+  - Todos os itens do mesmo pedido vão para a MESMA praça de preparo
 
+### 2. Edge Function (kds-data)
+- Novo action `smart_move_item`: roteamento inteligente server-side
+  - prep_start → least-busy item_assembly
+  - item_assembly → order_status (despacho)
+  - Inclui load balancing e logging automático
+
+### 3. Frontend
+- `useKdsWorkflow.ts`: `moveItemToNextStation` agora usa roteamento inteligente
+  - prep_start → busca item_assembly com menor fila
+  - item_assembly → vai direto para despacho
+- `useKdsDeviceData.ts`: novo mutation `smartMoveItem`
+- `KDS.tsx`: device-only mode usa `smart_move_item` via edge function
+- `KdsProductionLineView.tsx`: aceita `overrideSettings` para bypass de RLS
+- `KdsStationCard.tsx`: aceita settings como props
+
+### Praças configuradas
+- **Preparando Massa e Borda** (sort_order: 0, prep_start) → BANCADA DE BORDAS
+- **Preparando Recheio A** (sort_order: 1, item_assembly) → BANCADA A
+- **Preparando Recheio B** (sort_order: 1, item_assembly) → BANCADA B
+- **Despachado - Delivery/Retirada** (sort_order: 5, order_status) → DESPACHO DELIVERY
+- **Despachado - Item Servido** (sort_order: 6, custom) → DESPACHO GARÇOM

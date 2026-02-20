@@ -6,6 +6,56 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Find the least-busy prep station (item_assembly) for smart routing
+async function findLeastBusyPrepStation(supabase: any, tenantId: string, excludeStationId?: string) {
+  // Get all item_assembly stations
+  const { data: prepStations } = await supabase
+    .from("kds_stations")
+    .select("id, name, sort_order")
+    .eq("tenant_id", tenantId)
+    .eq("is_active", true)
+    .eq("station_type", "item_assembly")
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true });
+
+  if (!prepStations || prepStations.length === 0) return null;
+
+  // Count items in each prep station
+  let leastBusyStation = prepStations[0];
+  let minCount = Infinity;
+
+  for (const station of prepStations) {
+    const { count } = await supabase
+      .from("order_items")
+      .select("id", { count: "exact", head: true })
+      .eq("current_station_id", station.id)
+      .in("station_status", ["waiting", "in_progress"]);
+
+    const itemCount = count || 0;
+    if (itemCount < minCount) {
+      minCount = itemCount;
+      leastBusyStation = station;
+    }
+  }
+
+  return leastBusyStation;
+}
+
+// Find the dispatch/order_status station
+async function findDispatchStation(supabase: any, tenantId: string) {
+  const { data } = await supabase
+    .from("kds_stations")
+    .select("id, name, station_type")
+    .eq("tenant_id", tenantId)
+    .eq("is_active", true)
+    .eq("station_type", "order_status")
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  return data;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -29,7 +79,7 @@ serve(async (req) => {
     // Validate device belongs to tenant
     const { data: device, error: deviceError } = await supabase
       .from("kds_devices")
-      .select("id, tenant_id, is_active")
+      .select("id, tenant_id, is_active, station_id")
       .eq("device_id", device_id)
       .eq("tenant_id", tenant_id)
       .maybeSingle();
@@ -77,7 +127,7 @@ serve(async (req) => {
 
       if (error) throw error;
 
-      // Fetch profiles for created_by and added_by
+      // Fetch profiles
       const createdByIds = (orders || []).map((o: any) => o.created_by).filter(Boolean);
       const addedByIds = (orders || []).flatMap((o: any) =>
         (o.order_items || []).map((item: any) => item.added_by).filter(Boolean)
@@ -145,7 +195,6 @@ serve(async (req) => {
     }
 
     if (action === "get_all") {
-      // Fetch orders, settings, and stations in parallel
       const statuses = body.statuses || ["pending", "preparing", "ready", "delivered", "cancelled"];
       
       const [ordersResult, settingsResult, stationsResult] = await Promise.all([
@@ -225,6 +274,159 @@ serve(async (req) => {
           settings: settingsResult.data,
           stations: stationsResult.data || [],
         }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Smart move: routes item to the correct next station with load balancing
+    if (action === "smart_move_item") {
+      const { item_id, current_station_id } = body;
+      
+      if (!item_id || !current_station_id) {
+        return new Response(
+          JSON.stringify({ error: "item_id e current_station_id são obrigatórios" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const now = new Date().toISOString();
+
+      // Get current station info
+      const { data: currentStation } = await supabase
+        .from("kds_stations")
+        .select("id, station_type, sort_order")
+        .eq("id", current_station_id)
+        .single();
+
+      if (!currentStation) {
+        return new Response(
+          JSON.stringify({ error: "Estação atual não encontrada" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      let targetStationId: string | null = null;
+      let targetStationStatus = "waiting";
+
+      // SMART ROUTING LOGIC
+      if (currentStation.station_type === "prep_start") {
+        // From borda/prep_start → route to least-busy item_assembly station
+        const leastBusy = await findLeastBusyPrepStation(supabase, tenant_id);
+        if (leastBusy) {
+          targetStationId = leastBusy.id;
+        } else {
+          // No prep stations, go to dispatch
+          const dispatch = await findDispatchStation(supabase, tenant_id);
+          targetStationId = dispatch?.id || null;
+        }
+      } else if (currentStation.station_type === "item_assembly") {
+        // From prep/item_assembly → go to dispatch/order_status
+        const dispatch = await findDispatchStation(supabase, tenant_id);
+        if (dispatch) {
+          targetStationId = dispatch.id;
+        } else {
+          // No dispatch station, mark as done
+          targetStationId = null;
+          targetStationStatus = "done";
+        }
+      } else {
+        // Default: find next station by sort_order
+        const { data: nextStations } = await supabase
+          .from("kds_stations")
+          .select("id, station_type")
+          .eq("tenant_id", tenant_id)
+          .eq("is_active", true)
+          .neq("station_type", "order_status")
+          .gt("sort_order", currentStation.sort_order)
+          .order("sort_order", { ascending: true })
+          .limit(1);
+
+        if (nextStations && nextStations.length > 0) {
+          targetStationId = nextStations[0].id;
+        } else {
+          const dispatch = await findDispatchStation(supabase, tenant_id);
+          targetStationId = dispatch?.id || null;
+          if (!targetStationId) targetStationStatus = "done";
+        }
+      }
+
+      // Update the item
+      const updates: any = {
+        current_station_id: targetStationId,
+        station_status: targetStationId ? "waiting" : "done",
+        station_started_at: null,
+        station_completed_at: now,
+      };
+
+      if (!targetStationId) {
+        updates.status = "delivered";
+      }
+
+      const { error: updateError } = await supabase
+        .from("order_items")
+        .update(updates)
+        .eq("id", item_id)
+        .eq("tenant_id", tenant_id);
+
+      if (updateError) throw updateError;
+
+      // Log completion at current station
+      await supabase.from("kds_station_logs").insert({
+        order_item_id: item_id,
+        station_id: current_station_id,
+        action: "completed",
+        tenant_id,
+      }).catch(() => {});
+
+      // Log entry at new station
+      if (targetStationId) {
+        await supabase.from("kds_station_logs").insert({
+          order_item_id: item_id,
+          station_id: targetStationId,
+          action: "entered",
+          tenant_id,
+        }).catch(() => {});
+      }
+
+      // Check if all items of the order are done/in order_status → mark order as ready
+      if (!targetStationId || currentStation.station_type === "item_assembly") {
+        const { data: itemData } = await supabase
+          .from("order_items")
+          .select("order_id")
+          .eq("id", item_id)
+          .single();
+
+        if (itemData?.order_id) {
+          const { data: orderStatusStations } = await supabase
+            .from("kds_stations")
+            .select("id")
+            .eq("tenant_id", tenant_id)
+            .eq("is_active", true)
+            .eq("station_type", "order_status");
+
+          const osIds = (orderStatusStations || []).map((s: any) => s.id);
+
+          const { data: allItems } = await supabase
+            .from("order_items")
+            .select("id, current_station_id, station_status")
+            .eq("order_id", itemData.order_id);
+
+          const allReady = allItems?.every((item: any) =>
+            (item.current_station_id && osIds.includes(item.current_station_id)) ||
+            item.station_status === "done"
+          );
+
+          if (allReady) {
+            await supabase
+              .from("orders")
+              .update({ status: "ready", ready_at: now })
+              .eq("id", itemData.order_id);
+          }
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, target_station_id: targetStationId }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

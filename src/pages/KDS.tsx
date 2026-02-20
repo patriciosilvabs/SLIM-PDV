@@ -1751,29 +1751,14 @@ export default function KDS() {
           overrideWorkflow={isDeviceOnlyMode ? {
             moveItemToNextStation: {
               mutate: ({ itemId, currentStationId }: { itemId: string; currentStationId: string }) => {
-                // Find next station in device stations
-                const prodStations = deviceData.stations.filter((s: any) => s.is_active && s.station_type !== 'order_status');
-                const orderStatusSt = deviceData.stations.find((s: any) => s.is_active && s.station_type === 'order_status');
-                const currentIdx = prodStations.findIndex((s: any) => s.id === currentStationId);
-                const nextStation = currentIdx >= 0 && currentIdx < prodStations.length - 1 ? prodStations[currentIdx + 1] : null;
-                const targetId = nextStation?.id || orderStatusSt?.id || null;
-                
-                deviceData.updateItemStation.mutate({
-                  itemId,
-                  stationId: targetId,
-                  stationStatus: targetId ? 'waiting' : 'done',
-                });
+                // Use smart routing via edge function (load balancing)
+                deviceData.smartMoveItem.mutate({ itemId, currentStationId });
               },
-              isPending: deviceData.updateItemStation.isPending,
+              isPending: deviceData.smartMoveItem.isPending,
             },
             skipItemToNextStation: {
               mutate: ({ itemId, currentStationId }: { itemId: string; currentStationId: string }) => {
-                const prodStations = deviceData.stations.filter((s: any) => s.is_active && s.station_type !== 'order_status');
-                const currentIdx = prodStations.findIndex((s: any) => s.id === currentStationId);
-                const nextStation = currentIdx >= 0 && currentIdx < prodStations.length - 1 ? prodStations[currentIdx + 1] : null;
-                if (nextStation) {
-                  deviceData.updateItemStation.mutate({ itemId, stationId: nextStation.id, stationStatus: 'waiting' });
-                }
+                deviceData.smartMoveItem.mutate({ itemId, currentStationId });
               },
             },
             finalizeOrderFromStatus: {
@@ -1784,7 +1769,6 @@ export default function KDS() {
             },
             serveItem: {
               mutate: (_itemId: string) => {
-                // Serve is not critical for device mode, just refetch
                 deviceData.refetch();
               },
               isPending: false,

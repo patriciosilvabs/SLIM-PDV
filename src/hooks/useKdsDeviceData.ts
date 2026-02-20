@@ -82,6 +82,20 @@ export function useKdsDeviceData(deviceAuth: DeviceAuth | null) {
     },
   });
 
+  // Smart move: routes item to next station with load balancing
+  const smartMoveItem = useMutation({
+    mutationFn: async ({ itemId, currentStationId }: { itemId: string; currentStationId: string }) => {
+      if (!deviceAuth) throw new Error('No device auth');
+      return fetchKdsData(deviceAuth, 'smart_move_item', {
+        item_id: itemId,
+        current_station_id: currentStationId,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kds-device-data'] });
+    },
+  });
+
   const logStation = useMutation({
     mutationFn: async (params: { order_item_id: string; station_id: string; action: string; duration_seconds?: number; notes?: string }) => {
       if (!deviceAuth) throw new Error('No device auth');
@@ -97,6 +111,7 @@ export function useKdsDeviceData(deviceAuth: DeviceAuth | null) {
     refetch,
     updateOrderStatus,
     updateItemStation,
+    smartMoveItem,
     logStation,
     isDeviceMode,
   };
