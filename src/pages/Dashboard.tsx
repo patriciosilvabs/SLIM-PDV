@@ -35,7 +35,10 @@ export default function Dashboard() {
     <PDVLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+            <span className="text-xs font-mono bg-muted text-muted-foreground px-2 py-0.5 rounded-full">v1.8.0</span>
+          </div>
           <p className="text-muted-foreground">Visão geral do seu negócio</p>
         </div>
 
