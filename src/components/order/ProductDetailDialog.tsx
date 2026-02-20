@@ -337,15 +337,16 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
     return group.is_required && count < group.min_selections;
   });
 
-  // Validate per-unit groups (now from unified selections)
+  // Validate per-unit groups using group's own rules (same as shared)
   const invalidPerUnitGroups = useMemo(() => {
     if (!hasPerUnitGroups) return [];
     return perUnitGroups.filter(group => {
       if (!group.is_required) return false;
       const count = getSelectionCount(group.id);
-      return count < unitCount; // must select exactly unitCount flavors
+      const minRequired = group.selection_type === 'single' ? 1 : (group.min_selections || 1);
+      return count < minRequired;
     });
-  }, [selections, perUnitGroups, hasPerUnitGroups, unitCount]);
+  }, [selections, perUnitGroups, hasPerUnitGroups]);
 
   const canAdd = invalidSharedGroups.length === 0 && invalidPerUnitGroups.length === 0;
 
@@ -440,7 +441,9 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
             ) : (
               <>
                 {/* Per-unit groups - Unified flavor selection */}
-                {hasPerUnitGroups && perUnitGroups.map(group => (
+                {hasPerUnitGroups && perUnitGroups.map(group => {
+                  const effectiveMax = group.selection_type === 'single' ? 1 : group.max_selections;
+                  return (
                   <div key={group.id} className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
@@ -453,16 +456,18 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          {unitCount === 1 ? 'Escolha 1 sabor' : `Escolha até ${unitCount} sabores`}
+                          {group.selection_type === 'single' 
+                            ? 'Escolha 1 opção' 
+                            : `Escolha até ${effectiveMax} opções`}
                         </p>
                       </div>
                       <span className="text-sm text-muted-foreground">
-                        {getSelectionCount(group.id)}/{unitCount}
+                        {getSelectionCount(group.id)}/{effectiveMax}
                       </span>
                     </div>
 
                     <div className="space-y-2">
-                      {unitCount === 1 ? (
+                      {group.selection_type === 'single' ? (
                         <RadioGroup
                           value={selections[group.id]?.[0]?.option_id || ''}
                           onValueChange={(value) => {
@@ -501,7 +506,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
                             </div>
                           ))}
                         </RadioGroup>
-                      ) : (
+                      ) : group.selection_type === 'multiple' ? (
                         group.options.map(option => (
                           <div
                             key={option.id}
@@ -511,12 +516,12 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
                                 ? 'border-primary bg-primary/5'
                                 : 'hover:bg-muted/50'
                             )}
-                            onClick={() => handlePerUnitSelect(group, option, !isOptionSelected(group.id, option.id))}
+                            onClick={() => handleMultipleSelect(group, option, !isOptionSelected(group.id, option.id))}
                           >
                             <div className="flex items-center gap-3">
                               <Checkbox
                                 checked={isOptionSelected(group.id, option.id)}
-                                onCheckedChange={(checked) => handlePerUnitSelect(group, option, !!checked)}
+                                onCheckedChange={(checked) => handleMultipleSelect(group, option, !!checked)}
                               />
                               {option.image_url && (
                                 <img src={option.image_url} alt={option.name} className="w-10 h-10 rounded object-cover" />
@@ -535,6 +540,58 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
                             )}
                           </div>
                         ))
+                      ) : (
+                        // multiple_repeat
+                        group.options.map(option => {
+                          const qty = getOptionQuantity(group.id, option.id);
+                          return (
+                            <div
+                              key={option.id}
+                              className={cn(
+                                'flex items-center justify-between p-3 rounded-lg border transition-colors',
+                                qty > 0 ? 'border-primary bg-primary/5' : ''
+                              )}
+                            >
+                              <div className="flex items-center gap-3">
+                                {option.image_url && (
+                                  <img src={option.image_url} alt={option.name} className="w-10 h-10 rounded object-cover" />
+                                )}
+                                <div>
+                                  <p className="font-medium text-sm">{option.name}</p>
+                                  {option.description && (
+                                    <p className="text-xs text-muted-foreground">{option.description}</p>
+                                  )}
+                                  {(option.price_override ?? option.price) > 0 && (
+                                    <span className="text-xs text-primary font-medium">
+                                      +{formatCurrency(option.price_override ?? option.price)}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  className="h-8 w-8"
+                                  onClick={() => handleRepeatQuantity(group, option, -1)}
+                                  disabled={qty === 0}
+                                >
+                                  <Minus className="h-4 w-4" />
+                                </Button>
+                                <span className="w-6 text-center font-medium">{qty}</span>
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  className="h-8 w-8"
+                                  onClick={() => handleRepeatQuantity(group, option, 1)}
+                                  disabled={getSelectionCount(group.id) >= effectiveMax}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })
                       )}
                     </div>
 
@@ -550,7 +607,8 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
                       />
                     </div>
                   </div>
-                ))}
+                  );
+                })}
 
                 {/* Shared groups - apply to whole item */}
                 {sharedGroups.map(group => (
