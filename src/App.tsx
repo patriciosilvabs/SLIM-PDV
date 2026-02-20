@@ -83,7 +83,7 @@ const App = () => (
                   <Route path="/counter" element={<RequireTenant><Counter /></RequireTenant>} />
                   <Route path="/customers" element={<RequireTenant><Customers /></RequireTenant>} />
                   <Route path="/order-management" element={<RequireTenant><OrderManagement /></RequireTenant>} />
-                  <Route path="/kds" element={<RequireTenant><KDS /></RequireTenant>} />
+                  <Route path="/kds" element={<KDS />} />
                   <Route path="/closing-history" element={<RequireTenant><ClosingHistory /></RequireTenant>} />
                   <Route path="/cancellation-history" element={<RequireTenant><CancellationHistory /></RequireTenant>} />
                   <Route path="/item-cancellation-history" element={<RequireTenant><ItemCancellationHistory /></RequireTenant>} />
