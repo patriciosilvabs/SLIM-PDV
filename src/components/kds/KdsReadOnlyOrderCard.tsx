@@ -50,8 +50,6 @@ interface KdsReadOnlyOrderCardProps {
 // Extrair sabores dos extras usando kds_category
 const getFlavors = (extras?: Array<{ extra_name: string; kds_category?: string }>): string[] => {
   if (!extras || extras.length === 0) return [];
-  
-  // Primeiro por kds_category
   const flavorExtras = extras.filter(e => e.kds_category === 'flavor');
   if (flavorExtras.length > 0) {
     return flavorExtras.map(e => {
@@ -59,8 +57,6 @@ const getFlavors = (extras?: Array<{ extra_name: string; kds_category?: string }
       return parts.length > 1 ? parts[1].trim() : e.extra_name;
     });
   }
-  
-  // Fallback: por texto
   return extras
     .filter(e => {
       const lower = e.extra_name.toLowerCase();
@@ -70,6 +66,24 @@ const getFlavors = (extras?: Array<{ extra_name: string; kds_category?: string }
       const parts = e.extra_name.split(':');
       return parts.length > 1 ? parts[1].trim() : e.extra_name;
     });
+};
+
+// Extrair bordas dos extras
+const getBorder = (extras?: Array<{ extra_name: string; kds_category?: string }>): string | null => {
+  if (!extras) return null;
+  const borderExtra = extras.find(e => e.kds_category === 'border') 
+    || extras.find(e => { const l = e.extra_name.toLowerCase(); return l.includes('borda') || l.includes('massa'); });
+  if (!borderExtra) return null;
+  const parts = borderExtra.extra_name.split(':');
+  return parts.length > 1 ? parts[1].trim() : borderExtra.extra_name;
+};
+
+// Extrair complementos
+const getComplements = (extras?: Array<{ extra_name: string; kds_category?: string }>): string[] => {
+  if (!extras) return [];
+  return extras
+    .filter(e => e.kds_category !== 'flavor' && e.kds_category !== 'border')
+    .map(e => { const p = e.extra_name.split(':'); return p.length > 1 ? p[1].trim() : e.extra_name; });
 };
 
 export function KdsReadOnlyOrderCard({
@@ -128,32 +142,41 @@ export function KdsReadOnlyOrderCard({
           <div className="space-y-2 max-h-40 overflow-y-auto">
             {order.order_items?.slice(0, 5).map((item, idx) => {
               const flavors = getFlavors(item.extras);
+              const border = getBorder(item.extras);
+              const complements = getComplements(item.extras);
+              const itemNotes = getItemNotes(item);
               
               return (
-                <div key={idx} className="text-sm">
+                <div key={idx} className="text-sm space-y-1">
                   <p className="font-medium text-foreground">
                     {item.quantity}x {item.product?.name || 'Produto'}
                     {item.variation?.name && (
                       <span className="text-muted-foreground"> ({item.variation.name})</span>
                     )}
                   </p>
-                  {/* Sabores */}
+                  {/* Sabores em destaque */}
                   {flavors.length > 0 && (
-                    <p className="text-xs text-blue-600 pl-2">
-                      🍕 {flavors.join(' + ')}
+                    <p className="text-lg font-bold text-foreground">
+                      {flavors.join(' + ')}
                     </p>
                   )}
-                  {/* Outros extras */}
-                  {item.extras && item.extras.length > 0 && flavors.length === 0 && (
+                  {/* Borda */}
+                  {border && (
+                    <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-bold animate-pulse bg-orange-600 text-white">
+                      🟡 {border}
+                    </span>
+                  )}
+                  {/* Complementos */}
+                  {complements.length > 0 && (
                     <p className="text-xs text-muted-foreground pl-2">
-                      {item.extras.map(e => 
-                        e.extra_name.split(': ').slice(1).join(': ')
-                      ).join(', ')}
+                      {complements.join(', ')}
                     </p>
                   )}
                   {/* Observações */}
-                  {getItemNotes(item) && (
-                    <p className="text-xs text-amber-600 pl-2 italic">📝 {getItemNotes(item)}</p>
+                  {itemNotes && (
+                    <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-bold animate-pulse bg-red-600 text-white">
+                      ⚠️ OBS: {itemNotes}
+                    </span>
                   )}
                 </div>
               );
