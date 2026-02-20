@@ -24,7 +24,7 @@ interface OrderItem {
   created_at: string;
   product?: { name: string } | null;
   variation?: { name: string } | null;
-  extras?: Array<{ extra_name: string; price: number }>;
+  extras?: Array<{ extra_name: string; price: number; kds_category?: string }>;
   added_by_profile?: { name: string } | null;
 }
 
@@ -118,8 +118,19 @@ function ReadOnlyItemCard({
     return `MESA ${order.table?.number || '?'}`;
   };
 
-  const getFlavors = (extras?: Array<{ extra_name: string }>): string[] => {
+  const getFlavors = (extras?: Array<{ extra_name: string; kds_category?: string }>): string[] => {
     if (!extras || extras.length === 0) return [];
+    
+    // Primeiro por kds_category
+    const flavorExtras = extras.filter(e => e.kds_category === 'flavor');
+    if (flavorExtras.length > 0) {
+      return flavorExtras.map(e => {
+        const parts = e.extra_name.split(':');
+        return parts.length > 1 ? parts[1].trim() : e.extra_name;
+      });
+    }
+    
+    // Fallback: por texto
     return extras
       .filter(e => {
         const lower = e.extra_name.toLowerCase();
@@ -131,19 +142,24 @@ function ReadOnlyItemCard({
       });
   };
 
-  // Extrair informação da borda dos extras
-  const getBorderInfo = (extras?: Array<{ extra_name: string }>): string | null => {
+  // Extrair informação da borda dos extras usando kds_category
+  const getBorderInfo = (extras?: Array<{ extra_name: string; kds_category?: string }>): string | null => {
     if (!extras || extras.length === 0) return null;
     
-    const borderExtra = extras.find(e => {
+    // Primeiro por kds_category
+    const borderExtra = extras.find(e => e.kds_category === 'border');
+    
+    // Fallback: por texto
+    const fallbackExtra = !borderExtra ? extras.find(e => {
       const lower = e.extra_name.toLowerCase();
       return lower.includes('borda') || lower.includes('massa');
-    });
+    }) : null;
     
-    if (!borderExtra) return null;
+    const selectedExtra = borderExtra || fallbackExtra;
+    if (!selectedExtra) return null;
     
-    const parts = borderExtra.extra_name.split(':');
-    return parts.length > 1 ? parts[1].trim() : borderExtra.extra_name;
+    const parts = selectedExtra.extra_name.split(':');
+    return parts.length > 1 ? parts[1].trim() : selectedExtra.extra_name;
   };
 
   return (
@@ -247,8 +263,15 @@ function ReadyOrderCard({
 
   const canMarkDelivered = order.order_type === 'takeaway' && order.status === 'ready';
 
-  const getFlavors = (extras?: Array<{ extra_name: string }>): string[] => {
+  const getFlavors = (extras?: Array<{ extra_name: string; kds_category?: string }>): string[] => {
     if (!extras || extras.length === 0) return [];
+    const flavorExtras = extras.filter(e => e.kds_category === 'flavor');
+    if (flavorExtras.length > 0) {
+      return flavorExtras.map(e => {
+        const parts = e.extra_name.split(':');
+        return parts.length > 1 ? parts[1].trim() : e.extra_name;
+      });
+    }
     return extras
       .filter(e => {
         const lower = e.extra_name.toLowerCase();
@@ -260,19 +283,17 @@ function ReadyOrderCard({
       });
   };
 
-  // Extrair informação da borda dos extras
-  const getBorderInfo = (extras?: Array<{ extra_name: string }>): string | null => {
+  const getBorderInfo = (extras?: Array<{ extra_name: string; kds_category?: string }>): string | null => {
     if (!extras || extras.length === 0) return null;
-    
-    const borderExtra = extras.find(e => {
+    const borderExtra = extras.find(e => e.kds_category === 'border');
+    const fallbackExtra = !borderExtra ? extras.find(e => {
       const lower = e.extra_name.toLowerCase();
       return lower.includes('borda') || lower.includes('massa');
-    });
-    
-    if (!borderExtra) return null;
-    
-    const parts = borderExtra.extra_name.split(':');
-    return parts.length > 1 ? parts[1].trim() : borderExtra.extra_name;
+    }) : null;
+    const selectedExtra = borderExtra || fallbackExtra;
+    if (!selectedExtra) return null;
+    const parts = selectedExtra.extra_name.split(':');
+    return parts.length > 1 ? parts[1].trim() : selectedExtra.extra_name;
   };
 
   return (

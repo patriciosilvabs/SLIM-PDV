@@ -633,6 +633,7 @@ export default function Counter() {
               extra_name: `${c.group_name}: ${c.option_name}`,
               price: c.price * c.quantity,
               extra_id: null,
+              kds_category: c.kds_category || 'complement',
             }));
             await addOrderItemExtras.mutateAsync(extras);
           }
@@ -651,6 +652,7 @@ export default function Counter() {
                   option_name: c.option_name,
                   price: c.price,
                   quantity: c.quantity,
+                  kds_category: c.kds_category || 'complement',
                 })),
               })),
             });

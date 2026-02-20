@@ -20,7 +20,7 @@ interface OrderItem {
   created_at: string;
   product?: { name: string } | null;
   variation?: { name: string } | null;
-  extras?: Array<{ extra_name: string; price: number }>;
+  extras?: Array<{ extra_name: string; price: number; kds_category?: string }>;
   added_by_profile?: { name: string } | null;
 }
 

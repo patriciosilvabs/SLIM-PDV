@@ -51,7 +51,7 @@ export interface OrderItem {
   cancellation_reason?: string | null;
   product?: { name: string; image_url: string | null };
   variation?: { name: string } | null;
-  extras?: { extra_name: string; price: number }[] | null;
+  extras?: { extra_name: string; price: number; kds_category?: string }[] | null;
   current_station?: OrderItemStation | null;
   added_by_profile?: { name: string } | null;
   sub_items?: OrderItemSubItem[] | null;
@@ -97,7 +97,7 @@ export function useOrders(status?: OrderStatus[]) {
     queryFn: async () => {
       let q = supabase
         .from('orders')
-        .select('*, table:tables(number), order_items(*, added_by, product:products(name, image_url), variation:product_variations(name), extras:order_item_extras(extra_name, price), current_station:kds_stations(id, name, station_type, color, icon, sort_order), sub_items:order_item_sub_items(id, sub_item_index, notes, sub_extras:order_item_sub_item_extras(id, group_name, option_name, price, quantity)))')
+        .select('*, table:tables(number), order_items(*, added_by, product:products(name, image_url), variation:product_variations(name), extras:order_item_extras(extra_name, price, kds_category), current_station:kds_stations(id, name, station_type, color, icon, sort_order), sub_items:order_item_sub_items(id, sub_item_index, notes, sub_extras:order_item_sub_item_extras(id, group_name, option_name, price, quantity, kds_category)))')
         .order('created_at', { ascending: false });
       
       if (stableStatus && stableStatus.length > 0) {
@@ -152,7 +152,7 @@ export function useOrders(status?: OrderStatus[]) {
           cancellation_reason: item.cancellation_reason as string | null,
           product: item.product as { name: string; image_url: string | null } | undefined,
           variation: item.variation as { name: string } | null,
-          extras: item.extras as { extra_name: string; price: number }[] | null,
+          extras: item.extras as { extra_name: string; price: number; kds_category?: string }[] | null,
           current_station: item.current_station as OrderItemStation | null,
           added_by_profile: (item.added_by as string) ? profilesMap[item.added_by as string] || null : null,
           sub_items: item.sub_items as OrderItemSubItem[] | null,
@@ -449,7 +449,7 @@ export function useOrderMutations() {
   });
 
   const addOrderItemExtras = useMutation({
-    mutationFn: async (extras: { order_item_id: string; extra_name: string; price: number; extra_id?: string | null }[]) => {
+    mutationFn: async (extras: { order_item_id: string; extra_name: string; price: number; extra_id?: string | null; kds_category?: string }[]) => {
       if (extras.length === 0) return [];
       if (!tenantId) throw new Error('Tenant não encontrado');
       
@@ -517,6 +517,7 @@ export function useOrderMutations() {
         price: number;
         quantity: number;
         tenant_id: string;
+        kds_category: string;
       }[] = [];
 
       for (const insertedSubItem of insertedSubItems) {
@@ -534,6 +535,7 @@ export function useOrderMutations() {
               price: extra.price,
               quantity: extra.quantity,
               tenant_id: tenantId,
+              kds_category: (extra as any).kds_category || 'complement',
             });
           }
         }

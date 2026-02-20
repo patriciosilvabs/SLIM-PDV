@@ -11,7 +11,7 @@ interface OrderItem {
   notes: string | null;
   product?: { name: string } | null;
   variation?: { name: string } | null;
-  extras?: Array<{ extra_name: string; price: number }>;
+  extras?: Array<{ extra_name: string; price: number; kds_category?: string }>;
 }
 
 interface Order {
@@ -34,10 +34,20 @@ interface KdsReadOnlyOrderCardProps {
   isDelivering?: boolean;
 }
 
-// Extrair sabores dos extras
-const getFlavors = (extras?: Array<{ extra_name: string }>): string[] => {
+// Extrair sabores dos extras usando kds_category
+const getFlavors = (extras?: Array<{ extra_name: string; kds_category?: string }>): string[] => {
   if (!extras || extras.length === 0) return [];
   
+  // Primeiro por kds_category
+  const flavorExtras = extras.filter(e => e.kds_category === 'flavor');
+  if (flavorExtras.length > 0) {
+    return flavorExtras.map(e => {
+      const parts = e.extra_name.split(':');
+      return parts.length > 1 ? parts[1].trim() : e.extra_name;
+    });
+  }
+  
+  // Fallback: por texto
   return extras
     .filter(e => {
       const lower = e.extra_name.toLowerCase();
