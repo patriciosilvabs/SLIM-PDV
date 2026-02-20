@@ -196,7 +196,7 @@ export function KdsStationCard({
     // Chama a ação
     onMoveToNext(itemId);
     
-    // Reset após 800ms (tempo suficiente para optimistic update)
+    // Reset após 3000ms (tempo suficiente para a ação completar)
     const timeout = setTimeout(() => {
       setClickedItems(prev => {
         const next = new Set(prev);
@@ -204,7 +204,7 @@ export function KdsStationCard({
         return next;
       });
       clickTimeouts.current.delete(itemId);
-    }, 800);
+    }, 3000);
     
     clickTimeouts.current.set(itemId, timeout);
   }, [clickedItems, onMoveToNext]);
