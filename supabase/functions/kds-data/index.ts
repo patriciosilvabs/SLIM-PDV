@@ -370,22 +370,26 @@ serve(async (req) => {
 
       if (updateError) throw updateError;
 
-      // Log completion at current station
-      await supabase.from("kds_station_logs").insert({
-        order_item_id: item_id,
-        station_id: current_station_id,
-        action: "completed",
-        tenant_id,
-      }).catch(() => {});
+      // Log completion at current station (fire-and-forget, ignore errors)
+      try {
+        await supabase.from("kds_station_logs").insert({
+          order_item_id: item_id,
+          station_id: current_station_id,
+          action: "completed",
+          tenant_id,
+        });
+      } catch (_) { /* ignore */ }
 
       // Log entry at new station
       if (targetStationId) {
-        await supabase.from("kds_station_logs").insert({
-          order_item_id: item_id,
-          station_id: targetStationId,
-          action: "entered",
-          tenant_id,
-        }).catch(() => {});
+        try {
+          await supabase.from("kds_station_logs").insert({
+            order_item_id: item_id,
+            station_id: targetStationId,
+            action: "entered",
+            tenant_id,
+          });
+        } catch (_) { /* ignore */ }
       }
 
       // Check if all items of the order are done/in order_status → mark order as ready
