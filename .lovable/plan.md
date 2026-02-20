@@ -1,89 +1,80 @@
 
-# Correcao: Pedidos nao aparecem no KDS
+# Correcao: KDS sempre mostra Kanban mesmo com Linha de Producao configurada
 
 ## Problema identificado
 
-Existe uma falha na logica de atribuicao de estacoes KDS. O fluxo atual e:
+O KDS mostra a visualizacao Kanban (PENDENTE, EM PREPARO, PRONTO) mesmo quando o modo "Linha de Producao" esta configurado no banco de dados.
 
-1. Pedido e criado como **rascunho** (`is_draft: true`)
-2. Itens sao inseridos no pedido
-3. O trigger `auto_initialize_new_order_item` dispara, mas **ignora** itens de pedidos rascunho
-4. Pedido e marcado como **confirmado** (`is_draft: false`)
-5. Nenhum mecanismo reatribui os itens a primeira estacao KDS
+**Causa raiz:** Quando o KDS e acessado via login de dispositivo (codigo verificador + codigo de autenticacao), nao existe uma sessao de usuario autenticada no banco. O hook `useKdsSettings` depende da funcao `get_user_tenant_id()` para buscar as configuracoes globais do tenant. Sem sessao de usuario, `tenantId` retorna `null`, a query e desabilitada, e o sistema usa configuracoes padrao que definem `operationMode: 'traditional'` (Kanban).
 
-Resultado: itens ficam com `current_station_id = NULL` e nunca aparecem em nenhum dispositivo KDS.
-
-Isso afeta tanto a pagina de **Mesas** quanto o **Balcao**.
+Resultado: **nenhum dispositivo KDS com login por codigo consegue ver o modo Linha de Producao**, independente da configuracao.
 
 ## Solucao
 
-Criar um trigger no banco de dados que detecta quando `is_draft` muda de `true` para `false` na tabela `orders`, e automaticamente atribui todos os itens (que ainda nao tem estacao) a primeira estacao KDS ativa do tenant.
+Fazer o hook `useKdsSettings` aceitar um `tenantId` externo (vindo do dispositivo) como fallback, e fazer a pagina KDS fornecer esse `tenantId` a partir dos dados do device auth.
 
 ## Detalhes tecnicos
 
-### 1. Novo trigger no banco: `assign_station_on_order_confirm`
+### 1. Armazenar o `tenant_id` no login do dispositivo
 
-Sera criada uma funcao + trigger na tabela `orders` que:
-
-- Dispara em UPDATE quando `is_draft` muda de `true` para `false`
-- Busca a primeira `kds_station` ativa (excluindo `order_status`) do mesmo `tenant_id`
-- Atualiza todos os `order_items` do pedido que ainda tem `current_station_id IS NULL` para apontar para essa estacao com `station_status = 'waiting'`
+No arquivo `src/components/kds/KdsDeviceLogin.tsx`, o login ja recebe o objeto `device` que contem `tenant_id`. Basta armazena-lo no localStorage junto com os outros dados:
 
 ```text
-orders UPDATE (is_draft: true -> false)
-       |
-       v
-  Buscar first_station (kds_stations WHERE tenant_id AND active AND !order_status)
-       |
-       v
-  UPDATE order_items SET current_station_id = first_station, station_status = 'waiting'
-  WHERE order_id = NEW.id AND current_station_id IS NULL
+KdsDeviceLogin.tsx
+  - Adicionar tenant_id ao objeto authData salvo no localStorage
+  - Atualizar getStoredDeviceAuth para retornar tenant_id
 ```
 
-### 2. Migracao SQL
+### 2. Passar `tenantId` do dispositivo para `useKdsSettings`
 
-```sql
-CREATE OR REPLACE FUNCTION public.assign_station_on_order_confirm()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-DECLARE
-  first_station_id UUID;
-BEGIN
-  -- Apenas quando is_draft muda de true para false
-  IF OLD.is_draft = TRUE AND NEW.is_draft = FALSE THEN
-    -- Buscar primeira estacao ativa do tenant
-    SELECT id INTO first_station_id
-    FROM kds_stations
-    WHERE is_active = TRUE 
-      AND station_type != 'order_status'
-      AND tenant_id = NEW.tenant_id
-    ORDER BY sort_order ASC
-    LIMIT 1;
-    
-    IF first_station_id IS NOT NULL THEN
-      -- Atribuir estacao a todos os itens sem estacao
-      UPDATE order_items
-      SET current_station_id = first_station_id,
-          station_status = 'waiting'
-      WHERE order_id = NEW.id
-        AND current_station_id IS NULL
-        AND (station_status IS NULL OR station_status = 'waiting');
-    END IF;
-  END IF;
-  
-  RETURN NEW;
-END;
-$$;
+No arquivo `src/hooks/useKdsSettings.ts`:
 
-CREATE TRIGGER trigger_assign_station_on_confirm
-  AFTER UPDATE ON orders
-  FOR EACH ROW
-  EXECUTE FUNCTION public.assign_station_on_order_confirm();
+```text
+useKdsSettings.ts
+  - Aceitar parametro opcional overrideTenantId
+  - Usar overrideTenantId como fallback quando get_user_tenant_id() retorna null
+  - Manter comportamento atual para usuarios logados normalmente
 ```
 
-### 3. Nenhuma alteracao no codigo frontend
+### 3. Atualizar a pagina KDS para fornecer o `tenantId`
 
-A correcao e 100% no banco de dados via trigger, garantindo que funcione independente de qual pagina criou o pedido (Mesas, Balcao, API externa, etc).
+No arquivo `src/pages/KDS.tsx`:
+
+```text
+KDS.tsx
+  - Extrair tenant_id do deviceAuth
+  - Passar para useKdsSettings como override
+```
+
+### 4. Fluxo corrigido
+
+```text
+Dispositivo faz login por codigo
+  |
+  v
+Edge function retorna device com tenant_id
+  |
+  v
+tenant_id salvo no localStorage
+  |
+  v
+KDS.tsx le tenant_id do deviceAuth
+  |
+  v
+useKdsSettings recebe overrideTenantId
+  |
+  v
+Query busca kds_global_settings com o tenant correto
+  |
+  v
+operationMode = 'production_line' carrega corretamente
+  |
+  v
+KdsProductionLineView e renderizado
+```
+
+### Arquivos alterados
+
+1. **src/components/kds/KdsDeviceLogin.tsx** - Salvar `tenant_id` no localStorage
+2. **src/hooks/useKdsSettings.ts** - Aceitar `overrideTenantId` como parametro
+3. **src/pages/KDS.tsx** - Passar `deviceAuth.tenantId` para o hook
