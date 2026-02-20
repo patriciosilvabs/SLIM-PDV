@@ -1,92 +1,56 @@
 
+# Plano: Reagrupar Pedido no Despacho
 
-# Plano: Distribuir Itens do Pedido em Bancadas Diferentes
+## Problema
 
-## Problema Identificado
-
-Quando um pedido tem mais de um item, o sistema deveria "explodir" o pedido e distribuir cada item para bancadas de produção diferentes (balanceamento de carga), mas todos os itens estão ficando na mesma bancada ("Preparando Massa e Borda").
-
-**Causa raiz:** O trigger do banco de dados `assign_station_on_order_confirm` tem a logica correta para distribuir itens sem borda para bancadas `item_assembly` (Recheio A / Recheio B), mas na pratica ambos os itens estao indo para a bancada `prep_start`. Alem disso, itens adicionados DEPOIS da confirmacao do pedido (via modal "Adicionar Itens") nao passam pelo trigger, ficando sem bancada.
+Quando um pedido com multiplos itens e "explodido" nas bancadas de producao, os itens chegam ao despacho em momentos diferentes. Atualmente, o card do pedido aparece no despacho assim que o PRIMEIRO item chega, mostrando apenas esse item e permitindo despachar um pedido incompleto.
 
 ## Solucao
 
-### 1. Corrigir o Trigger de Distribuicao
+O pedido deve aparecer no despacho somente quando TODOS os itens estiverem prontos (chegaram na estacao `order_status` ou tem `station_status = 'done'`). Enquanto houver itens ainda em producao, o pedido nao deve aparecer na coluna de despacho.
 
-Atualizar a funcao `assign_station_on_order_confirm()` para garantir que:
-- Itens COM borda vao para a primeira estacao de producao (`prep_start`)
-- Itens SEM borda vao diretamente para a bancada `item_assembly` menos ocupada (Recheio A ou Recheio B)
-- Quando nao houver estacoes `item_assembly`, todos vao para a primeira estacao
+Adicionalmente, sera exibido um indicador visual de "Aguardando X itens" caso o pedido apareca parcialmente.
 
-### 2. Criar Trigger para Itens Adicionados Depois
+## Mudancas
 
-Criar um novo trigger `trigger_assign_station_on_item_insert` na tabela `order_items` que:
-- Dispara quando um novo item e inserido
-- Verifica se o pedido ja foi confirmado (`is_draft = false`)
-- Se sim, atribui automaticamente o item a bancada correta usando a mesma logica de balanceamento
+### 1. KdsProductionLineView.tsx - Filtro `readyOrdersInStatus`
 
-### 3. Atualizar o Workflow no Frontend
+Atualizar o `useMemo` para:
+- Verificar se TODOS os `order_items` do pedido estao na estacao `order_status` ou com `station_status === 'done'`
+- Ao montar o card, passar TODOS os itens do pedido (nao apenas os que estao na estacao), para que o card mostre o pedido completo reagrupado
 
-Ajustar `useKdsWorkflow.ts` para que a funcao `initializeOrderForProductionLine` tambem use a logica de distribuicao inteligente ao inves de enviar todos para a primeira bancada.
+### 2. KdsOrderStatusCard.tsx - Indicador de itens pendentes
 
----
+Ajustar o card para:
+- Mostrar todos os itens do pedido reagrupados
+- Desabilitar o botao "Servir Mesa" / "Finalizar Pedido" ate que todos os itens estejam presentes
+- Mostrar badge "Aguardando X itens em producao" quando houver itens faltando
+
+### 3. KdsProductionLineReadOnly.tsx - Mesma logica
+
+Aplicar a mesma correcao no componente read-only para consistencia.
 
 ## Detalhes Tecnicos
 
-### Migracao SQL - Trigger Atualizado
+### readyOrdersInStatus (KdsProductionLineView.tsx, linhas 194-221)
 
-```sql
--- Trigger para novos itens adicionados a pedidos ja confirmados
-CREATE OR REPLACE FUNCTION public.assign_station_on_item_insert()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $function$
-DECLARE
-  order_draft BOOLEAN;
-  order_tenant UUID;
-  borda_station_id UUID;
-  all_prep_ids UUID[];
-  prep_counts INT[];
-  num_preps INT;
-  min_idx INT;
-  min_val INT;
-  i INT;
-  has_border BOOLEAN;
-  border_kws TEXT[];
-  kds_settings RECORD;
-  combined_text TEXT;
-  kw TEXT;
-BEGIN
-  -- Verificar se o pedido ja esta confirmado
-  SELECT is_draft, tenant_id INTO order_draft, order_tenant
-  FROM orders WHERE id = NEW.order_id;
-  
-  -- Se ainda e rascunho, o trigger principal cuida
-  IF order_draft = TRUE OR order_draft IS NULL THEN
-    RETURN NEW;
-  END IF;
-  
-  -- Se ja tem station atribuida, ignorar
-  IF NEW.current_station_id IS NOT NULL THEN
-    RETURN NEW;
-  END IF;
-  
-  -- Mesma logica de distribuicao do trigger principal
-  -- (buscar keywords, estacoes, verificar borda, atribuir)
-  ...
-  
-  RETURN NEW;
-END;
-$function$;
+Logica atual:
+```
+order.order_items?.every(item => 
+  item.current_station_id === orderStatusStation.id || item.station_status === 'done'
+)
 ```
 
-### Alteracao no Frontend
+Esta logica ja verifica todos os itens, mas o problema e que na hora de montar os `items` do card (linhas 209-218), ele filtra apenas os itens NA estacao de despacho, excluindo itens com `station_status === 'done'`. A correcao sera passar todos os itens do pedido para o card quando o pedido estiver pronto.
 
-Em `useKdsWorkflow.ts`, a funcao `initializeOrderForProductionLine` sera atualizada para usar `findLeastBusyPrepStation()` ao inves de enviar todos os itens para `activeStations[0]`.
+Tambem sera necessario garantir que pedidos com itens ainda em bancadas de producao (`item_assembly`, `prep_start`) NAO aparecem, mesmo que o `order.status` seja `ready`.
 
-### Arquivos Modificados
+### KdsOrderStatusCard.tsx
 
-- `supabase/migrations/` - Nova migracao com trigger atualizado + trigger de insert
-- `src/hooks/useKdsWorkflow.ts` - Atualizar `initializeOrderForProductionLine` para distribuir itens
+O card ja tem a logica de `allServed` que desabilita o botao. A mudanca principal e garantir que todos os itens aparecem na lista, incluindo os que ja estao `done`.
 
+### Arquivos modificados
+
+- `src/components/kds/KdsProductionLineView.tsx`
+- `src/components/kds/KdsOrderStatusCard.tsx`
+- `src/components/kds/KdsProductionLineReadOnly.tsx`
