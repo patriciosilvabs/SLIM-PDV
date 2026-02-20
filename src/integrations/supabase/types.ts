@@ -866,8 +866,10 @@ export type Database = {
           last_seen_at: string | null
           name: string
           operation_mode: string | null
+          password_hash: string | null
           station_id: string | null
           tenant_id: string | null
+          username: string | null
         }
         Insert: {
           created_at?: string | null
@@ -877,8 +879,10 @@ export type Database = {
           last_seen_at?: string | null
           name: string
           operation_mode?: string | null
+          password_hash?: string | null
           station_id?: string | null
           tenant_id?: string | null
+          username?: string | null
         }
         Update: {
           created_at?: string | null
@@ -888,8 +892,10 @@ export type Database = {
           last_seen_at?: string | null
           name?: string
           operation_mode?: string | null
+          password_hash?: string | null
           station_id?: string | null
           tenant_id?: string | null
+          username?: string | null
         }
         Relationships: [
           {

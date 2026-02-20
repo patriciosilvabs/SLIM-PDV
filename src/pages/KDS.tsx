@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { KdsDeviceLogin, getStoredDeviceAuth, clearDeviceAuth } from '@/components/kds/KdsDeviceLogin';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -83,6 +84,9 @@ const formatTimeDisplay = (minutes: number): string => {
 };
 
 export default function KDS() {
+  // Device authentication state
+  const [deviceAuth, setDeviceAuth] = useState(() => getStoredDeviceAuth());
+  
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const { isAdmin } = useUserRole();
@@ -766,6 +770,21 @@ export default function KDS() {
       }
     };
   }, [unconfirmedCancellations.size, unconfirmedItemCancellations.size, soundEnabled, settings.enabled, playOrderCancelledSound, kdsSettings.cancellationAlertInterval, kdsSettings.cancellationAlertsEnabled]);
+
+  // Device authentication check
+  if (!deviceAuth) {
+    return (
+      <KdsDeviceLogin
+        onLoginSuccess={(device) => {
+          setDeviceAuth({
+            deviceId: device.device_id,
+            deviceName: device.name,
+            stationId: device.station_id,
+          });
+        }}
+      />
+    );
+  }
 
   // Permission check AFTER all hooks
   if (!permissionsLoading && !hasPermission('kds_view')) {
@@ -1697,8 +1716,11 @@ export default function KDS() {
             <Button 
               variant="ghost" 
               size="icon" 
-              onClick={signOut}
-              title="Sair"
+              onClick={() => {
+                clearDeviceAuth();
+                setDeviceAuth(null);
+              }}
+              title="Desconectar dispositivo"
             >
               <LogOut className="h-4 w-4" />
             </Button>
