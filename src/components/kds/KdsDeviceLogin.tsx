@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
-import { Tablet, Eye, EyeOff, LogIn, Loader2 } from 'lucide-react';
+import { Tablet, Eye, EyeOff, LogIn, Loader2, Home } from 'lucide-react';
 import logoSlim from '@/assets/logo-slim.png';
 
 interface KdsDeviceLoginProps {
@@ -29,6 +30,7 @@ export function clearDeviceAuth() {
 
 export function KdsDeviceLogin({ onLoginSuccess }: KdsDeviceLoginProps) {
   const { tenantId } = useTenant();
+  const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -138,6 +140,15 @@ export function KdsDeviceLogin({ onLoginSuccess }: KdsDeviceLoginProps) {
                 <LogIn className="h-4 w-4" />
               )}
               {isLoading ? 'Entrando...' : 'Entrar'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full gap-2"
+              onClick={() => navigate('/')}
+            >
+              <Home className="h-4 w-4" />
+              Voltar para Home
             </Button>
           </form>
         </CardContent>
