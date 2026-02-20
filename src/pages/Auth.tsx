@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTenant } from '@/hooks/useTenant';
 import { supabase } from '@/integrations/supabase/client';
@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle2, Tablet } from 'lucide-react';
 import logoSlim from '@/assets/logo-slim.png';
 import { z } from 'zod';
 import { PasswordRequirements } from '@/components/auth/PasswordRequirements';
@@ -49,6 +49,7 @@ interface FieldErrors {
 }
 
 export default function Auth() {
+  const navigate = useNavigate();
   const { user, loading, signIn, signUp } = useAuth();
   const { hasTenant, isLoading: tenantLoading } = useTenant();
   const { toast } = useToast();
@@ -346,6 +347,17 @@ export default function Auth() {
                   </svg>
                 )}
                 Continuar com Google
+              </Button>
+
+              {/* Botão KDS */}
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full mt-3 text-muted-foreground"
+                onClick={() => navigate('/kds')}
+              >
+                <Tablet className="mr-2 h-4 w-4" />
+                Acessar KDS (tablets e monitores)
               </Button>
             </TabsContent>
 
