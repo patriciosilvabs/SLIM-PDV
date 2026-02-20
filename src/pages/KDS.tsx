@@ -1727,12 +1727,27 @@ export default function KDS() {
         <div className="flex items-center justify-center h-64">
           <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
+      ) : (isDeviceOnlyMode && !deviceData.settings) ? (
+        <div className="flex items-center justify-center h-64">
+          <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+          <span className="ml-3 text-muted-foreground">Carregando configurações...</span>
+        </div>
       ) : kdsSettings.operationMode === 'production_line' ? (
         <KdsProductionLineView 
           orders={orders} 
           isLoading={isLoading} 
           overrideTenantId={deviceAuth?.tenantId}
           overrideStations={isDeviceOnlyMode ? deviceData.stations : undefined}
+          overrideSettings={isDeviceOnlyMode ? {
+            assignedStationId: kdsSettings.assignedStationId,
+            highlightSpecialBorders: kdsSettings.highlightSpecialBorders,
+            borderKeywords: kdsSettings.borderKeywords,
+            showPartySize: kdsSettings.showPartySize,
+            showWaiterName: kdsSettings.showWaiterName,
+            compactMode: kdsSettings.compactMode,
+            timerGreenMinutes: kdsSettings.timerGreenMinutes,
+            timerYellowMinutes: kdsSettings.timerYellowMinutes,
+          } : undefined}
           overrideWorkflow={isDeviceOnlyMode ? {
             moveItemToNextStation: {
               mutate: ({ itemId, currentStationId }: { itemId: string; currentStationId: string }) => {
