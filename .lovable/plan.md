@@ -1,80 +1,86 @@
 
-# Correcao: KDS sempre mostra Kanban mesmo com Linha de Producao configurada
 
-## Problema identificado
+# Correcao: Dispositivos KDS mostrando Kanban em vez de Linha de Producao e sem filtrar por praca
 
-O KDS mostra a visualizacao Kanban (PENDENTE, EM PREPARO, PRONTO) mesmo quando o modo "Linha de Producao" esta configurado no banco de dados.
+## Problema
 
-**Causa raiz:** Quando o KDS e acessado via login de dispositivo (codigo verificador + codigo de autenticacao), nao existe uma sessao de usuario autenticada no banco. O hook `useKdsSettings` depende da funcao `get_user_tenant_id()` para buscar as configuracoes globais do tenant. Sem sessao de usuario, `tenantId` retorna `null`, a query e desabilitada, e o sistema usa configuracoes padrao que definem `operationMode: 'traditional'` (Kanban).
+Existem dois problemas conectados:
 
-Resultado: **nenhum dispositivo KDS com login por codigo consegue ver o modo Linha de Producao**, independente da configuracao.
+1. **Layout errado**: Dispositivos mostram Kanban (PENDENTE, EM PREPARO, PRONTO) em vez da "Linha de Producao" configurada
+2. **Sem filtragem por praca**: Cada dispositivo deveria mostrar apenas os itens da sua praca atribuida (ex: BORDAS ve apenas itens de borda, BANCADA A ve apenas seus itens)
+
+## Causa raiz
+
+No modo device-only (login por codigo), o `useKdsSettings` tenta buscar configuracoes via query direta ao banco, mas o RLS bloqueia (sem sessao de usuario). Mesmo com o override no KDS.tsx, ha dois pontos de falha:
+
+1. **Dentro do `KdsProductionLineView`**: O componente chama `useKdsSettings(overrideTenantId)` internamente. Mesmo com `overrideTenantId`, a query ao `kds_global_settings` falha por RLS (sem `auth.uid()`), fazendo o `operationMode` voltar para `'traditional'`
+2. **Settings do dispositivo**: O `assignedStationId` vem do localStorage e funciona, mas como o componente nunca e renderizado (pois o KDS page ve `'traditional'` antes do deviceData carregar), a filtragem nunca acontece
 
 ## Solucao
 
-Fazer o hook `useKdsSettings` aceitar um `tenantId` externo (vindo do dispositivo) como fallback, e fazer a pagina KDS fornecer esse `tenantId` a partir dos dados do device auth.
+### 1. Garantir que `kdsSettings.operationMode` use dados do Edge Function imediatamente
+
+No `KDS.tsx`, o memo `kdsSettings` (linhas 131-163) ja faz o override correto, mas existe uma condicao de corrida: quando `deviceData.settings` ainda e `null` (carregando), volta para defaults. Vamos adicionar um estado de loading para nao renderizar o view errado enquanto os dados carregam.
+
+### 2. Passar settings ja resolvidas para `KdsProductionLineView`
+
+Em vez de deixar o componente chamar `useKdsSettings` internamente (que falha por RLS), passar as settings ja resolvidas como prop. O componente ja recebe `overrideTenantId`, mas isso nao resolve o problema do RLS.
+
+### 3. Adicionar prop `overrideSettings` ao `KdsProductionLineView`
+
+O componente recebera as settings completas (com `assignedStationId` e `operationMode` corretos) vindas do KDS page, eliminando a dependencia do hook que falha por RLS.
 
 ## Detalhes tecnicos
 
-### 1. Armazenar o `tenant_id` no login do dispositivo
+### Arquivo: `src/pages/KDS.tsx`
 
-No arquivo `src/components/kds/KdsDeviceLogin.tsx`, o login ja recebe o objeto `device` que contem `tenant_id`. Basta armazena-lo no localStorage junto com os outros dados:
+- Adicionar guarda de loading: enquanto `isDeviceOnlyMode && !deviceData.settings`, mostrar spinner em vez de renderizar Kanban
+- Passar `kdsSettings` (ja com override) como prop para `KdsProductionLineView`
 
-```text
-KdsDeviceLogin.tsx
-  - Adicionar tenant_id ao objeto authData salvo no localStorage
-  - Atualizar getStoredDeviceAuth para retornar tenant_id
-```
+### Arquivo: `src/components/kds/KdsProductionLineView.tsx`
 
-### 2. Passar `tenantId` do dispositivo para `useKdsSettings`
+- Adicionar prop `overrideSettings` com as settings pre-resolvidas
+- Quando `overrideSettings` estiver presente, usar em vez de chamar `useKdsSettings`
+- Manter `assignedStationId` do localStorage como fallback
 
-No arquivo `src/hooks/useKdsSettings.ts`:
+### Arquivo: `src/components/kds/KdsStationCard.tsx`
 
-```text
-useKdsSettings.ts
-  - Aceitar parametro opcional overrideTenantId
-  - Usar overrideTenantId como fallback quando get_user_tenant_id() retorna null
-  - Manter comportamento atual para usuarios logados normalmente
-```
+- `KdsStationCard` tambem chama `useKdsSettings()` internamente (linha 202) para `hasSpecialBorder` e `settings.showPartySize`
+- Passar essas configs como props em vez de depender do hook bloqueado por RLS
 
-### 3. Atualizar a pagina KDS para fornecer o `tenantId`
-
-No arquivo `src/pages/KDS.tsx`:
-
-```text
-KDS.tsx
-  - Extrair tenant_id do deviceAuth
-  - Passar para useKdsSettings como override
-```
-
-### 4. Fluxo corrigido
+### Fluxo corrigido
 
 ```text
 Dispositivo faz login por codigo
   |
   v
-Edge function retorna device com tenant_id
+KDS.tsx detecta isDeviceOnlyMode
   |
   v
-tenant_id salvo no localStorage
+useKdsDeviceData busca orders + settings + stations via Edge Function
   |
   v
-KDS.tsx le tenant_id do deviceAuth
+kdsSettings memo combina deviceData.settings + localStorage
   |
   v
-useKdsSettings recebe overrideTenantId
+operationMode = 'production_line' (do Edge Function)
+assignedStationId = station_id do dispositivo (do localStorage)
   |
   v
-Query busca kds_global_settings com o tenant correto
+Renderiza KdsProductionLineView com overrideSettings
   |
   v
-operationMode = 'production_line' carrega corretamente
+Componente filtra itens pela praca do dispositivo
   |
   v
-KdsProductionLineView e renderizado
+BORDAS ve so itens na praca "Preparando Massa e Borda"
+BANCADA A ve so itens na praca "Preparando Recheio"
+DESPACHO ve so pedidos prontos
 ```
 
 ### Arquivos alterados
 
-1. **src/components/kds/KdsDeviceLogin.tsx** - Salvar `tenant_id` no localStorage
-2. **src/hooks/useKdsSettings.ts** - Aceitar `overrideTenantId` como parametro
-3. **src/pages/KDS.tsx** - Passar `deviceAuth.tenantId` para o hook
+1. **src/pages/KDS.tsx** - Guarda de loading + passar settings como prop
+2. **src/components/kds/KdsProductionLineView.tsx** - Aceitar `overrideSettings` prop
+3. **src/components/kds/KdsStationCard.tsx** - Receber configs relevantes como props em vez de chamar useKdsSettings internamente
+
