@@ -306,12 +306,11 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
     }
   };
 
-  // Calculate price for per-unit groups using price_calculation_type (now from unified selections)
+  // Calculate price for per-unit groups using the configured price_calculation_type
   const calculatePerUnitPrice = (): number => {
     let total = 0;
     for (const group of perUnitGroups) {
-      const effectiveType = unitCount > 1 ? 'average' : group.price_calculation_type;
-      total += calculateGroupPrice(group.id, effectiveType);
+      total += calculateGroupPrice(group.id, group.price_calculation_type);
     }
     return total;
   };
