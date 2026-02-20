@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -40,13 +40,14 @@ export function OrderDrawer({
   const { data: products } = useProducts();
   const { data: categories } = useCategories();
   const { duplicateItems } = useOrderSettings();
-  const { data: pizzaData } = usePizzaProducts();
+  const { data: pizzaData, isLoading: pizzaDataLoading } = usePizzaProducts();
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [flavorDialogOpen, setFlavorDialogOpen] = useState(false);
   const [overrideUnitCount, setOverrideUnitCount] = useState<number | undefined>(undefined);
+  const pendingProductRef = useRef<any>(null);
 
   const activeCategories = useMemo(() => 
     categories?.filter(c => c.is_active !== false) || [], 
@@ -68,7 +69,16 @@ export function OrderDrawer({
     [activeProducts, effectiveCategory]
   );
 
-  const handleProductClick = (product: any) => {
+  // Process pending product click once pizzaData loads
+  useEffect(() => {
+    if (!pizzaDataLoading && pendingProductRef.current) {
+      const product = pendingProductRef.current;
+      pendingProductRef.current = null;
+      processProductClick(product);
+    }
+  }, [pizzaDataLoading]);
+
+  const processProductClick = (product: any) => {
     const config = pizzaData?.configMap.get(product.id);
     if (config && config.flavorModalEnabled && config.flavorModalChannels.includes('table')) {
       setSelectedProduct(product);
@@ -79,6 +89,15 @@ export function OrderDrawer({
       setOverrideUnitCount(undefined);
       setProductDialogOpen(true);
     }
+  };
+
+  const handleProductClick = (product: any) => {
+    if (pizzaDataLoading) {
+      pendingProductRef.current = product;
+      setSelectedProduct(product);
+      return;
+    }
+    processProductClick(product);
   };
 
   const handleFlavorSelect = (count: number) => {
