@@ -34,7 +34,7 @@ import { Badge } from '@/components/ui/badge';
 import { ComplementGroupDialog } from '@/components/menu/ComplementGroupDialog';
 import { ComplementOptionDialog } from '@/components/menu/ComplementOptionDialog';
 import { ReplicateMenuDialog } from '@/components/menu/ReplicateMenuDialog';
-import { SizesTab } from '@/components/menu/SizesTab';
+
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -657,7 +657,7 @@ export default function Menu() {
           <TabsList className="w-fit">
             <TabsTrigger value="categories">CATEGORIAS</TabsTrigger>
             <TabsTrigger value="products">PRODUTOS</TabsTrigger>
-            <TabsTrigger value="sizes">TAMANHOS</TabsTrigger>
+            
             <TabsTrigger value="extras">COMPLEMENTOS</TabsTrigger>
             <TabsTrigger value="variations">OPÇÕES</TabsTrigger>
           </TabsList>
@@ -852,10 +852,6 @@ export default function Menu() {
             </DndContext>
           </TabsContent>
 
-          {/* Sizes Tab */}
-          <TabsContent value="sizes" className="flex-1 mt-4">
-            <SizesTab complementGroups={complementGroups} />
-          </TabsContent>
 
           {/* Complement Groups Tab */}
           <TabsContent value="extras" className="flex-1 mt-4">
