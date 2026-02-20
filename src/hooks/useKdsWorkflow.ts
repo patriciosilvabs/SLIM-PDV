@@ -58,24 +58,37 @@ export function useKdsWorkflow() {
     return leastBusyId;
   };
 
-  // Smart next station: borda → least-busy prep, prep → dispatch, otherwise sequential
-  const getSmartNextStation = async (currentStationId: string): Promise<{ id: string; type: string } | null> => {
+  // Smart next station: borda → least-busy prep, prep → dispatch, order_status → next order_status or done
+  const getSmartNextStation = async (currentStationId: string, orderType?: string): Promise<{ id: string; type: string } | null> => {
     const currentStation = activeStations.find(s => s.id === currentStationId);
     if (!currentStation) return getNextStation(currentStationId) ? { id: getNextStation(currentStationId)!.id, type: getNextStation(currentStationId)!.station_type } : null;
 
     if (currentStation.station_type === 'prep_start') {
-      // From borda → least-busy prep station
       const prepId = await findLeastBusyPrepStation();
       if (prepId) return { id: prepId, type: 'item_assembly' };
-      // No prep stations, go to order_status
       if (orderStatusStation) return { id: orderStatusStation.id, type: 'order_status' };
       return null;
     }
 
     if (currentStation.station_type === 'item_assembly') {
-      // From prep → dispatch/order_status
       if (orderStatusStation) return { id: orderStatusStation.id, type: 'order_status' };
       return null;
+    }
+
+    // ORDER_STATUS routing: depends on order_type
+    if (currentStation.station_type === 'order_status') {
+      if (orderType === 'dine_in') {
+        // Mesa: find next order_status station with higher sort_order
+        const nextOrderStatus = orderStatusStations
+          ?.filter(s => s.is_active && (s.sort_order ?? 0) > (currentStation.sort_order ?? 0))
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))[0];
+        if (nextOrderStatus) return { id: nextOrderStatus.id, type: 'order_status' };
+        // No more order_status stations → done
+        return null;
+      } else {
+        // Delivery/Takeaway: done immediately from order_status
+        return null;
+      }
     }
 
     // Default: sequential
@@ -87,11 +100,11 @@ export function useKdsWorkflow() {
 
   // Mover item diretamente para a próxima estação (clique único) - COM ROTEAMENTO INTELIGENTE
   const moveItemToNextStation = useMutation({
-    mutationFn: async ({ itemId, currentStationId }: { itemId: string; currentStationId: string }) => {
+    mutationFn: async ({ itemId, currentStationId, orderType }: { itemId: string; currentStationId: string; orderType?: string }) => {
       const now = new Date().toISOString();
       
-      // Smart routing
-      const target = await getSmartNextStation(currentStationId);
+      // Smart routing with order_type awareness
+      const target = await getSmartNextStation(currentStationId, orderType);
       const targetStationId = target?.id || null;
 
       if (targetStationId) {
@@ -171,16 +184,30 @@ export function useKdsWorkflow() {
     },
     
     // OPTIMISTIC UPDATE
-    onMutate: async ({ itemId, currentStationId }) => {
+    onMutate: async ({ itemId, currentStationId, orderType }) => {
       // Mark item as recently moved to prevent Realtime from reverting the optimistic update
       markItemAsRecentlyMoved(itemId);
       
       await queryClient.cancelQueries({ queryKey: ['orders'] });
       const previousOrders = queryClient.getQueryData(['orders']);
       
-      // For optimistic update, use sequential next (smart routing result will correct on settle)
-      const nextStation = getNextStation(currentStationId);
-      const targetStationId = nextStation?.id || orderStatusStation?.id || null;
+      // Calculate optimistic target based on station type and order_type
+      const currentStation = activeStations.find(s => s.id === currentStationId);
+      let targetStationId: string | null = null;
+      
+      if (currentStation?.station_type === 'order_status') {
+        // For order_status stations, only dine_in goes to next order_status
+        if (orderType === 'dine_in') {
+          const nextOrderStatus = orderStatusStations
+            ?.filter(s => s.is_active && (s.sort_order ?? 0) > (currentStation.sort_order ?? 0))
+            .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))[0];
+          targetStationId = nextOrderStatus?.id || null;
+        }
+        // delivery/takeaway → null (done)
+      } else {
+        const nextStation = getNextStation(currentStationId);
+        targetStationId = nextStation?.id || orderStatusStation?.id || null;
+      }
       
       queryClient.setQueryData(['orders'], (old: OrderData[] | undefined) => {
         if (!old) return old;

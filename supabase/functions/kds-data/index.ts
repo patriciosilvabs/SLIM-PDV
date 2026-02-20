@@ -310,22 +310,53 @@ serve(async (req) => {
 
       // SMART ROUTING LOGIC
       if (currentStation.station_type === "prep_start") {
-        // From borda/prep_start → route to least-busy item_assembly station
         const leastBusy = await findLeastBusyPrepStation(supabase, tenant_id);
         if (leastBusy) {
           targetStationId = leastBusy.id;
         } else {
-          // No prep stations, go to dispatch
           const dispatch = await findDispatchStation(supabase, tenant_id);
           targetStationId = dispatch?.id || null;
         }
       } else if (currentStation.station_type === "item_assembly") {
-        // From prep/item_assembly → go to dispatch/order_status
         const dispatch = await findDispatchStation(supabase, tenant_id);
         if (dispatch) {
           targetStationId = dispatch.id;
         } else {
-          // No dispatch station, mark as done
+          targetStationId = null;
+          targetStationStatus = "done";
+        }
+      } else if (currentStation.station_type === "order_status") {
+        // ORDER_STATUS routing: depends on order_type
+        // Fetch the order_type from the order linked to this item
+        const { data: itemOrder } = await supabase
+          .from("order_items")
+          .select("order_id, orders!inner(order_type)")
+          .eq("id", item_id)
+          .single();
+
+        const orderType = (itemOrder as any)?.orders?.order_type || "takeaway";
+
+        if (orderType === "dine_in") {
+          // Mesa: find next order_status station with higher sort_order
+          const { data: nextOrderStatusStations } = await supabase
+            .from("kds_stations")
+            .select("id, station_type, sort_order")
+            .eq("tenant_id", tenant_id)
+            .eq("is_active", true)
+            .eq("station_type", "order_status")
+            .gt("sort_order", currentStation.sort_order)
+            .order("sort_order", { ascending: true })
+            .limit(1);
+
+          if (nextOrderStatusStations && nextOrderStatusStations.length > 0) {
+            targetStationId = nextOrderStatusStations[0].id;
+          } else {
+            // No more order_status stations → done
+            targetStationId = null;
+            targetStationStatus = "done";
+          }
+        } else {
+          // Delivery/Takeaway: done immediately
           targetStationId = null;
           targetStationStatus = "done";
         }
