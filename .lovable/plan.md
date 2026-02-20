@@ -1,49 +1,79 @@
 
 
-# Desmembrar Pedidos: Distribuicao Individual de Itens entre Bancadas
+# Corrigir Flicker no Despacho e Roteamento por Tipo de Pedido
 
-## O que muda
+## Problema Identificado
 
-Atualmente, quando um pedido com 2+ itens (ex: Pedido 0040 com Pizza Calabresa + Pizza Mussarela) e confirmado, **todos os itens sem borda vao para a MESMA bancada de preparo**. O sistema escolhe a bancada menos ocupada e envia tudo junto.
+Existem **2 problemas** na logica de roteamento do KDS:
 
-Com esta mudanca, **cada item sera distribuido individualmente** para a bancada menos ocupada no momento da atribuicao. Isso significa que:
-- Pizza Calabresa pode ir para Bancada A
-- Pizza Mussarela pode ir para Bancada B
+### Problema 1: Item some e volta (flicker) nas bancadas de Despacho
+Quando voce clica "Proximo" em uma estacao do tipo `order_status` (ex: "Despachado - Delivery / Retirada"), o sistema tenta encontrar a proxima estacao usando `getSmartNextStation`, mas essa funcao **nao sabe lidar com estacoes order_status**. Ela cai no caso `else` (default), que procura em `productionStations` -- mas estacoes order_status sao EXCLUIDAS dessa lista. O resultado: o item volta para a MESMA estacao ou para a primeira order_status, criando um loop infinito de "some e volta".
 
-O pedido so sera marcado como "pronto" quando TODOS os itens individuais chegarem ao despacho.
+### Problema 2: Nao diferencia pedidos de Mesa vs Delivery no Despacho
+Atualmente, o roteamento nao considera o `order_type` do pedido. Pedidos de Mesa deveriam ir de "Despachado - Embalagem / Mesa" para "Despachado - Item Servido na mesa" (garcom). Pedidos de Delivery/Retirada deveriam ser finalizados ou seguir fluxo diferente.
 
-## Mudancas Tecnicas
+## Solucao
 
-### 1. Trigger `assign_station_on_order_confirm` (Migration SQL)
+### 1. Corrigir `getSmartNextStation` no hook `useKdsWorkflow.ts`
 
-Alterar a logica de "escolher UMA bancada para o pedido inteiro" para "escolher a bancada menos ocupada POR ITEM":
+Adicionar tratamento para estacoes `order_status`:
+- Buscar o `order_type` do pedido (dine_in, delivery, takeaway)
+- Se estiver em uma estacao order_status com sort_order menor, verificar se existe OUTRA estacao order_status com sort_order MAIOR
+- Para pedidos de **Mesa (dine_in)**: mover para a proxima estacao order_status (ex: "Despachado - Item Servido na mesa")
+- Para pedidos de **Delivery/Takeaway**: marcar como `done` (finalizado) -- nao precisa ir para garcom
 
-- Remover a variavel `target_prep_id` que e calculada antes do loop
-- Dentro do loop `FOR item_record`, recalcular o balanceamento para CADA item individualmente
-- Apos atribuir um item a uma bancada, o contador daquela bancada sobe, garantindo que o proximo item va para outra se estiverem equilibradas
+### 2. Corrigir a Edge Function `kds-data/index.ts` (smart_move_item)
 
-### 2. Trigger `auto_initialize_new_order_item` (Migration SQL)
+Aplicar a mesma logica de roteamento por order_type na edge function (usada pelo modo dispositivo):
+- Buscar o `order_type` do pedido via `order_items.order_id -> orders.order_type`
+- Se estacao atual for `order_status`:
+  - **dine_in**: buscar proxima estacao order_status por sort_order
+  - **delivery/takeaway**: marcar item como `done`, status `delivered`
 
-Este trigger ja funciona por item individual (disparado no INSERT de cada order_item), entao ja distribui corretamente. Nenhuma mudanca necessaria.
+### 3. Atualizar o optimistic update no `onMutate`
 
-### 3. Edge Function `kds-data/index.ts`
+O optimistic update precisa saber tambem o destino correto para nao causar flicker:
+- Passar o `order_type` junto com os parametros da mutacao
+- Calcular o destino otimista corretamente (proxima order_status ou done)
 
-A funcao `smart_move_item` ja opera por item individual. Nenhuma mudanca necessaria.
+### 4. Manter a protecao anti-flicker existente
 
-### 4. Hook `useKdsWorkflow.ts`
+A logica de `markItemAsRecentlyMoved` + `isRecentlyMoved` ja implementada continua funcionando como camada extra de seguranca.
 
-O hook ja opera por item. Nenhuma mudanca necessaria.
+## Detalhes Tecnicos
 
----
+### Mudancas em `src/hooks/useKdsWorkflow.ts`
 
-## Resumo
+```text
+getSmartNextStation(currentStationId, orderType?)
+  ├── prep_start → least-busy item_assembly (sem mudanca)
+  ├── item_assembly → order_status (sem mudanca)  
+  ├── order_status + dine_in → proxima order_status por sort_order
+  ├── order_status + delivery/takeaway → null (done)
+  └── default → sequential (sem mudanca)
+```
 
-| Componente | Mudanca |
+- A interface da mutacao `moveItemToNextStation` recebera um campo opcional `orderType`
+- O `onMutate` usara `orderType` para calcular o destino otimista correto
+
+### Mudancas em `supabase/functions/kds-data/index.ts`
+
+Na acao `smart_move_item`:
+- Buscar `order_type` do pedido associado ao item
+- Adicionar caso `order_status` no roteamento:
+  - dine_in: buscar proxima order_status station com sort_order maior
+  - delivery/takeaway: targetStationId = null (done)
+
+### Mudancas em componentes que chamam `moveItemToNextStation`
+
+- `KdsStationCard` e outros componentes que chamam `onMoveToNext` precisarao passar o `orderType` junto
+
+## Resumo das Mudancas
+
+| Arquivo | Mudanca |
 |---|---|
-| Trigger `assign_station_on_order_confirm` | Balanceamento POR ITEM em vez de por pedido |
-| Trigger `auto_initialize_new_order_item` | Nenhuma (ja funciona por item) |
-| Edge Function `smart_move_item` | Nenhuma (ja funciona por item) |
-| Hook `useKdsWorkflow` | Nenhuma (ja funciona por item) |
-
-A unica mudanca real e no trigger SQL que roda quando o pedido e confirmado (`is_draft = false`).
+| `src/hooks/useKdsWorkflow.ts` | Roteamento order_status com order_type + optimistic update correto |
+| `supabase/functions/kds-data/index.ts` | Roteamento order_status com order_type na edge function |
+| `src/components/kds/KdsStationCard.tsx` | Passar order_type no callback onMoveToNext |
+| `src/components/kds/KdsProductionLineView.tsx` | Passar order_type ao chamar handleMoveToNext |
 
