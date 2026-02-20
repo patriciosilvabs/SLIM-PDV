@@ -278,7 +278,7 @@ export function KdsOrderStatusCard({
           {!allArrived 
             ? `Aguardando ${pendingCount} ${pendingCount === 1 ? 'item' : 'itens'}...`
             : allServed 
-              ? 'Finalizar Pedido' 
+              ? 'PRONTO!' 
               : `Servir ${totalCount - servedCount} itens restantes`
           }
         </Button>

@@ -360,11 +360,6 @@ export function KdsStationCard({
                     <CheckCircle className={cn("h-4 w-4 mr-2 animate-pulse", compact && "h-3 w-3 mr-1")} />
                     Movendo...
                   </>
-                ) : (stationType === 'order_status' && order.order_type === 'dine_in') ? (
-                  <>
-                    <CheckCircle className={cn("h-4 w-4 mr-2", compact && "h-3 w-3 mr-1")} />
-                    Servir Mesa
-                  </>
                 ) : isLastStation ? (
                   <>
                     <CheckCircle className={cn("h-4 w-4 mr-2", compact && "h-3 w-3 mr-1")} />
