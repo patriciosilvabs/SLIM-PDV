@@ -107,7 +107,7 @@ interface KdsStationCardProps {
   stationType: string;
   isFirstStation?: boolean;
   isLastStation?: boolean;
-  onMoveToNext: (itemId: string) => void;
+  onMoveToNext: (itemId: string, orderType: string) => void;
   onSkipItem?: (itemId: string) => void;
   isProcessing?: boolean;
   compact?: boolean;
@@ -193,8 +193,8 @@ export function KdsStationCard({
     // Marca como clicado imediatamente (feedback visual instantâneo)
     setClickedItems(prev => new Set(prev).add(itemId));
     
-    // Chama a ação
-    onMoveToNext(itemId);
+    // Chama a ação passando o order_type do pedido
+    onMoveToNext(itemId, order.order_type);
     
     // Reset após 3000ms (tempo suficiente para a ação completar)
     const timeout = setTimeout(() => {

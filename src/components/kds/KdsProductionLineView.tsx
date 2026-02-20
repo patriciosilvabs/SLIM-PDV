@@ -172,8 +172,8 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
        || null)
     : null;
 
-  const handleMoveToNext = (itemId: string, stationId: string) => {
-    workflow.moveItemToNextStation.mutate({ itemId, currentStationId: stationId });
+  const handleMoveToNext = (itemId: string, stationId: string, orderType?: string) => {
+    workflow.moveItemToNextStation.mutate({ itemId, currentStationId: stationId, orderType });
   };
 
   const handleSkipItem = (itemId: string, stationId: string) => {
@@ -297,7 +297,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
                   stationType={currentStation.station_type}
                   isFirstStation={isFirstStation}
                   isLastStation={isLastStation}
-                  onMoveToNext={(itemId) => handleMoveToNext(itemId, currentStation.id)}
+                  onMoveToNext={(itemId, orderType) => handleMoveToNext(itemId, currentStation.id, orderType)}
                   onSkipItem={(itemId) => handleSkipItem(itemId, currentStation.id)}
                   isProcessing={workflow.moveItemToNextStation.isPending}
                   overrideSettings={overrideSettings}
@@ -398,7 +398,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
                         stationType={station.station_type}
                         isFirstStation={isFirstStation}
                         isLastStation={isLastStation}
-                      onMoveToNext={(itemId) => handleMoveToNext(itemId, station.id)}
+                      onMoveToNext={(itemId, orderType) => handleMoveToNext(itemId, station.id, orderType)}
                       onSkipItem={(itemId) => handleSkipItem(itemId, station.id)}
                       isProcessing={workflow.moveItemToNextStation.isPending}
                       overrideSettings={overrideSettings}
