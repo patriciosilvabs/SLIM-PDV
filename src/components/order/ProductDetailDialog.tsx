@@ -370,6 +370,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
             option_name: sel.option_name,
             price: sel.price,
             quantity: sel.quantity,
+            price_calculation_type: sel.price_calculation_type,
           }],
         }));
       }
