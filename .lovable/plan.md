@@ -1,52 +1,36 @@
 
-# Plano: Fluxo do Botao DESPACHAR por Tipo de Pedido
+# Plano: Corrigir Despacho Mesa e Historico
 
-## Problema
+## Problema Identificado
 
-Atualmente, quando o usuario aperta "DESPACHAR" no card de despacho (`finalizeOrderFromStatus`), **todos os pedidos sao finalizados diretamente** (status `delivered`), independentemente do tipo. Pedidos de mesa deveriam ser movidos para a proxima estacao `order_status` (ex: "DESPACHO - MESA") em vez de serem finalizados.
+A estacao "Despacho - Mesa" esta cadastrada com `station_type = 'custom'` no banco de dados, mas o codigo procura apenas estacoes do tipo `'order_status'` para rotear pedidos de mesa. Por isso:
+
+1. Pedidos de mesa despachados em "Despacho - Geral" sao finalizados diretamente em vez de irem para "Despacho - Mesa"
+2. O historico de "Despacho - Geral" nao mostra os despachos porque o log `completed` so e criado quando o pedido e movido corretamente (e nao quando e finalizado direto)
 
 ## Solucao
 
-Alterar o `finalizeOrderFromStatus` para verificar o `order_type` do pedido:
+### 1. Migracao SQL - Corrigir tipo da estacao
 
-- **Mesa (`dine_in`)**: Move todos os itens para a proxima estacao `order_status` (com `sort_order` maior). Se nao houver proxima estacao, finaliza normalmente.
-- **Delivery / Balcao**: Finaliza diretamente como `delivered` (comportamento atual).
-
-## Mudancas
-
-### 1. useKdsWorkflow.ts - `finalizeOrderFromStatus`
-
-Modificar a mutacao para:
-
-1. Buscar o `order_type` do pedido junto com os itens
-2. Se for `dine_in`, buscar a proxima estacao `order_status` com `sort_order` maior que a estacao atual
-3. Se encontrar proxima estacao, mover todos os itens para ela (em vez de finalizar)
-4. Se nao encontrar, ou se nao for `dine_in`, manter o comportamento atual (finalizar como `delivered`)
-
-### 2. KdsOrderStatusCard.tsx - Passar `order_type` no callback
-
-O componente precisa passar o `order_type` junto ao chamar `onFinalize`, para que o workflow saiba qual fluxo seguir.
-
-### 3. KdsProductionLineView.tsx - Adaptar handler
-
-Atualizar `handleFinalizeOrder` para aceitar e repassar o `order_type` e o `stationId` atual.
-
-### Detalhes tecnicos
-
-No `finalizeOrderFromStatus`:
+Alterar o `station_type` de "Despacho - Mesa" de `custom` para `order_status`:
 
 ```text
-1. Busca order com order_type
-2. Identifica estacao atual (onde os itens estao)
-3. Se order_type === 'dine_in':
-   a. Busca proxima order_status com sort_order maior
-   b. Se existe: move itens para la, atualiza status do pedido
-   c. Se nao existe: finaliza normalmente
-4. Se delivery/takeaway: finaliza normalmente (comportamento atual)
+UPDATE kds_stations 
+SET station_type = 'order_status' 
+WHERE id = '2ebd0f1a-6b97-4f83-8dd6-c70ffc3ceeb0';
 ```
 
-### Arquivos modificados
+Isso faz com que o codigo existente ja reconheca "Despacho - Mesa" como proxima estacao de despacho.
 
-- `src/hooks/useKdsWorkflow.ts`
-- `src/components/kds/KdsOrderStatusCard.tsx`
-- `src/components/kds/KdsProductionLineView.tsx`
+### 2. useKdsWorkflow.ts - Garantir log `completed` no despacho
+
+Quando `finalizeOrderFromStatus` finaliza um pedido (delivery/takeaway ou ultima estacao), ele ja cria o log `completed`. Porem, quando move para a proxima estacao (dine_in), tambem precisa invalidar o cache do historico apos a mutacao. Adicionar invalidacao de `kds-station-history` no `onSuccess`.
+
+### 3. KdsStationHistory.tsx - Invalidar cache apos despacho
+
+Adicionar invalidacao do query `kds-station-history` no `onSuccess` do `finalizeOrderFromStatus` para que o historico atualize imediatamente apos o despacho.
+
+## Arquivos modificados
+
+- Migracao SQL (novo)
+- `src/hooks/useKdsWorkflow.ts` - adicionar invalidacao de `kds-station-history` no onSuccess do finalizeOrderFromStatus
