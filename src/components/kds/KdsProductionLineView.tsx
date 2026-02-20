@@ -496,28 +496,49 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
               </Badge>
             </div>
 
-            <ScrollArea className="h-[calc(100vh-320px)]">
-              {readyOrdersInStatus.length === 0 ? (
-                <div className="text-center text-muted-foreground text-sm py-8">
-                  Nenhum pedido pronto
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {readyOrdersInStatus.map(({ order, items }) => (
-                    <KdsOrderStatusCard
-                      key={order.id}
-                      order={order}
-                      items={items}
-                      stationColor={orderStatusStation.color}
-                      orderStatusStationId={orderStatusStation.id}
-                      onFinalize={handleFinalizeOrder}
-                      onServeItem={handleServeItem}
-                      isProcessing={workflow.finalizeOrderFromStatus.isPending || workflow.serveItem.isPending}
-                    />
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
+            <Tabs defaultValue="ativos" className="flex flex-col">
+              <TabsList className="w-fit mb-3">
+                <TabsTrigger value="ativos" className="gap-1.5 text-xs">
+                  <Circle className="h-3 w-3" />
+                  Ativos
+                </TabsTrigger>
+                <TabsTrigger value="historico" className="gap-1.5 text-xs">
+                  <History className="h-3 w-3" />
+                  Histórico
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="ativos" className="mt-0">
+                <ScrollArea className="h-[calc(100vh-380px)]">
+                  {readyOrdersInStatus.length === 0 ? (
+                    <div className="text-center text-muted-foreground text-sm py-8">
+                      Nenhum pedido pronto
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {readyOrdersInStatus.map(({ order, items }) => (
+                        <KdsOrderStatusCard
+                          key={order.id}
+                          order={order}
+                          items={items}
+                          stationColor={orderStatusStation.color}
+                          orderStatusStationId={orderStatusStation.id}
+                          onFinalize={handleFinalizeOrder}
+                          onServeItem={handleServeItem}
+                          isProcessing={workflow.finalizeOrderFromStatus.isPending || workflow.serveItem.isPending}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </TabsContent>
+              <TabsContent value="historico" className="mt-0">
+                <KdsStationHistory
+                  stationId={orderStatusStation.id}
+                  stationColor={orderStatusStation.color}
+                  tenantId={overrideTenantId}
+                />
+              </TabsContent>
+            </Tabs>
           </div>
         )}
       </div>
