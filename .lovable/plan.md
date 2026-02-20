@@ -1,51 +1,74 @@
 
 
-# Corrigir calculo de preco para pizza com multiplos sabores
+# Classificacao Inteligente de Complementos no KDS via Codigo de Grupo
 
-## Problema
-Quando o cliente escolhe 2 sabores, o sistema soma os precos dos dois sabores. O comportamento correto eh calcular a media: (preco sabor 1 + preco sabor 2) / 2.
+## Problema Atual
 
-Exemplo: Sabor A = R$40, Sabor B = R$50 --> Resultado esperado: R$45 (media), nao R$90 (soma).
+O KDS identifica o que e sabor, borda ou complemento usando **busca por palavras** no texto do `extra_name` (ex: procura "borda", "massa", "sabor"). Isso e fragil: se o nome mudar (ex: "Recheio de Borda" para "Stuffed Crust"), o sistema para de funcionar.
 
-## Causa raiz
-O grupo "Sabores" esta configurado com `price_calculation_type = 'sum'` no banco de dados. Porem, para grupos per-unit (sabores de pizza), quando ha mais de 1 unidade, o calculo deveria forcar o uso de media automaticamente.
+## Solucao Proposta
 
-## Solucao
+Adicionar um campo **`kds_category`** na tabela `complement_groups` com valores pre-definidos:
 
-### Alterar `src/components/order/ProductDetailDialog.tsx`
+- `flavor` -- Sabores (ex: Calabresa, Margherita)
+- `border` -- Bordas (ex: Borda de Chocolate)
+- `complement` -- Complementos gerais (ex: Bacon extra)
 
-Na funcao `calculatePerUnitPrice` (linha ~310), quando o `unitCount > 1`, forcar o calculo como **media** independentemente do `price_calculation_type` configurado no grupo. Isso porque, para pizza com multiplos sabores, o padrao de mercado eh cobrar a media dos sabores.
+O KDS usara esse campo para classificar corretamente cada item, em vez de adivinhar pelo nome.
 
-Logica atualizada:
+## Como vai funcionar para voce
 
-```text
-calculatePerUnitPrice():
-  para cada grupo per-unit:
-    se unitCount > 1:
-      usar calculo 'average' (media dos sabores selecionados)
-    senao:
-      usar o price_calculation_type configurado no grupo (comportamento normal)
-```
+1. Na tela de edicao de cada **grupo de complementos**, aparecera um novo campo "Categoria KDS" com as opcoes acima
+2. O KDS automaticamente mostrara:
+   - Sabores em azul com icone de sabor
+   - Bordas com destaque piscante (como ja funciona hoje, mas sem depender do nome)
+   - Complementos normais como extras simples
+3. Observacoes do item continuam aparecendo como ja aparecem (campo `notes`)
 
-### Detalhe tecnico
+## Detalhes Tecnicos
 
-Alterar a funcao `calculatePerUnitPrice` de:
+### 1. Migracao de banco de dados
+Adicionar coluna `kds_category` na tabela `complement_groups`:
+- Tipo: `text`
+- Default: `'complement'`
+- Valores permitidos: `flavor`, `border`, `complement`
 
-```
-total += calculateGroupPrice(group.id, group.price_calculation_type);
-```
+### 2. Propagacao da categoria no pedido
+Quando um pedido e salvo, a tabela `order_item_extras` atualmente recebe apenas `extra_name` e `price`. A alteracao sera:
+- Adicionar coluna `kds_category` em `order_item_extras` (texto, default `'complement'`)
+- Adicionar coluna `kds_category` em `order_item_sub_item_extras` (texto, default `'complement'`)
+- No momento da criacao do pedido (Counter.tsx, Tables.tsx), incluir a `kds_category` do grupo junto com os extras
 
-Para:
+### 3. Atualizacao do KDS
+Substituir toda a logica de string matching nos componentes KDS:
+- `KdsItemBadges.tsx` -- usar `kds_category` em vez de buscar "borda"/"massa" no nome
+- `KdsStationCard.tsx` -- usar `kds_category` para classificar sabores
+- `KdsReadOnlyOrderCard.tsx` -- idem
+- `KdsKanbanReadOnly.tsx` -- idem
+- `KdsProductionLineReadOnly.tsx` -- idem
 
-```
-const effectiveType = unitCount > 1 ? 'average' : group.price_calculation_type;
-total += calculateGroupPrice(group.id, effectiveType);
-```
+### 4. Interface de configuracao
+No dialogo de edicao do grupo de complementos (`ComplementGroupDialog.tsx`), adicionar um Select com as opcoes:
+- Sabor (flavor)
+- Borda (border)
+- Complemento (complement)
 
-Isso garante que:
-- Pizza de 1 sabor: usa o calculo normal do grupo
-- Pizza de 2+ sabores: sempre calcula a media dos precos
+### 5. Impressao de cozinha
+Atualizar `KitchenReceipt.tsx` e `escpos.ts` para usar a categoria ao formatar o ticket, mostrando sabores e bordas de forma diferenciada.
 
-### Sem alteracoes no banco de dados
-Apenas uma mudanca de logica no componente. O `price_calculation_type` do grupo permanece como esta.
+### Arquivos que serao modificados
+- `complement_groups` (migracao SQL)
+- `order_item_extras` (migracao SQL)
+- `order_item_sub_item_extras` (migracao SQL)
+- `src/components/menu/ComplementGroupDialog.tsx`
+- `src/hooks/useProductComplements.ts`
+- `src/hooks/useOrders.ts`
+- `src/pages/Counter.tsx`
+- `src/pages/Tables.tsx`
+- `src/components/kds/KdsItemBadges.tsx`
+- `src/components/kds/KdsStationCard.tsx`
+- `src/components/kds/KdsReadOnlyOrderCard.tsx`
+- `src/components/kds/KdsKanbanReadOnly.tsx`
+- `src/components/kds/KdsProductionLineReadOnly.tsx`
+- `src/components/kitchen/KitchenReceipt.tsx`
 
