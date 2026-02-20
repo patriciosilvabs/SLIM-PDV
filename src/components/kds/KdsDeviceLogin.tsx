@@ -2,12 +2,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { supabase } from '@/integrations/supabase/client';
-import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
-import { Tablet, Eye, EyeOff, LogIn, Loader2, Home } from 'lucide-react';
+import { Tablet, LogIn, Loader2, Home } from 'lucide-react';
 import logoSlim from '@/assets/logo-slim.png';
 
 interface KdsDeviceLoginProps {
@@ -29,25 +28,22 @@ export function clearDeviceAuth() {
 }
 
 export function KdsDeviceLogin({ onLoginSuccess }: KdsDeviceLoginProps) {
-  const { tenantId } = useTenant();
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [authCode, setAuthCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim() || !password.trim() || !tenantId) return;
+    if (verificationCode.length !== 6 || authCode.length !== 6) return;
 
     setIsLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('kds-device-auth', {
         body: {
-          action: 'login',
-          username: username.trim(),
-          password: password.trim(),
-          tenant_id: tenantId,
+          action: 'login_by_codes',
+          verification_code: verificationCode,
+          auth_code: authCode,
         },
       });
 
@@ -56,15 +52,12 @@ export function KdsDeviceLogin({ onLoginSuccess }: KdsDeviceLoginProps) {
 
       const device = data.device;
       
-      // Store auth in localStorage
       const authData = {
         deviceId: device.device_id,
         deviceName: device.name,
         stationId: device.station_id,
       };
       localStorage.setItem(DEVICE_AUTH_KEY, JSON.stringify(authData));
-      
-      // Also update KDS device settings for compatibility
       localStorage.setItem('pdv_kds_device_id', device.device_id);
       localStorage.setItem('pdv_kds_device_settings', JSON.stringify({
         deviceId: device.device_id,
@@ -91,48 +84,47 @@ export function KdsDeviceLogin({ onLoginSuccess }: KdsDeviceLoginProps) {
             <CardTitle className="text-xl">Login do Dispositivo KDS</CardTitle>
           </div>
           <p className="text-sm text-muted-foreground">
-            Insira as credenciais cadastradas para este dispositivo
+            Insira os códigos fornecidos pelo administrador
           </p>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <Label htmlFor="device-username">Usuário</Label>
-              <Input
-                id="device-username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Ex: cozinha1"
-                autoComplete="username"
-                autoFocus
-              />
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div className="space-y-2">
+              <Label>Código Verificador</Label>
+              <p className="text-xs text-muted-foreground">Vincula o dispositivo à conta</p>
+              <div className="flex justify-center">
+                <InputOTP maxLength={6} value={verificationCode} onChange={setVerificationCode}>
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
+              </div>
             </div>
-            <div>
-              <Label htmlFor="device-password">Senha</Label>
-              <div className="relative">
-                <Input
-                  id="device-password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Senha do dispositivo"
-                  autoComplete="current-password"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
+            <div className="space-y-2">
+              <Label>Código de Autenticação</Label>
+              <p className="text-xs text-muted-foreground">Faz login no dispositivo</p>
+              <div className="flex justify-center">
+                <InputOTP maxLength={6} value={authCode} onChange={setAuthCode}>
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
               </div>
             </div>
             <Button
               type="submit"
               className="w-full gap-2"
-              disabled={!username.trim() || !password.trim() || isLoading}
+              disabled={verificationCode.length !== 6 || authCode.length !== 6 || isLoading}
             >
               {isLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

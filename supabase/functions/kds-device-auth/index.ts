@@ -6,19 +6,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Simple hash using Web Crypto API (SHA-256 with salt)
-async function hashPassword(password: string, salt: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(salt + password);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function generateSalt(): Promise<string> {
-  const array = new Uint8Array(16);
+function generateCode(): string {
+  const array = new Uint8Array(4);
   crypto.getRandomValues(array);
-  return Array.from(array).map(b => b.toString(16).padStart(2, "0")).join("");
+  const num = ((array[0] << 16) | (array[1] << 8) | array[2]) % 900000 + 100000;
+  return num.toString();
 }
 
 serve(async (req) => {
@@ -34,33 +26,37 @@ serve(async (req) => {
     const { action, ...params } = await req.json();
 
     if (action === "register") {
-      // Register a new device with username/password
-      const { username, password, name, station_id, tenant_id } = params;
+      const { name, station_id, tenant_id } = params;
 
-      if (!username || !password || !name || !tenant_id) {
+      if (!name || !tenant_id) {
         return new Response(
-          JSON.stringify({ error: "username, password, name e tenant_id são obrigatórios" }),
+          JSON.stringify({ error: "name e tenant_id são obrigatórios" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // Check if username already exists for this tenant
-      const { data: existing } = await supabase
-        .from("kds_devices")
-        .select("id")
-        .eq("username", username)
-        .eq("tenant_id", tenant_id)
-        .maybeSingle();
-
-      if (existing) {
+      // Generate unique verification code (retry on collision)
+      let verification_code = "";
+      for (let i = 0; i < 10; i++) {
+        const candidate = generateCode();
+        const { data: existing } = await supabase
+          .from("kds_devices")
+          .select("id")
+          .eq("verification_code", candidate)
+          .maybeSingle();
+        if (!existing) {
+          verification_code = candidate;
+          break;
+        }
+      }
+      if (!verification_code) {
         return new Response(
-          JSON.stringify({ error: "Nome de usuário já existe para esta loja" }),
-          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: "Não foi possível gerar código único. Tente novamente." }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const salt = await generateSalt();
-      const passwordHash = await hashPassword(password, salt);
+      const auth_code = generateCode();
       const deviceId = crypto.randomUUID();
 
       const { data: device, error } = await supabase
@@ -68,11 +64,11 @@ serve(async (req) => {
         .insert({
           device_id: deviceId,
           name,
-          username,
-          password_hash: salt + ":" + passwordHash,
           station_id: station_id || null,
           tenant_id,
           operation_mode: "production_line",
+          verification_code,
+          auth_code,
         })
         .select()
         .single();
@@ -80,44 +76,40 @@ serve(async (req) => {
       if (error) throw error;
 
       return new Response(
-        JSON.stringify({ success: true, device }),
+        JSON.stringify({ success: true, device, verification_code, auth_code }),
         { status: 201, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (action === "login") {
-      // Login with username/password
-      const { username, password, tenant_id } = params;
+    if (action === "login_by_codes") {
+      const { verification_code, auth_code } = params;
 
-      if (!username || !password || !tenant_id) {
+      if (!verification_code || !auth_code) {
         return new Response(
-          JSON.stringify({ error: "username, password e tenant_id são obrigatórios" }),
+          JSON.stringify({ error: "verification_code e auth_code são obrigatórios" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
+      // Lookup by verification_code globally (no tenant needed)
       const { data: device, error } = await supabase
         .from("kds_devices")
         .select("*")
-        .eq("username", username)
-        .eq("tenant_id", tenant_id)
+        .eq("verification_code", verification_code)
         .maybeSingle();
 
       if (error) throw error;
 
-      if (!device || !device.password_hash) {
+      if (!device) {
         return new Response(
-          JSON.stringify({ error: "Credenciais inválidas" }),
+          JSON.stringify({ error: "Código verificador inválido" }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const [salt, storedHash] = device.password_hash.split(":");
-      const inputHash = await hashPassword(password, salt);
-
-      if (inputHash !== storedHash) {
+      if (device.auth_code !== auth_code) {
         return new Response(
-          JSON.stringify({ error: "Credenciais inválidas" }),
+          JSON.stringify({ error: "Código de autenticação inválido" }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -129,33 +121,80 @@ serve(async (req) => {
         .eq("id", device.id);
 
       return new Response(
-        JSON.stringify({ success: true, device: { ...device, password_hash: undefined } }),
+        JSON.stringify({
+          success: true,
+          device: { ...device, password_hash: undefined, auth_code: undefined, verification_code: undefined },
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (action === "update_password") {
-      const { device_id, new_password } = params;
+    if (action === "regenerate_codes") {
+      const { device_id } = params;
 
-      if (!device_id || !new_password) {
+      if (!device_id) {
         return new Response(
-          JSON.stringify({ error: "device_id e new_password são obrigatórios" }),
+          JSON.stringify({ error: "device_id é obrigatório" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const salt = await generateSalt();
-      const passwordHash = await hashPassword(new_password, salt);
+      // Generate new unique verification code
+      let verification_code = "";
+      for (let i = 0; i < 10; i++) {
+        const candidate = generateCode();
+        const { data: existing } = await supabase
+          .from("kds_devices")
+          .select("id")
+          .eq("verification_code", candidate)
+          .maybeSingle();
+        if (!existing) {
+          verification_code = candidate;
+          break;
+        }
+      }
+      if (!verification_code) {
+        return new Response(
+          JSON.stringify({ error: "Não foi possível gerar código único. Tente novamente." }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const auth_code = generateCode();
 
       const { error } = await supabase
         .from("kds_devices")
-        .update({ password_hash: salt + ":" + passwordHash })
+        .update({ verification_code, auth_code })
         .eq("id", device_id);
 
       if (error) throw error;
 
       return new Response(
-        JSON.stringify({ success: true }),
+        JSON.stringify({ success: true, verification_code, auth_code }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (action === "get_codes") {
+      const { device_id } = params;
+
+      if (!device_id) {
+        return new Response(
+          JSON.stringify({ error: "device_id é obrigatório" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { data: device, error } = await supabase
+        .from("kds_devices")
+        .select("verification_code, auth_code")
+        .eq("id", device_id)
+        .single();
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true, verification_code: device.verification_code, auth_code: device.auth_code }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

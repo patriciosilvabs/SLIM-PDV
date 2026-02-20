@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.replicate-menu]
 verify_jwt = false
+
+[functions.kds-device-auth]
+verify_jwt = false

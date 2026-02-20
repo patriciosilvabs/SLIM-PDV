@@ -23,9 +23,9 @@ import {
   Clock, 
   Tablet,
   Plus,
-  Eye,
-  EyeOff,
-  KeyRound
+  KeyRound,
+  Copy,
+  RefreshCw
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -50,23 +50,18 @@ export function KdsDevicesSettings() {
   // New device registration
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newUsername, setNewUsername] = useState('');
-  const [newPassword, setNewPassword] = useState('');
   const [newStationId, setNewStationId] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
 
-  // Reset password
-  const [resetPasswordDeviceId, setResetPasswordDeviceId] = useState<string | null>(null);
-  const [resetPassword, setResetPassword] = useState('');
-  const [showResetPassword, setShowResetPassword] = useState(false);
+  // Show codes dialog
+  const [showCodesDialog, setShowCodesDialog] = useState(false);
+  const [codesData, setCodesData] = useState<{ verification_code: string; auth_code: string; deviceName: string } | null>(null);
+  const [isLoadingCodes, setIsLoadingCodes] = useState(false);
 
   const createDeviceMutation = useMutation({
-    mutationFn: async (params: { name: string; username: string; password: string; station_id: string | null }) => {
+    mutationFn: async (params: { name: string; station_id: string | null }) => {
       const { data, error } = await supabase.functions.invoke('kds-device-auth', {
         body: {
           action: 'register',
-          username: params.username,
-          password: params.password,
           name: params.name,
           station_id: params.station_id,
           tenant_id: tenantId,
@@ -76,14 +71,18 @@ export function KdsDevicesSettings() {
       if (data?.error) throw new Error(data.error);
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['kds-devices-all'] });
-      toast.success('Dispositivo cadastrado com sucesso');
       setShowCreateDialog(false);
       setNewName('');
-      setNewUsername('');
-      setNewPassword('');
       setNewStationId(null);
+      // Show codes dialog
+      setCodesData({
+        verification_code: data.verification_code,
+        auth_code: data.auth_code,
+        deviceName: data.device.name,
+      });
+      setShowCodesDialog(true);
     },
     onError: (error: any) => {
       toast.error(error.message || 'Erro ao cadastrar dispositivo');
@@ -126,24 +125,55 @@ export function KdsDevicesSettings() {
     },
   });
 
-  const resetPasswordMutation = useMutation({
-    mutationFn: async ({ device_id, new_password }: { device_id: string; new_password: string }) => {
+  const regenerateCodesMutation = useMutation({
+    mutationFn: async (device_id: string) => {
       const { data, error } = await supabase.functions.invoke('kds-device-auth', {
-        body: { action: 'update_password', device_id, new_password },
+        body: { action: 'regenerate_codes', device_id },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       return data;
     },
-    onSuccess: () => {
-      toast.success('Senha redefinida com sucesso');
-      setResetPasswordDeviceId(null);
-      setResetPassword('');
+    onSuccess: (data, device_id) => {
+      const dev = allDevices.find(d => d.id === device_id);
+      setCodesData({
+        verification_code: data.verification_code,
+        auth_code: data.auth_code,
+        deviceName: dev?.name || 'Dispositivo',
+      });
+      setShowCodesDialog(true);
+      toast.success('Códigos regenerados com sucesso');
     },
     onError: (error: any) => {
-      toast.error(error.message || 'Erro ao redefinir senha');
+      toast.error(error.message || 'Erro ao regenerar códigos');
     },
   });
+
+  const handleViewCodes = async (device: KdsDevice) => {
+    setIsLoadingCodes(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('kds-device-auth', {
+        body: { action: 'get_codes', device_id: device.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setCodesData({
+        verification_code: data.verification_code,
+        auth_code: data.auth_code,
+        deviceName: device.name,
+      });
+      setShowCodesDialog(true);
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao buscar códigos');
+    } finally {
+      setIsLoadingCodes(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copiado!`);
+  };
 
   const openEdit = (device: KdsDevice) => {
     setEditingDevice(device);
@@ -161,11 +191,9 @@ export function KdsDevicesSettings() {
   };
 
   const handleCreateDevice = () => {
-    if (!newName.trim() || !newUsername.trim() || !newPassword.trim()) return;
+    if (!newName.trim()) return;
     createDeviceMutation.mutate({
       name: newName,
-      username: newUsername,
-      password: newPassword,
       station_id: newStationId,
     });
   };
@@ -191,7 +219,7 @@ export function KdsDevicesSettings() {
                   Dispositivos KDS
                 </CardTitle>
                 <CardDescription>
-                  Cadastre e gerencie os tablets e dispositivos conectados ao KDS. Cada dispositivo precisa de login e senha para acessar.
+                  Cadastre e gerencie os tablets e dispositivos conectados ao KDS. Cada dispositivo recebe códigos automáticos para acesso.
                 </CardDescription>
               </div>
               <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
@@ -272,12 +300,6 @@ export function KdsDevicesSettings() {
                           </Badge>
                         </div>
                         <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
-                          {(dev as any).username && (
-                            <span className="flex items-center gap-1">
-                              <KeyRound className="h-3 w-3" />
-                              {(dev as any).username}
-                            </span>
-                          )}
                           {station ? (
                             <span className="flex items-center gap-1">
                               <Circle className="h-2.5 w-2.5" style={{ color: station.color, fill: station.color }} />
@@ -302,8 +324,9 @@ export function KdsDevicesSettings() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => setResetPasswordDeviceId(dev.id)}
-                        title="Redefinir senha"
+                        onClick={() => handleViewCodes(dev)}
+                        title="Ver códigos"
+                        disabled={isLoadingCodes}
                       >
                         <KeyRound className="h-4 w-4" />
                       </Button>
@@ -419,36 +442,6 @@ export function KdsDevicesSettings() {
               />
             </div>
             <div>
-              <Label>Usuário (login)</Label>
-              <Input
-                value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
-                placeholder="Ex: cozinha1"
-                autoComplete="off"
-              />
-            </div>
-            <div>
-              <Label>Senha</Label>
-              <div className="relative">
-                <Input
-                  type={showPassword ? 'text' : 'password'}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Senha de acesso"
-                  autoComplete="new-password"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-            <div>
               <Label>Praça Atribuída (opcional)</Label>
               <Select
                 value={newStationId || 'none'}
@@ -475,15 +468,87 @@ export function KdsDevicesSettings() {
                 </SelectContent>
               </Select>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Os códigos de acesso serão gerados automaticamente após o cadastro.
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateDialog(false)}>Cancelar</Button>
             <Button
               onClick={handleCreateDevice}
-              disabled={!newName.trim() || !newUsername.trim() || !newPassword.trim() || createDeviceMutation.isPending}
+              disabled={!newName.trim() || createDeviceMutation.isPending}
             >
               {createDeviceMutation.isPending ? 'Cadastrando...' : 'Cadastrar'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de códigos */}
+      <Dialog open={showCodesDialog} onOpenChange={setShowCodesDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Códigos de Acesso — {codesData?.deviceName}</DialogTitle>
+          </DialogHeader>
+          {codesData && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Anote estes códigos. Eles serão necessários para conectar o dispositivo ao KDS.
+              </p>
+              <div className="space-y-3">
+                <div className="p-4 rounded-lg border bg-muted/30">
+                  <div className="flex items-center justify-between mb-1">
+                    <Label className="text-xs text-muted-foreground">Código Verificador</Label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs gap-1"
+                      onClick={() => copyToClipboard(codesData.verification_code, 'Código verificador')}
+                    >
+                      <Copy className="h-3 w-3" />
+                      Copiar
+                    </Button>
+                  </div>
+                  <div className="text-3xl font-mono font-bold tracking-[0.3em] text-center">
+                    {codesData.verification_code}
+                  </div>
+                </div>
+                <div className="p-4 rounded-lg border bg-muted/30">
+                  <div className="flex items-center justify-between mb-1">
+                    <Label className="text-xs text-muted-foreground">Código de Autenticação</Label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs gap-1"
+                      onClick={() => copyToClipboard(codesData.auth_code, 'Código de autenticação')}
+                    >
+                      <Copy className="h-3 w-3" />
+                      Copiar
+                    </Button>
+                  </div>
+                  <div className="text-3xl font-mono font-bold tracking-[0.3em] text-center">
+                    {codesData.auth_code}
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 gap-2"
+                  onClick={() => {
+                    const dev = allDevices.find(d => d.name === codesData.deviceName);
+                    if (dev) regenerateCodesMutation.mutate(dev.id);
+                  }}
+                  disabled={regenerateCodesMutation.isPending}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Regenerar Códigos
+                </Button>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setShowCodesDialog(false)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -535,47 +600,6 @@ export function KdsDevicesSettings() {
             <Button variant="outline" onClick={() => setEditingDevice(null)}>Cancelar</Button>
             <Button onClick={handleSaveEdit} disabled={!editName.trim() || updateDeviceMutation.isPending}>
               Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog de redefinir senha */}
-      <Dialog open={!!resetPasswordDeviceId} onOpenChange={() => { setResetPasswordDeviceId(null); setResetPassword(''); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Redefinir Senha do Dispositivo</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Nova Senha</Label>
-              <div className="relative">
-                <Input
-                  type={showResetPassword ? 'text' : 'password'}
-                  value={resetPassword}
-                  onChange={(e) => setResetPassword(e.target.value)}
-                  placeholder="Nova senha"
-                  autoComplete="new-password"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                  onClick={() => setShowResetPassword(!showResetPassword)}
-                >
-                  {showResetPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setResetPasswordDeviceId(null); setResetPassword(''); }}>Cancelar</Button>
-            <Button
-              onClick={() => resetPasswordDeviceId && resetPasswordMutation.mutate({ device_id: resetPasswordDeviceId, new_password: resetPassword })}
-              disabled={!resetPassword.trim() || resetPasswordMutation.isPending}
-            >
-              {resetPasswordMutation.isPending ? 'Redefinindo...' : 'Redefinir Senha'}
             </Button>
           </DialogFooter>
         </DialogContent>
