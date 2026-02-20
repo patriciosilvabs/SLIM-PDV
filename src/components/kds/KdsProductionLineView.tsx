@@ -86,9 +86,11 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
   const productionStations = hasOverrideStations
     ? overrideStations.filter((s: any) => s.is_active && s.station_type !== 'order_status')
     : hookProductionStations;
-  const orderStatusStation = hasOverrideStations
-    ? overrideStations.find((s: any) => s.is_active && s.station_type === 'order_status') || null
-    : hookOrderStatusStation;
+  // All order_status stations (for general view multi-column dispatch)
+  const allOrderStatusStations = hasOverrideStations
+    ? overrideStations.filter((s: any) => s.is_active && s.station_type === 'order_status')
+    : activeStations.filter(s => s.station_type === 'order_status');
+  const orderStatusStation = allOrderStatusStations[0] || null;
 
   // Use override workflow if provided (device-only mode)
   const workflow = overrideWorkflow || {
@@ -200,35 +202,39 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
     workflow.serveItem.mutate(itemId);
   };
 
-  // Pedidos no despacho - aparece quando QUALQUER item chega na estação order_status
-  // Mostra TODOS os itens do pedido (os que ainda estão em produção ficam opacos no card)
-  // Pedidos no despacho - usa a estação atribuída (currentStation) se for order_status,
-  // senão usa a primeira orderStatusStation (visão geral)
+  // Pedidos no despacho - per station map for general view (all order_status stations)
+  const readyOrdersByStation = useMemo(() => {
+    const result = new Map<string, { order: Order; items: OrderItem[] }[]>();
+    
+    for (const station of allOrderStatusStations) {
+      const stationOrders = filteredOrders
+        .filter(order => {
+          const items = order.order_items || [];
+          const activeItems = items.filter(i => i.status !== 'cancelled');
+          if (activeItems.length === 0) return false;
+          return activeItems.some(item => item.current_station_id === station.id);
+        })
+        .map(order => {
+          const activeItems = (order.order_items || []).filter(i => i.status !== 'cancelled');
+          return { order, items: activeItems };
+        })
+        .filter(entry => entry.items.length > 0);
+      
+      result.set(station.id, stationOrders);
+    }
+    
+    return result;
+  }, [filteredOrders, allOrderStatusStations]);
+
+  // For assigned station view (single station)
   const readyOrdersInStatus = useMemo(() => {
     const targetStationId = (currentStation?.station_type === 'order_status')
       ? currentStation.id
       : orderStatusStation?.id;
     
     if (!targetStationId) return [];
-    
-    return filteredOrders
-      .filter(order => {
-        const items = order.order_items || [];
-        const activeItems = items.filter(i => i.status !== 'cancelled');
-        if (activeItems.length === 0) return false;
-        
-        // Mostra se o pedido já está ready OU se pelo menos 1 item chegou a ESTA estação order_status
-        if (order.status === 'ready' && activeItems.some(item => item.current_station_id === targetStationId)) return true;
-        return activeItems.some(
-          item => item.current_station_id === targetStationId
-        );
-      })
-      .map(order => {
-        const activeItems = (order.order_items || []).filter(i => i.status !== 'cancelled');
-        return { order, items: activeItems };
-      })
-      .filter(entry => entry.items.length > 0);
-  }, [filteredOrders, orderStatusStation, currentStation]);
+    return readyOrdersByStation.get(targetStationId) || [];
+  }, [readyOrdersByStation, currentStation, orderStatusStation]);
 
   if ((hasOverrideStations ? false : stationsLoading) || isLoading) {
     return (
@@ -418,10 +424,12 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
       {/* Colunas por praça de produção */}
       <div className={cn(
         "grid gap-6",
-        orderStatusStation 
-          ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-4" 
+        allOrderStatusStations.length > 0
+          ? `grid-cols-1 md:grid-cols-2 lg:grid-cols-${Math.min(productionStations.length + allOrderStatusStations.length, 6)}`
           : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
-      )}>
+      )}
+      style={{ gridTemplateColumns: `repeat(${Math.min(productionStations.length + allOrderStatusStations.length, 6)}, minmax(0, 1fr))` }}
+      >
         {productionStations.map((station, idx) => {
           const stationOrders = itemsByStation.get(station.id) || [];
           const totalItems = stationOrders.reduce((acc, o) => acc + o.items.length, 0);
@@ -477,70 +485,73 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
           );
         })}
 
-        {/* Coluna de Status do Pedido */}
-        {orderStatusStation && (
-          <div>
-            <div 
-              className="flex items-center gap-2 mb-3 p-2 rounded-lg"
-              style={{ backgroundColor: orderStatusStation.color + '15' }}
-            >
+        {/* Colunas de Despacho (todas as estações order_status) */}
+        {allOrderStatusStations.map((dispatchStation) => {
+          const stationOrders = readyOrdersByStation.get(dispatchStation.id) || [];
+          return (
+            <div key={dispatchStation.id}>
               <div 
-                className="h-6 w-6 rounded-full flex items-center justify-center"
-                style={{ backgroundColor: orderStatusStation.color + '30' }}
+                className="flex items-center gap-2 mb-3 p-2 rounded-lg"
+                style={{ backgroundColor: dispatchStation.color + '15' }}
               >
-                <CheckCircle className="h-3 w-3" style={{ color: orderStatusStation.color }} />
+                <div 
+                  className="h-6 w-6 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: dispatchStation.color + '30' }}
+                >
+                  <CheckCircle className="h-3 w-3" style={{ color: dispatchStation.color }} />
+                </div>
+                <span className="font-semibold text-sm">{dispatchStation.name}</span>
+                <Badge variant="secondary" className="ml-auto text-xs">
+                  {stationOrders.length}
+                </Badge>
               </div>
-              <span className="font-semibold text-sm">{orderStatusStation.name}</span>
-              <Badge variant="secondary" className="ml-auto text-xs">
-                {readyOrdersInStatus.length}
-              </Badge>
-            </div>
 
-            <Tabs defaultValue="ativos" className="flex flex-col">
-              <TabsList className="w-fit mb-3">
-                <TabsTrigger value="ativos" className="gap-1.5 text-xs">
-                  <Circle className="h-3 w-3" />
-                  Ativos
-                </TabsTrigger>
-                <TabsTrigger value="historico" className="gap-1.5 text-xs">
-                  <History className="h-3 w-3" />
-                  Histórico
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="ativos" className="mt-0">
-                <ScrollArea className="h-[calc(100vh-380px)]">
-                  {readyOrdersInStatus.length === 0 ? (
-                    <div className="text-center text-muted-foreground text-sm py-8">
-                      Nenhum pedido pronto
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {readyOrdersInStatus.map(({ order, items }) => (
-                        <KdsOrderStatusCard
-                          key={order.id}
-                          order={order}
-                          items={items}
-                          stationColor={orderStatusStation.color}
-                          orderStatusStationId={orderStatusStation.id}
-                          onFinalize={handleFinalizeOrder}
-                          onServeItem={handleServeItem}
-                          isProcessing={workflow.finalizeOrderFromStatus.isPending || workflow.serveItem.isPending}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </ScrollArea>
-              </TabsContent>
-              <TabsContent value="historico" className="mt-0">
-                <KdsStationHistory
-                  stationId={orderStatusStation.id}
-                  stationColor={orderStatusStation.color}
-                  tenantId={overrideTenantId}
-                />
-              </TabsContent>
-            </Tabs>
-          </div>
-        )}
+              <Tabs defaultValue="ativos" className="flex flex-col">
+                <TabsList className="w-fit mb-3">
+                  <TabsTrigger value="ativos" className="gap-1.5 text-xs">
+                    <Circle className="h-3 w-3" />
+                    Ativos
+                  </TabsTrigger>
+                  <TabsTrigger value="historico" className="gap-1.5 text-xs">
+                    <History className="h-3 w-3" />
+                    Histórico
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="ativos" className="mt-0">
+                  <ScrollArea className="h-[calc(100vh-380px)]">
+                    {stationOrders.length === 0 ? (
+                      <div className="text-center text-muted-foreground text-sm py-8">
+                        Nenhum pedido pronto
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {stationOrders.map(({ order, items }) => (
+                          <KdsOrderStatusCard
+                            key={order.id}
+                            order={order}
+                            items={items}
+                            stationColor={dispatchStation.color}
+                            orderStatusStationId={dispatchStation.id}
+                            onFinalize={handleFinalizeOrder}
+                            onServeItem={handleServeItem}
+                            isProcessing={workflow.finalizeOrderFromStatus.isPending || workflow.serveItem.isPending}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </TabsContent>
+                <TabsContent value="historico" className="mt-0">
+                  <KdsStationHistory
+                    stationId={dispatchStation.id}
+                    stationColor={dispatchStation.color}
+                    tenantId={overrideTenantId}
+                  />
+                </TabsContent>
+              </Tabs>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
