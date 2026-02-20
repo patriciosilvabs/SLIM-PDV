@@ -1487,6 +1487,19 @@ export default function KDS() {
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
             <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
           </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => {
+              clearDeviceAuth();
+              setDeviceAuth(null);
+            }}
+            className="gap-1.5 text-destructive hover:text-destructive"
+            title="Sair do KDS e trocar dispositivo"
+          >
+            <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">Sair KDS</span>
+          </Button>
         </div>
       </div>
 
