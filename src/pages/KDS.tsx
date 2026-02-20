@@ -786,8 +786,8 @@ export default function KDS() {
     );
   }
 
-  // Permission check AFTER all hooks
-  if (!permissionsLoading && !hasPermission('kds_view')) {
+  // Permission check AFTER all hooks - skip for device-only auth (no user session)
+  if (!deviceAuth && !permissionsLoading && !hasPermission('kds_view')) {
     return <AccessDenied permission="kds_view" />;
   }
 
