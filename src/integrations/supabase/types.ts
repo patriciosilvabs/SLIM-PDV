@@ -3062,6 +3062,7 @@ export type Database = {
     Functions: {
       belongs_to_tenant: { Args: { _tenant_id: string }; Returns: boolean }
       can_bootstrap_admin: { Args: { _user_id: string }; Returns: boolean }
+      cleanup_kds_station_logs: { Args: never; Returns: undefined }
       get_user_tenant_id: { Args: never; Returns: string }
       has_active_subscription: {
         Args: { _tenant_id: string }
