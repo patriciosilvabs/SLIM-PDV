@@ -242,6 +242,9 @@ export function useKdsWorkflow() {
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['orders'] });
       }, 2000);
+      queryClient.invalidateQueries({ queryKey: ['kds-station-history'] });
+      queryClient.invalidateQueries({ queryKey: ['kds-station-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['kds-all-stations-metrics'] });
       if (result.isComplete) {
         toast.success('Item concluído!');
       }
@@ -619,6 +622,7 @@ export function useKdsWorkflow() {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['kds-station-logs'] });
       queryClient.invalidateQueries({ queryKey: ['kds-all-stations-metrics'] });
+      queryClient.invalidateQueries({ queryKey: ['kds-station-history'] });
       if ('movedToStation' in result && result.movedToStation) {
         toast.success(`Pedido movido para ${result.movedToStation}`);
       } else {
