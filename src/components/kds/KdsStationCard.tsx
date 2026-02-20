@@ -66,7 +66,20 @@ interface OrderItem {
   variation?: { name: string } | null;
   extras?: Array<{ extra_name: string; price: number; kds_category?: string }>;
   added_by_profile?: { name: string } | null;
+  sub_items?: Array<{ id: string; sub_item_index: number; notes: string | null; sub_extras?: Array<{ group_name: string; option_name: string; kds_category?: string }> }> | null;
 }
+
+// Combinar observações do item principal com observações dos sub_items
+const getItemNotes = (item: OrderItem): string | null => {
+  const mainNotes = item.notes;
+  const subNotes = item.sub_items
+    ?.filter(si => si.notes)
+    .map(si => si.notes)
+    .join('; ');
+  
+  if (mainNotes && subNotes) return `${mainNotes} | ${subNotes}`;
+  return mainNotes || subNotes || null;
+};
 
 interface Order {
   id: string;
@@ -198,7 +211,7 @@ export function KdsStationCard({
               <span className="text-xs text-muted-foreground">({item.variation.name})</span>
             )}
           </div>
-          <KdsItemBadges notes={item.notes} extras={item.extras} />
+          <KdsItemBadges notes={getItemNotes(item)} extras={item.extras} />
         </div>
       );
     }
@@ -214,7 +227,7 @@ export function KdsStationCard({
               <span className="text-xs text-muted-foreground">({item.variation.name})</span>
             )}
           </div>
-          <KdsItemBadges notes={item.notes} extras={item.extras} />
+          <KdsItemBadges notes={getItemNotes(item)} extras={item.extras} />
           {flavors.length > 0 && (
             <p className="text-sm text-blue-600 mt-0.5">
               🍕 {flavors.join(' + ')}
@@ -235,7 +248,7 @@ export function KdsStationCard({
               <span className="text-xs text-muted-foreground">({item.variation.name})</span>
             )}
           </div>
-          <KdsItemBadges notes={item.notes} extras={item.extras} />
+          <KdsItemBadges notes={getItemNotes(item)} extras={item.extras} />
           {flavors.length > 0 && (
             <p className="text-sm text-blue-600 mt-0.5">
               🍕 {flavors.join(' + ')}
@@ -255,7 +268,7 @@ export function KdsStationCard({
             <span className="text-xs text-muted-foreground">({item.variation.name})</span>
           )}
         </div>
-        <KdsItemBadges notes={item.notes} extras={item.extras} />
+        <KdsItemBadges notes={getItemNotes(item)} extras={item.extras} />
         {flavors.length > 0 && (
           <p className="text-sm text-blue-600 mt-0.5">
             🍕 {flavors.join(' + ')}

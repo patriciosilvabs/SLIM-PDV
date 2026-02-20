@@ -12,7 +12,20 @@ interface OrderItem {
   product?: { name: string } | null;
   variation?: { name: string } | null;
   extras?: Array<{ extra_name: string; price: number; kds_category?: string }>;
+  sub_items?: Array<{ id: string; sub_item_index: number; notes: string | null }> | null;
 }
+
+// Combinar observações do item principal com observações dos sub_items
+const getItemNotes = (item: OrderItem): string | null => {
+  const mainNotes = item.notes;
+  const subNotes = item.sub_items
+    ?.filter(si => si.notes)
+    .map(si => si.notes)
+    .join('; ');
+  
+  if (mainNotes && subNotes) return `${mainNotes} | ${subNotes}`;
+  return mainNotes || subNotes || null;
+};
 
 interface Order {
   id: string;
@@ -139,8 +152,8 @@ export function KdsReadOnlyOrderCard({
                     </p>
                   )}
                   {/* Observações */}
-                  {item.notes && (
-                    <p className="text-xs text-amber-600 pl-2 italic">📝 {item.notes}</p>
+                  {getItemNotes(item) && (
+                    <p className="text-xs text-amber-600 pl-2 italic">📝 {getItemNotes(item)}</p>
                   )}
                 </div>
               );
