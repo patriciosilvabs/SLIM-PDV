@@ -91,7 +91,40 @@ export function useKdsDeviceData(deviceAuth: DeviceAuth | null) {
         current_station_id: currentStationId,
       });
     },
-    onSuccess: () => {
+    // Optimistic update: remove item from current station immediately
+    onMutate: async ({ itemId, currentStationId }) => {
+      await queryClient.cancelQueries({ queryKey: ['kds-device-data'] });
+      const previous = queryClient.getQueryData(['kds-device-data', deviceAuth?.deviceId, deviceAuth?.tenantId]);
+
+      queryClient.setQueryData(
+        ['kds-device-data', deviceAuth?.deviceId, deviceAuth?.tenantId],
+        (old: KdsDataResult | null | undefined) => {
+          if (!old) return old;
+          return {
+            ...old,
+            orders: old.orders.map((order: any) => ({
+              ...order,
+              order_items: order.order_items?.map((item: any) =>
+                item.id === itemId
+                  ? { ...item, current_station_id: '__moving__', station_status: 'moving' }
+                  : item
+              ),
+            })),
+          };
+        }
+      );
+
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(
+          ['kds-device-data', deviceAuth?.deviceId, deviceAuth?.tenantId],
+          context.previous
+        );
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['kds-device-data'] });
     },
   });
