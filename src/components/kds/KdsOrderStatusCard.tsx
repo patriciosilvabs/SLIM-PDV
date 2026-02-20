@@ -15,6 +15,8 @@ interface OrderItem {
   variation?: { name: string } | null;
   extras?: Array<{ extra_name: string; price: number }>;
   served_at?: string | null;
+  current_station_id?: string | null;
+  station_status?: string;
 }
 
 interface Order {
@@ -32,6 +34,7 @@ interface KdsOrderStatusCardProps {
   order: Order;
   items: OrderItem[];
   stationColor: string;
+  orderStatusStationId?: string;
   onFinalize: (orderId: string) => void;
   onServeItem?: (itemId: string) => void;
   isProcessing?: boolean;
@@ -41,6 +44,7 @@ export function KdsOrderStatusCard({
   order,
   items,
   stationColor,
+  orderStatusStationId,
   onFinalize,
   onServeItem,
   isProcessing,
@@ -75,10 +79,21 @@ export function KdsOrderStatusCard({
   const origin = getOrderOrigin();
   const OriginIcon = origin.icon;
 
-  // Contar itens servidos
+  // Verificar se o item já chegou ao despacho (está na estação order_status ou done)
+  const isItemAtDispatch = (item: OrderItem) => {
+    if (item.served_at) return true;
+    if (item.station_status === 'done') return true;
+    if (orderStatusStationId && item.current_station_id === orderStatusStationId) return true;
+    return false;
+  };
+
+  // Contar itens servidos e itens que chegaram ao despacho
   const servedCount = items.filter(item => item.served_at).length;
+  const arrivedCount = items.filter(item => isItemAtDispatch(item)).length;
   const totalCount = items.length;
   const allServed = servedCount === totalCount;
+  const allArrived = arrivedCount === totalCount;
+  const pendingCount = totalCount - arrivedCount;
 
   return (
     <Card 
@@ -152,67 +167,90 @@ export function KdsOrderStatusCard({
           </div>
         )}
 
+        {/* Indicador de itens pendentes em produção */}
+        {pendingCount > 0 && (
+          <div className="flex items-center justify-center gap-2 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
+            <Clock className={cn("h-4 w-4 text-amber-600 animate-pulse", compact && "h-3 w-3")} />
+            <span className={cn("font-semibold text-amber-700 dark:text-amber-400 text-sm", compact && "text-xs")}>
+              Aguardando {pendingCount} {pendingCount === 1 ? 'item' : 'itens'} em produção
+            </span>
+          </div>
+        )}
+
         {/* Lista de itens individuais */}
         <div className={cn("border-t border-border/50 pt-3 space-y-2", compact && "pt-2 space-y-1.5")}>
-          {items.map((item) => (
-            <div 
-              key={item.id}
-              className={cn(
-                "flex items-center justify-between gap-2 p-2 rounded-lg border",
-                item.served_at 
-                  ? "bg-green-500/10 border-green-500/30" 
-                  : "bg-background/50 border-border/50",
-                compact && "p-1.5"
-              )}
-            >
-              <div className="flex-1 min-w-0">
-                <div className={cn("flex items-center gap-1.5", compact && "gap-1")}>
-                  <Badge variant="secondary" className={cn("text-xs shrink-0", compact && "text-[10px] px-1")}>
-                    x{item.quantity}
-                  </Badge>
-                  <span className={cn(
-                    "font-medium truncate text-sm",
-                    compact && "text-xs",
-                    item.served_at && "text-green-700 dark:text-green-400"
-                  )}>
-                    {item.product?.name || 'Item'}
-                  </span>
+          {items.map((item) => {
+            const arrived = isItemAtDispatch(item);
+            return (
+              <div 
+                key={item.id}
+                className={cn(
+                  "flex items-center justify-between gap-2 p-2 rounded-lg border transition-opacity",
+                  item.served_at 
+                    ? "bg-green-500/10 border-green-500/30" 
+                    : arrived 
+                      ? "bg-background/50 border-border/50"
+                      : "bg-muted/20 border-dashed border-muted-foreground/30 opacity-40",
+                  compact && "p-1.5"
+                )}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className={cn("flex items-center gap-1.5", compact && "gap-1")}>
+                    <Badge variant="secondary" className={cn("text-xs shrink-0", compact && "text-[10px] px-1")}>
+                      x{item.quantity}
+                    </Badge>
+                    <span className={cn(
+                      "font-medium truncate text-sm",
+                      compact && "text-xs",
+                      item.served_at && "text-green-700 dark:text-green-400",
+                      !arrived && "italic text-muted-foreground"
+                    )}>
+                      {item.product?.name || 'Item'}
+                    </span>
+                    {!arrived && (
+                      <Badge variant="outline" className="text-[10px] px-1 text-amber-600 border-amber-500/50 shrink-0">
+                        em produção
+                      </Badge>
+                    )}
+                  </div>
+                  {item.variation && (
+                    <span className={cn("text-xs text-muted-foreground ml-6", compact && "text-[10px] ml-5")}>
+                      {item.variation.name}
+                    </span>
+                  )}
                 </div>
-                {item.variation && (
-                  <span className={cn("text-xs text-muted-foreground ml-6", compact && "text-[10px] ml-5")}>
-                    {item.variation.name}
-                  </span>
+
+                {item.served_at ? (
+                  <Badge 
+                    variant="outline" 
+                    className={cn(
+                      "text-green-600 border-green-500/50 bg-green-500/10 shrink-0",
+                      compact && "text-[10px] px-1.5"
+                    )}
+                  >
+                    <Check className={cn("h-3 w-3 mr-1", compact && "h-2.5 w-2.5")} />
+                    {format(new Date(item.served_at), 'HH:mm')}
+                  </Badge>
+                ) : arrived ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onServeItem?.(item.id)}
+                    disabled={isProcessing}
+                    className={cn(
+                      "shrink-0 h-7 px-2 text-xs",
+                      compact && "h-6 px-1.5 text-[10px]"
+                    )}
+                    style={{ borderColor: stationColor, color: stationColor }}
+                  >
+                    Servir
+                  </Button>
+                ) : (
+                  <Clock className="h-4 w-4 text-muted-foreground/50 shrink-0 animate-pulse" />
                 )}
               </div>
-
-              {item.served_at ? (
-                <Badge 
-                  variant="outline" 
-                  className={cn(
-                    "text-green-600 border-green-500/50 bg-green-500/10 shrink-0",
-                    compact && "text-[10px] px-1.5"
-                  )}
-                >
-                  <Check className={cn("h-3 w-3 mr-1", compact && "h-2.5 w-2.5")} />
-                  {format(new Date(item.served_at), 'HH:mm')}
-                </Badge>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onServeItem?.(item.id)}
-                  disabled={isProcessing}
-                  className={cn(
-                    "shrink-0 h-7 px-2 text-xs",
-                    compact && "h-6 px-1.5 text-[10px]"
-                  )}
-                  style={{ borderColor: stationColor, color: stationColor }}
-                >
-                  Servir
-                </Button>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Nome do cliente se houver */}
@@ -223,21 +261,26 @@ export function KdsOrderStatusCard({
           </div>
         )}
 
-        {/* Botão finalizar pedido */}
+        {/* Botão finalizar pedido - só ativa quando todos chegaram E foram servidos */}
         <Button
           size={compact ? "sm" : "default"}
           onClick={() => onFinalize(order.id)}
-          disabled={isProcessing || !allServed}
+          disabled={isProcessing || !allServed || !allArrived}
           className={cn(
             "w-full",
             compact && "h-8 text-xs",
-            !allServed && "opacity-50"
+            (!allServed || !allArrived) && "opacity-50"
           )}
-          style={{ backgroundColor: allServed ? stationColor : undefined }}
-          variant={allServed ? "default" : "outline"}
+          style={{ backgroundColor: allServed && allArrived ? stationColor : undefined }}
+          variant={allServed && allArrived ? "default" : "outline"}
         >
           <Package className={cn("h-4 w-4 mr-2", compact && "h-3 w-3 mr-1")} />
-          {allServed ? 'Finalizar Pedido' : `Servir ${totalCount - servedCount} itens restantes`}
+          {!allArrived 
+            ? `Aguardando ${pendingCount} ${pendingCount === 1 ? 'item' : 'itens'}...`
+            : allServed 
+              ? 'Finalizar Pedido' 
+              : `Servir ${totalCount - servedCount} itens restantes`
+          }
         </Button>
       </CardContent>
     </Card>
