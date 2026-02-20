@@ -1670,7 +1670,7 @@ export default function KDS() {
           <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : kdsSettings.operationMode === 'production_line' ? (
-        <KdsProductionLineView orders={orders} isLoading={isLoading} />
+        <KdsProductionLineView orders={orders} isLoading={isLoading} overrideTenantId={deviceAuth?.tenantId} />
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {kdsSettings.showPendingColumn && (

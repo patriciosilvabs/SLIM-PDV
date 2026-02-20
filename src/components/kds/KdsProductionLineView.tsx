@@ -43,11 +43,12 @@ interface Order {
 interface KdsProductionLineViewProps {
   orders: UseOrdersOrder[];
   isLoading: boolean;
+  overrideTenantId?: string | null;
 }
 
-export function KdsProductionLineView({ orders, isLoading }: KdsProductionLineViewProps) {
+export function KdsProductionLineView({ orders, isLoading, overrideTenantId }: KdsProductionLineViewProps) {
   const { activeStations, productionStations, orderStatusStation, isLoading: stationsLoading } = useKdsStations();
-  const { settings } = useKdsSettings();
+  const { settings } = useKdsSettings(overrideTenantId);
   const { 
     moveItemToNextStation,
     skipItemToNextStation,
