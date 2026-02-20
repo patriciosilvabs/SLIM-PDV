@@ -62,7 +62,7 @@ interface KdsProductionLineViewProps {
   overrideWorkflow?: {
     moveItemToNextStation: { mutate: (params: { itemId: string; currentStationId: string }) => void; isPending: boolean };
     skipItemToNextStation: { mutate: (params: { itemId: string; currentStationId: string }) => void };
-    finalizeOrderFromStatus: { mutate: (orderId: string) => void; isPending: boolean };
+    finalizeOrderFromStatus: { mutate: (params: { orderId: string; orderType?: string; currentStationId?: string }) => void; isPending: boolean };
     serveItem: { mutate: (itemId: string) => void; isPending: boolean };
   };
 }
@@ -180,9 +180,21 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
     workflow.skipItemToNextStation.mutate({ itemId, currentStationId: stationId });
   };
 
-  const handleFinalizeOrder = (orderId: string) => {
-    workflow.finalizeOrderFromStatus.mutate(orderId);
+  const handleFinalizeOrder = (orderId: string, orderType?: string) => {
+    // Determine which order_status station the order is currently at
+    const order = filteredOrders.find(o => o.id === orderId);
+    const currentStationId = order?.order_items?.find(
+      item => item.current_station_id && orderStatusStationIds.includes(item.current_station_id)
+    )?.current_station_id || orderStatusStation?.id;
+    
+    workflow.finalizeOrderFromStatus.mutate({ orderId, orderType, currentStationId });
   };
+
+  // IDs de todas as estações order_status
+  const orderStatusStationIds = useMemo(() => {
+    const allOrderStatusStations = activeStations.filter(s => s.station_type === 'order_status');
+    return allOrderStatusStations.map(s => s.id);
+  }, [activeStations]);
 
   const handleServeItem = (itemId: string) => {
     workflow.serveItem.mutate(itemId);

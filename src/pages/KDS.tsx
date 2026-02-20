@@ -1784,7 +1784,7 @@ export default function KDS() {
               },
             },
             finalizeOrderFromStatus: {
-              mutate: (orderId: string) => {
+              mutate: ({ orderId }: { orderId: string; orderType?: string; currentStationId?: string }) => {
                 deviceData.updateOrderStatus.mutate({ orderId, status: 'delivered' });
               },
               isPending: deviceData.updateOrderStatus.isPending,

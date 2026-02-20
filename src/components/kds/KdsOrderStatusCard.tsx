@@ -35,7 +35,7 @@ interface KdsOrderStatusCardProps {
   items: OrderItem[];
   stationColor: string;
   orderStatusStationId?: string;
-  onFinalize: (orderId: string) => void;
+  onFinalize: (orderId: string, orderType?: string) => void;
   onServeItem?: (itemId: string) => void;
   isProcessing?: boolean;
 }
@@ -170,7 +170,7 @@ export function KdsOrderStatusCard({
         {/* BOTÃO DESPACHAR - no topo, perto do timer */}
         <Button
           size={compact ? "sm" : "lg"}
-          onClick={() => onFinalize(order.id)}
+          onClick={() => onFinalize(order.id, order.order_type)}
           disabled={isProcessing || !allArrived}
           className={cn(
             "w-full font-bold text-lg",

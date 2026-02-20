@@ -521,12 +521,60 @@ export function useKdsWorkflow() {
     },
   });
 
-  // Finalizar pedido na estação de status (marcar como entregue)
+  // Finalizar pedido na estação de status (marcar como entregue ou mover para próximo despacho)
   const finalizeOrderFromStatus = useMutation({
-    mutationFn: async (orderId: string) => {
+    mutationFn: async ({ orderId, orderType, currentStationId }: { orderId: string; orderType?: string; currentStationId?: string }) => {
       const now = new Date().toISOString();
 
-      // Buscar todos os itens do pedido na estação order_status
+      // Se for dine_in, verificar se existe próxima estação order_status
+      if (orderType === 'dine_in' && currentStationId) {
+        const currentStation = activeStations.find(s => s.id === currentStationId);
+        if (currentStation) {
+          const nextOrderStatus = orderStatusStations
+            ?.filter(s => s.is_active && s.station_type === 'order_status' && (s.sort_order ?? 0) > (currentStation.sort_order ?? 0))
+            .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))[0];
+
+          if (nextOrderStatus) {
+            // Mover todos os itens para a próxima estação order_status
+            const { data: items, error: fetchError } = await supabase
+              .from('order_items')
+              .select('id, current_station_id')
+              .eq('order_id', orderId);
+
+            if (fetchError) throw fetchError;
+
+            for (const item of items || []) {
+              if (item.current_station_id) {
+                await logAction.mutateAsync({
+                  orderItemId: item.id,
+                  stationId: item.current_station_id,
+                  action: 'completed',
+                }).catch(() => {});
+              }
+
+              await supabase
+                .from('order_items')
+                .update({
+                  current_station_id: nextOrderStatus.id,
+                  station_status: 'waiting',
+                  station_started_at: null,
+                  station_completed_at: now,
+                })
+                .eq('id', item.id);
+
+              await logAction.mutateAsync({
+                orderItemId: item.id,
+                stationId: nextOrderStatus.id,
+                action: 'entered',
+              }).catch(() => {});
+            }
+
+            return { orderId, movedToStation: nextOrderStatus.name };
+          }
+        }
+      }
+
+      // Comportamento padrão: finalizar como delivered (delivery/takeaway ou última estação)
       const { data: items, error: fetchError } = await supabase
         .from('order_items')
         .select('id, current_station_id, served_at')
@@ -534,10 +582,8 @@ export function useKdsWorkflow() {
 
       if (fetchError) throw fetchError;
 
-      // Marcar todos os itens como done e servidos (se ainda não estiverem)
       for (const item of items || []) {
         if (item.current_station_id && orderStatusStationIds.includes(item.current_station_id)) {
-          // Log de conclusão
           await logAction.mutateAsync({
             orderItemId: item.id,
             stationId: item.current_station_id,
@@ -552,12 +598,11 @@ export function useKdsWorkflow() {
             station_status: 'done',
             station_completed_at: now,
             status: 'delivered',
-            served_at: item.served_at || now, // Marca como servido se ainda não estiver
+            served_at: item.served_at || now,
           })
           .eq('id', item.id);
       }
 
-      // Atualizar pedido para delivered
       const { error } = await supabase
         .from('orders')
         .update({ 
@@ -570,11 +615,15 @@ export function useKdsWorkflow() {
 
       return { orderId };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['kds-station-logs'] });
       queryClient.invalidateQueries({ queryKey: ['kds-all-stations-metrics'] });
-      toast.success('Pedido entregue!');
+      if ('movedToStation' in result && result.movedToStation) {
+        toast.success(`Pedido movido para ${result.movedToStation}`);
+      } else {
+        toast.success('Pedido entregue!');
+      }
     },
     onError: (error) => {
       toast.error('Erro ao finalizar pedido');
