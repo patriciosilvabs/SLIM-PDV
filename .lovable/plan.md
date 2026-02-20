@@ -1,55 +1,50 @@
 
 
-# Roteamento Inteligente KDS - Implementado
+# Correcao: Bancada de Borda mostrando colunas extras + Roteamento Preparo → Despacho
 
-## Fluxo de Roteamento
+## Problema 1: Bancada de Borda visualizando colunas das Bancadas de Preparo
 
-```text
-Pedido confirmado (is_draft → false)
-  |
-  v
-Trigger verifica cada item:
-  |
-  ├── Item COM borda? → Praça "Preparando Massa e Borda"
-  │                        |
-  │                        v (operador aperta "Próximo")
-  │                        → Praça de preparo com MENOR FILA (A ou B)
-  │
-  └── Item SEM borda? → Praça de preparo com MENOR FILA (A ou B) direto
-                           |
-                           v (operador aperta "Próximo")
-                           → Despacho (order_status)
-```
+**Causa raiz identificada**: Quando o dispositivo tem `assignedStationId` definido, o componente `KdsProductionLineView` deveria mostrar APENAS a coluna dessa praca (modo single-station). Porem, a busca do `currentStation` pode falhar em cenarios especificos, fazendo o sistema renderizar o modo "visao geral" (todas as colunas).
 
-## O que foi feito
+**Correcao**: Adicionar validacao robusta no `KdsProductionLineView` para garantir que o modo single-station sempre funcione quando ha `assignedStationId`. Tambem filtrar os itens exibidos para mostrar apenas itens que pertencem a essa praca, eliminando qualquer possibilidade de ver dados de outras pracas.
 
-### 1. Banco de dados
-- Dividiu "Preparando Recheio" em "Preparando Recheio A" e "Preparando Recheio B"
-- Atualizou BANCADA B para apontar para a nova praça B
-- Trigger `assign_station_on_order_confirm` agora faz roteamento inteligente:
-  - Verifica border_keywords nos extras/notes do item
-  - Itens com borda → praça de borda (prep_start)
-  - Itens sem borda → praça de preparo com menor fila (item_assembly)
-  - Todos os itens do mesmo pedido vão para a MESMA praça de preparo
+## Problema 2: Preparo marcando "proximo" nao envia para Despacho
 
-### 2. Edge Function (kds-data)
-- Novo action `smart_move_item`: roteamento inteligente server-side
-  - prep_start → least-busy item_assembly
-  - item_assembly → order_status (despacho)
-  - Inclui load balancing e logging automático
+**Causa raiz identificada**: O roteamento inteligente (`smart_move_item` na Edge Function e `getSmartNextStation` no hook) ja tem a logica `item_assembly → order_status`. Porem, a estacao "Despachado - Item Servido na mesa" (ID `2ebd0f1a`) esta com tipo `custom` em vez de `order_status`, o que impede o sistema de encontra-la como estacao de despacho. Alem disso, o `findDispatchStation` busca apenas estacoes do tipo `order_status`.
 
-### 3. Frontend
-- `useKdsWorkflow.ts`: `moveItemToNextStation` agora usa roteamento inteligente
-  - prep_start → busca item_assembly com menor fila
-  - item_assembly → vai direto para despacho
-- `useKdsDeviceData.ts`: novo mutation `smartMoveItem`
-- `KDS.tsx`: device-only mode usa `smart_move_item` via edge function
-- `KdsProductionLineView.tsx`: aceita `overrideSettings` para bypass de RLS
-- `KdsStationCard.tsx`: aceita settings como props
+**Correcao**: O roteamento ja funciona para estacoes com tipo `order_status`. A estacao "Despachado - Delivery/Retirada" (tipo `order_status`) recebe os itens corretamente. Para a estacao "Despachado / Garcom", sera necessario verificar se o tipo precisa ser alterado ou se o roteamento deve considerar ambos os tipos.
 
-### Praças configuradas
-- **Preparando Massa e Borda** (sort_order: 0, prep_start) → BANCADA DE BORDAS
-- **Preparando Recheio A** (sort_order: 1, item_assembly) → BANCADA A
-- **Preparando Recheio B** (sort_order: 1, item_assembly) → BANCADA B
-- **Despachado - Delivery/Retirada** (sort_order: 5, order_status) → DESPACHO DELIVERY
-- **Despachado - Item Servido** (sort_order: 6, custom) → DESPACHO GARÇOM
+---
+
+## Mudancas Tecnicas
+
+### 1. `src/components/kds/KdsProductionLineView.tsx`
+
+- Quando `settings.assignedStationId` estiver definido, FORCAR modo single-station mesmo que `activeStations.find()` falhe (buscar a estacao em `overrideStations` como fallback)
+- Adicionar log de depuracao temporario para identificar se o `assignedStationId` chega corretamente
+- Garantir que a renderizacao NUNCA mostre colunas de outras pracas quando ha uma praca atribuida
+
+### 2. `src/pages/KDS.tsx`
+
+- Garantir que o `assignedStationId` do dispositivo (de `deviceAuth.stationId`) seja priorizado sobre qualquer outro valor
+- Quando em device-only mode, usar `deviceAuth.stationId` diretamente em vez de depender de `kdsSettings.assignedStationId` (que pode ser null se o localStorage nao foi salvo corretamente)
+
+### 3. `supabase/functions/kds-data/index.ts` (Edge Function)
+
+- Verificar e corrigir a funcao `findDispatchStation` para garantir que encontra a estacao de despacho correta
+- Adicionar verificacao de que a estacao "Despachado / Garcom" (tipo `custom`) tambem e considerada como destino apos item_assembly, se necessario
+
+### 4. `src/hooks/useKdsWorkflow.ts`
+
+- Garantir que `getSmartNextStation` para `item_assembly` sempre encontra a estacao de despacho (order_status)
+- Adicionar fallback caso nenhuma estacao order_status seja encontrada
+
+---
+
+## Resumo das Correcoes
+
+| Problema | Causa | Solucao |
+|----------|-------|---------|
+| Borda ve colunas extras | `assignedStationId` pode nao estar sendo usado corretamente | Priorizar `deviceAuth.stationId` e forcar modo single-station |
+| Preparo nao vai para Despacho | Roteamento funciona mas pode ter tipo de estacao incorreto | Verificar tipos de estacao e corrigir a busca de dispatch |
+
