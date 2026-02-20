@@ -15,7 +15,7 @@ interface KdsDeviceLoginProps {
 
 const DEVICE_AUTH_KEY = 'kds_device_auth';
 
-export function getStoredDeviceAuth(): { deviceId: string; deviceName: string; stationId: string | null } | null {
+export function getStoredDeviceAuth(): { deviceId: string; deviceName: string; stationId: string | null; tenantId: string | null } | null {
   try {
     const stored = localStorage.getItem(DEVICE_AUTH_KEY);
     if (stored) return JSON.parse(stored);
@@ -56,6 +56,7 @@ export function KdsDeviceLogin({ onLoginSuccess }: KdsDeviceLoginProps) {
         deviceId: device.device_id,
         deviceName: device.name,
         stationId: device.station_id,
+        tenantId: device.tenant_id || null,
       };
       localStorage.setItem(DEVICE_AUTH_KEY, JSON.stringify(authData));
       localStorage.setItem('pdv_kds_device_id', device.device_id);
