@@ -37,6 +37,7 @@ interface ComplementGroup {
   price_calculation_type: 'sum' | 'average' | 'highest' | 'lowest';
   applies_per_unit?: boolean;
   unit_count?: number;
+  kds_category?: 'flavor' | 'border' | 'complement';
 }
 
 interface ComplementOption {
@@ -60,6 +61,7 @@ export interface SelectedComplement {
   price: number;
   quantity: number;
   price_calculation_type?: 'sum' | 'average' | 'highest' | 'lowest';
+  kds_category?: 'flavor' | 'border' | 'complement';
 }
 
 // Extended interface for sub-items (individual pizzas in a combo)
@@ -112,6 +114,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
       price_calculation_type: g.price_calculation_type as 'sum' | 'average' | 'highest' | 'lowest',
       applies_per_unit: g.applies_per_unit,
       unit_count: g.unit_count,
+      kds_category: g.kds_category,
       options: g.options.map(opt => ({
         id: opt.id,
         name: opt.name,
@@ -179,6 +182,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
         price,
         quantity: 1,
         price_calculation_type: group.price_calculation_type,
+        kds_category: group.kds_category,
       }],
     }));
   };
@@ -199,6 +203,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
             price,
             quantity: 1,
             price_calculation_type: group.price_calculation_type as 'sum' | 'average' | 'highest' | 'lowest',
+            kds_category: group.kds_category,
           }],
         };
       } else {
@@ -247,6 +252,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
             price,
             quantity: 1,
             price_calculation_type: group.price_calculation_type as 'sum' | 'average' | 'highest' | 'lowest',
+            kds_category: group.kds_category,
           }],
         };
       }
@@ -271,6 +277,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
             price,
             quantity: 1,
             price_calculation_type: group.price_calculation_type,
+            kds_category: group.kds_category,
           }],
         };
       } else {
@@ -385,6 +392,7 @@ export function ProductDetailDialog({ open, onOpenChange, product, onAdd, duplic
             price: sel.price,
             quantity: sel.quantity,
             price_calculation_type: sel.price_calculation_type,
+            kds_category: sel.kds_category,
           }],
         }));
       }

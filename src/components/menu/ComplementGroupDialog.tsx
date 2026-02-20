@@ -225,6 +225,7 @@ export function ComplementGroupDialog({
       { count: 2, label: '2 Sabores', description: 'Pizza metade/metade' },
     ],
     applicable_flavor_counts: [1, 2],
+    kds_category: 'complement',
   });
   const [selectedOptionIds, setSelectedOptionIds] = React.useState<string[]>([]);
   const [localOptions, setLocalOptions] = React.useState<ComplementOption[]>([]);
@@ -276,6 +277,7 @@ export function ComplementGroupDialog({
             { count: 2, label: '2 Sabores', description: 'Pizza metade/metade' },
           ],
           applicable_flavor_counts: group.applicable_flavor_counts ?? [1, 2],
+          kds_category: group.kds_category ?? 'complement',
         });
         setIsAdvancedOpen(
           (group.price_calculation_type !== 'sum' && group.price_calculation_type !== null) ||
@@ -399,22 +401,24 @@ export function ComplementGroupDialog({
             />
           </div>
 
-          {/* Channels & Visibility */}
+          {/* KDS Category & Visibility */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Disponível nos links de</Label>
-              <div className="flex flex-wrap gap-2">
-                {CHANNEL_OPTIONS.map(channel => (
-                  <Badge
-                    key={channel.value}
-                    variant={form.channels?.includes(channel.value) ? 'default' : 'outline'}
-                    className="cursor-pointer"
-                    onClick={() => toggleChannel(channel.value)}
-                  >
-                    {channel.label}
-                  </Badge>
-                ))}
-              </div>
+              <Label>Categoria KDS</Label>
+              <Select
+                value={form.kds_category || 'complement'}
+                onValueChange={(v) => setForm({ ...form, kds_category: v as 'flavor' | 'border' | 'complement' })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="complement">Complemento</SelectItem>
+                  <SelectItem value="flavor">Sabor</SelectItem>
+                  <SelectItem value="border">Borda</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Define como o KDS exibirá este grupo</p>
             </div>
             <div className="space-y-2">
               <Label>Visibilidade</Label>
@@ -431,6 +435,23 @@ export function ComplementGroupDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+          {/* Channels */}
+          <div className="space-y-2">
+            <Label>Disponível nos links de</Label>
+            <div className="flex flex-wrap gap-2">
+              {CHANNEL_OPTIONS.map(channel => (
+                <Badge
+                  key={channel.value}
+                  variant={form.channels?.includes(channel.value) ? 'default' : 'outline'}
+                  className="cursor-pointer"
+                  onClick={() => toggleChannel(channel.value)}
+                >
+                  {channel.label}
+                </Badge>
+              ))}
             </div>
           </div>
 

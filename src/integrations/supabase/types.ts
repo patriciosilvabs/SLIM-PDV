@@ -464,6 +464,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           is_required: boolean | null
+          kds_category: string
           max_selections: number | null
           min_selections: number | null
           name: string
@@ -487,6 +488,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           is_required?: boolean | null
+          kds_category?: string
           max_selections?: number | null
           min_selections?: number | null
           name: string
@@ -510,6 +512,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           is_required?: boolean | null
+          kds_category?: string
           max_selections?: number | null
           min_selections?: number | null
           name?: string
@@ -1204,6 +1207,7 @@ export type Database = {
           extra_id: string | null
           extra_name: string
           id: string
+          kds_category: string
           order_item_id: string
           price: number
           tenant_id: string | null
@@ -1212,6 +1216,7 @@ export type Database = {
           extra_id?: string | null
           extra_name: string
           id?: string
+          kds_category?: string
           order_item_id: string
           price: number
           tenant_id?: string | null
@@ -1220,6 +1225,7 @@ export type Database = {
           extra_id?: string | null
           extra_name?: string
           id?: string
+          kds_category?: string
           order_item_id?: string
           price?: number
           tenant_id?: string | null
@@ -1254,6 +1260,7 @@ export type Database = {
           group_id: string | null
           group_name: string
           id: string
+          kds_category: string
           option_id: string | null
           option_name: string
           price: number
@@ -1266,6 +1273,7 @@ export type Database = {
           group_id?: string | null
           group_name: string
           id?: string
+          kds_category?: string
           option_id?: string | null
           option_name: string
           price?: number
@@ -1278,6 +1286,7 @@ export type Database = {
           group_id?: string | null
           group_name?: string
           id?: string
+          kds_category?: string
           option_id?: string | null
           option_name?: string
           price?: number

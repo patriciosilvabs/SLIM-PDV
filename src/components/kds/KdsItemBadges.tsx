@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 interface OrderItemExtra {
   extra_name: string;
   price?: number;
+  kds_category?: string;
 }
 
 interface KdsItemBadgesProps {
@@ -13,7 +14,7 @@ interface KdsItemBadgesProps {
   compact?: boolean;
 }
 
-// Extrair informação da borda dos extras e verificar se deve destacar
+// Extrair informação da borda dos extras usando kds_category
 const getBorderInfo = (
   extras?: OrderItemExtra[],
   hasSpecialBorder?: (text: string) => boolean,
@@ -21,19 +22,28 @@ const getBorderInfo = (
 ): { text: string; shouldHighlight: boolean } | null => {
   if (!extras || extras.length === 0) return null;
   
-  // Encontrar extra que contém "borda" ou "massa" (para extrair o nome)
-  const borderExtra = extras.find(e => {
+  // Primeiro tentar por kds_category
+  const borderExtra = extras.find(e => e.kds_category === 'border');
+  
+  // Fallback: buscar por texto (compatibilidade com pedidos antigos)
+  const fallbackBorderExtra = !borderExtra ? extras.find(e => {
     const lower = e.extra_name.toLowerCase();
     return lower.includes('borda') || lower.includes('massa');
-  });
+  }) : null;
   
-  if (!borderExtra) return null;
+  const selectedExtra = borderExtra || fallbackBorderExtra;
+  if (!selectedExtra) return null;
   
   // "Massa & Borda: Borda de Chocolate" → "Borda de Chocolate"
-  const parts = borderExtra.extra_name.split(':');
-  const borderText = parts.length > 1 ? parts[1].trim() : borderExtra.extra_name;
+  const parts = selectedExtra.extra_name.split(':');
+  const borderText = parts.length > 1 ? parts[1].trim() : selectedExtra.extra_name;
   
-  // Verificar se deve destacar baseado nas palavras-chave configuradas
+  // Se encontrou por kds_category, sempre destacar
+  if (borderExtra) {
+    return { text: borderText, shouldHighlight: true };
+  }
+  
+  // Fallback: verificar por palavras-chave configuradas
   const shouldHighlight = highlightEnabled && hasSpecialBorder 
     ? hasSpecialBorder(borderText) 
     : false;
@@ -41,10 +51,21 @@ const getBorderInfo = (
   return { text: borderText, shouldHighlight };
 };
 
-// Extrair sabores dos extras (exclui bordas)
+// Extrair sabores dos extras usando kds_category
 export const getFlavorsFromExtras = (extras?: OrderItemExtra[]): string[] => {
   if (!extras || extras.length === 0) return [];
   
+  // Primeiro tentar por kds_category
+  const flavorExtras = extras.filter(e => e.kds_category === 'flavor');
+  
+  if (flavorExtras.length > 0) {
+    return flavorExtras.map(e => {
+      const parts = e.extra_name.split(':');
+      return parts.length > 1 ? parts[1].trim() : e.extra_name;
+    });
+  }
+  
+  // Fallback: buscar por texto (compatibilidade com pedidos antigos)
   return extras
     .filter(e => {
       const lower = e.extra_name.toLowerCase();
@@ -67,7 +88,7 @@ export function KdsItemBadges({ notes, extras, compact = false }: KdsItemBadgesP
   const borderColors = getBadgeColorClasses(settings.borderBadgeColor);
   const notesColors = getBadgeColorClasses(settings.notesBadgeColor);
   
-  // Só mostra borda se houver E se deveria destacar
+  // Mostra borda se shouldHighlight for true
   const showBorder = borderInfo?.shouldHighlight;
   
   if (!showBorder && !notes) {
@@ -80,7 +101,6 @@ export function KdsItemBadges({ notes, extras, compact = false }: KdsItemBadgesP
 
   return (
     <div className={cn("flex flex-wrap gap-1", compact ? "mt-0.5" : "mt-1")}>
-      {/* Badge de borda - só aparece se shouldHighlight for true */}
       {showBorder && borderInfo && (
         <span className={cn(
           "inline-flex rounded font-bold relative overflow-hidden animate-pulse",
@@ -91,7 +111,6 @@ export function KdsItemBadges({ notes, extras, compact = false }: KdsItemBadgesP
         </span>
       )}
       
-      {/* Badge de observações - SEMPRE pisca */}
       {notes && (
         <span className={cn(
           "inline-flex rounded font-bold relative overflow-hidden animate-pulse",
@@ -114,7 +133,6 @@ export function KdsBorderOnlyBadge({ extras, compact = false }: { extras?: Order
   const borderInfo = getBorderInfo(extras, hasSpecialBorder, settings.highlightSpecialBorders);
   const borderColors = getBadgeColorClasses(settings.borderBadgeColor);
   
-  // Só mostra se shouldHighlight for true
   if (!borderInfo?.shouldHighlight) {
     return null;
   }

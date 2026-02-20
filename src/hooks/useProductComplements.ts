@@ -15,6 +15,7 @@ export interface GroupWithOptions {
   visibility: string;
   channels: string[];
   applicable_flavor_counts: number[] | null;
+  kds_category: 'flavor' | 'border' | 'complement';
   options: {
     id: string;
     name: string;
@@ -137,6 +138,7 @@ export function useProductComplements(
             visibility: group.visibility ?? 'visible',
             channels: group.channels ?? ['delivery', 'counter', 'table'],
             applicable_flavor_counts: group.applicable_flavor_counts ?? null,
+            kds_category: (group.kds_category as 'flavor' | 'border' | 'complement') ?? 'complement',
             options,
           };
         });

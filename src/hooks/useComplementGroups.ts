@@ -29,6 +29,7 @@ export interface ComplementGroup {
   flavor_modal_channels: string[] | null;
   flavor_options: FlavorOption[] | null;
   applicable_flavor_counts: number[] | null;
+  kds_category: 'flavor' | 'border' | 'complement';
   created_at: string | null;
   updated_at: string | null;
 }
