@@ -5,6 +5,10 @@ import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 
 // https://vitejs.dev/config/
+// Generate version from build timestamp: YYYY.MM.DD.HHmm
+const now = new Date();
+const BUILD_VERSION = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')}.${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
@@ -211,5 +215,8 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
     dedupe: ["react", "react-dom", "react/jsx-runtime"],
+  },
+  define: {
+    __BUILD_VERSION__: JSON.stringify(BUILD_VERSION),
   },
 }));
