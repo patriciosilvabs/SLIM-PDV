@@ -54,6 +54,7 @@ export interface StoreData {
     price_calculation_type: string | null;
     channels: string[] | null;
     visibility: string | null;
+    kds_category: string;
   }>;
   groupOptions: Array<{
     id: string;

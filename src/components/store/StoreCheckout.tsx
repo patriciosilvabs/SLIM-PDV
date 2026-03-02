@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Store, Truck, Banknote, CreditCard, QrCode, Loader2 } from 'lucide-react';
+import { Store, Truck, Banknote, CreditCard, QrCode, Loader2, MapPin } from 'lucide-react';
 
 interface StoreCheckoutProps {
   open: boolean;
@@ -52,34 +52,36 @@ export function StoreCheckout({ open, onClose, onSubmit, total, isTable, isLoadi
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
-      <SheetContent side="bottom" className="h-[90vh] rounded-t-2xl p-0 flex flex-col">
+      <SheetContent side="bottom" className="h-[92vh] rounded-t-3xl p-0 flex flex-col">
         <SheetHeader className="p-4 border-b border-border">
-          <SheetTitle>Finalizar Pedido</SheetTitle>
+          <SheetTitle>Como você quer receber o pedido?</SheetTitle>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-5">
-          {/* Order type (not shown for table orders) */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          {/* Order type */}
           {!isTable && (
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold">Tipo do pedido</Label>
-              <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-3">
+              <Label className="text-sm font-bold">Tipo do pedido</Label>
+              <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => setOrderType('takeaway')}
-                  className={`flex items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all ${
-                    orderType === 'takeaway' ? 'border-primary bg-primary/5' : 'border-border'
+                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${
+                    orderType === 'takeaway' ? 'border-amber-500 bg-amber-50/50 shadow-sm' : 'border-border hover:border-amber-200'
                   }`}
                 >
-                  <Store className="h-5 w-5" />
-                  <span className="text-sm font-medium">Retirada</span>
+                  <Store className={`h-7 w-7 ${orderType === 'takeaway' ? 'text-amber-600' : 'text-muted-foreground'}`} />
+                  <span className="text-sm font-semibold">Retirada</span>
+                  <span className="text-[10px] text-muted-foreground">Retire no local</span>
                 </button>
                 <button
                   onClick={() => setOrderType('delivery')}
-                  className={`flex items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all ${
-                    orderType === 'delivery' ? 'border-primary bg-primary/5' : 'border-border'
+                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${
+                    orderType === 'delivery' ? 'border-amber-500 bg-amber-50/50 shadow-sm' : 'border-border hover:border-amber-200'
                   }`}
                 >
-                  <Truck className="h-5 w-5" />
-                  <span className="text-sm font-medium">Entrega</span>
+                  <Truck className={`h-7 w-7 ${orderType === 'delivery' ? 'text-amber-600' : 'text-muted-foreground'}`} />
+                  <span className="text-sm font-semibold">Entrega</span>
+                  <span className="text-[10px] text-muted-foreground">A gente leva até você</span>
                 </button>
               </div>
             </div>
@@ -87,50 +89,56 @@ export function StoreCheckout({ open, onClose, onSubmit, total, isTable, isLoadi
 
           {/* Customer info */}
           <div className="space-y-3">
-            <Label className="text-sm font-semibold">Seus dados</Label>
+            <Label className="text-sm font-bold">Seus dados</Label>
             <Input
               placeholder="Nome"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="rounded-lg"
+              className="rounded-xl h-11"
             />
             <Input
-              placeholder="Telefone"
+              placeholder="Telefone (WhatsApp)"
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="rounded-lg"
+              className="rounded-xl h-11"
             />
             {isDelivery && (
-              <Textarea
-                placeholder="Endereço completo para entrega *"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                className="rounded-lg"
-                rows={2}
-              />
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <MapPin className="h-3.5 w-3.5" />
+                  Endereço de entrega
+                </div>
+                <Textarea
+                  placeholder="Rua, número, bairro, complemento..."
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="rounded-xl"
+                  rows={2}
+                />
+              </div>
             )}
           </div>
 
           {/* Payment method */}
-          <div className="space-y-2">
-            <Label className="text-sm font-semibold">Forma de pagamento</Label>
-            <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod} className="space-y-1">
+          <div className="space-y-3">
+            <Label className="text-sm font-bold">Forma de pagamento</Label>
+            <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod} className="space-y-1.5">
               {[
                 { value: 'cash', label: 'Dinheiro', icon: Banknote },
-                { value: 'credit', label: 'Cartão de Crédito', icon: CreditCard },
-                { value: 'debit', label: 'Cartão de Débito', icon: CreditCard },
+                { value: 'credit', label: 'Crédito', icon: CreditCard },
+                { value: 'debit', label: 'Débito', icon: CreditCard },
                 { value: 'pix', label: 'Pix', icon: QrCode },
               ].map(method => (
                 <label
                   key={method.value}
-                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                    paymentMethod === method.value ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/30'
+                  className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
+                    paymentMethod === method.value ? 'border-amber-500 bg-amber-50/50' : 'border-border hover:border-amber-200'
                   }`}
                 >
-                  <RadioGroupItem value={method.value} />
-                  <method.icon className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">{method.label}</span>
+                  <RadioGroupItem value={method.value} className="border-amber-400 text-amber-600" />
+                  <method.icon className={`h-4 w-4 ${paymentMethod === method.value ? 'text-amber-600' : 'text-muted-foreground'}`} />
+                  <span className="text-sm font-medium">{method.label}</span>
                 </label>
               ))}
             </RadioGroup>
@@ -138,32 +146,32 @@ export function StoreCheckout({ open, onClose, onSubmit, total, isTable, isLoadi
 
           {/* Notes */}
           <div className="space-y-2">
-            <Label className="text-sm font-semibold">Observações</Label>
+            <Label className="text-sm font-bold">Observações</Label>
             <Textarea
               placeholder="Alguma observação para o pedido?"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="rounded-lg"
+              className="rounded-xl"
               rows={2}
             />
           </div>
         </div>
 
         {/* Footer */}
-        <div className="border-t border-border p-4 space-y-3 bg-card">
+        <div className="border-t border-border p-4 space-y-3 bg-card flex-shrink-0">
           <div className="flex justify-between text-lg font-bold">
             <span>Total</span>
-            <span>{formatCurrency(total)}</span>
+            <span className="text-amber-600">{formatCurrency(total)}</span>
           </div>
           <Button
             onClick={handleSubmit}
             disabled={!canSubmit || isLoading}
-            className="w-full h-12 text-base font-semibold rounded-xl"
+            className="w-full h-13 text-base font-bold rounded-xl bg-amber-500 hover:bg-amber-600 text-white shadow-lg"
           >
             {isLoading ? (
               <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Enviando...</>
             ) : (
-              `Enviar Pedido`
+              'Enviar Pedido'
             )}
           </Button>
         </div>
