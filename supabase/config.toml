@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.kds-data]
 verify_jwt = false
+
+[functions.public-store]
+verify_jwt = false
