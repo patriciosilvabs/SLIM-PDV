@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Plus, Minus, MessageSquare } from 'lucide-react';
+import { Plus, Minus, MessageSquare, AlertCircle } from 'lucide-react';
 import { CartItem } from '@/pages/store/StorePage';
 import { StoreData } from '@/hooks/usePublicStore';
 
@@ -22,6 +22,35 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
+function calculateGroupPrice(
+  selections: Record<string, number>,
+  options: Array<{ id: string; price: number }>,
+  priceCalcType: string | null
+): number {
+  const selected = Object.entries(selections)
+    .map(([optionId, qty]) => {
+      const opt = options.find(o => o.id === optionId);
+      return opt ? { price: opt.price, quantity: qty } : null;
+    })
+    .filter(Boolean) as Array<{ price: number; quantity: number }>;
+
+  if (selected.length === 0) return 0;
+
+  const prices = selected.map(s => s.price);
+
+  switch (priceCalcType) {
+    case 'average':
+      return prices.reduce((a, b) => a + b, 0) / prices.length;
+    case 'highest':
+      return Math.max(...prices);
+    case 'lowest':
+      return Math.min(...prices);
+    case 'sum':
+    default:
+      return selected.reduce((total, s) => total + s.price * s.quantity, 0);
+  }
+}
+
 export function StoreProductDetail({ product, store, open, onClose, onAddToCart }: StoreProductDetailProps) {
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
@@ -29,18 +58,42 @@ export function StoreProductDetail({ product, store, open, onClose, onAddToCart 
   const [selectedVariation, setSelectedVariation] = useState<string | null>(null);
   const [selectedComplements, setSelectedComplements] = useState<Record<string, Record<string, number>>>({});
 
+  // Reset state when product changes
+  useEffect(() => {
+    setQuantity(1);
+    setNotes('');
+    setShowNotes(false);
+    setSelectedVariation(null);
+    setSelectedComplements({});
+  }, [product.id]);
+
   // Get variations for this product
   const variations = store.variations.filter(v => v.product_id === product.id);
 
-  // Get complement groups for this product
-  const productGroupLinks = store.productGroups.filter(pg => pg.product_id === product.id);
+  // Get complement groups for this product, respecting channels & visibility
+  const productGroupLinks = store.productGroups
+    .filter(pg => pg.product_id === product.id)
+    .sort((a, b) => a.sort_order - b.sort_order);
+
   const groups = productGroupLinks
-    .map(link => store.complementGroups.find(g => g.id === link.group_id))
+    .map(link => {
+      const group = store.complementGroups.find(g => g.id === link.group_id);
+      return group ? { ...group, _skipFlavorModal: (link as any).skip_flavor_modal } : null;
+    })
     .filter(Boolean)
-    .filter(g => g!.visibility !== 'hidden' && (!g!.channels || g!.channels.includes('delivery')));
+    .filter(g => {
+      if (!g) return false;
+      // Respect visibility
+      if (g.visibility === 'hidden') return false;
+      // Respect channels - website = delivery channel
+      if (g.channels && g.channels.length > 0 && !g.channels.includes('delivery')) return false;
+      return true;
+    }) as Array<StoreData['complementGroups'][0] & { _skipFlavorModal?: boolean }>;
 
   const getGroupOptions = (groupId: string) => {
-    const links = store.groupOptions.filter(go => go.group_id === groupId);
+    const links = store.groupOptions
+      .filter(go => go.group_id === groupId)
+      .sort((a, b) => a.sort_order - b.sort_order);
     return links.map(link => {
       const option = store.complementOptions.find(o => o.id === link.option_id);
       if (!option) return null;
@@ -49,70 +102,102 @@ export function StoreProductDetail({ product, store, open, onClose, onAddToCart 
         price: link.price_override ?? option.price,
         max_quantity: link.max_quantity || 1,
       };
-    }).filter(Boolean) as Array<{ id: string; name: string; price: number; max_quantity: number; image_url: string | null }>;
+    }).filter(Boolean) as Array<{
+      id: string; name: string; description: string | null;
+      price: number; max_quantity: number; image_url: string | null;
+    }>;
+  };
+
+  const updateComplementQuantity = (groupId: string, optionId: string, delta: number, group: any) => {
+    setSelectedComplements(prev => {
+      const groupSelections = { ...(prev[groupId] || {}) };
+      const currentQty = groupSelections[optionId] || 0;
+      const newQty = currentQty + delta;
+      const options = getGroupOptions(groupId);
+      const opt = options.find(o => o.id === optionId);
+      const maxQty = opt?.max_quantity || 1;
+
+      if (newQty <= 0) {
+        delete groupSelections[optionId];
+      } else if (newQty <= maxQty) {
+        // Check max_selections for group
+        const totalSelected = Object.entries(groupSelections)
+          .filter(([id]) => id !== optionId)
+          .reduce((sum, [, q]) => sum + q, 0) + newQty;
+        if (group.max_selections && totalSelected > group.max_selections) return prev;
+        groupSelections[optionId] = newQty;
+      } else {
+        return prev;
+      }
+
+      return { ...prev, [groupId]: groupSelections };
+    });
   };
 
   const toggleComplement = (groupId: string, optionId: string, group: any) => {
     setSelectedComplements(prev => {
       const groupSelections = { ...(prev[groupId] || {}) };
-      
+
       if (group.selection_type === 'single') {
-        // Radio - only one selection
         if (groupSelections[optionId]) {
-          delete groupSelections[optionId];
-        } else {
-          return { ...prev, [groupId]: { [optionId]: 1 } };
+          if (!group.is_required) delete groupSelections[optionId];
+          return { ...prev, [groupId]: groupSelections };
         }
-      } else {
-        // Checkbox
-        if (groupSelections[optionId]) {
-          delete groupSelections[optionId];
-        } else {
-          const currentCount = Object.keys(groupSelections).length;
-          if (group.max_selections && currentCount >= group.max_selections) return prev;
-          groupSelections[optionId] = 1;
-        }
+        return { ...prev, [groupId]: { [optionId]: 1 } };
       }
-      
+
+      // Multiple
+      if (groupSelections[optionId]) {
+        delete groupSelections[optionId];
+      } else {
+        const currentCount = Object.values(groupSelections).reduce((s, q) => s + q, 0);
+        if (group.max_selections && currentCount >= group.max_selections) return prev;
+        groupSelections[optionId] = 1;
+      }
+
       return { ...prev, [groupId]: groupSelections };
     });
   };
 
-  const basePrice = product.is_promotion && product.promotion_price 
-    ? product.promotion_price 
+  const basePrice = product.is_promotion && product.promotion_price
+    ? product.promotion_price
     : product.price;
 
-  const variationModifier = selectedVariation 
-    ? variations.find(v => v.id === selectedVariation)?.price_modifier || 0 
+  const variationModifier = selectedVariation
+    ? variations.find(v => v.id === selectedVariation)?.price_modifier || 0
     : 0;
 
   const complementsTotal = useMemo(() => {
     let total = 0;
     for (const [groupId, selections] of Object.entries(selectedComplements)) {
-      for (const [optionId, qty] of Object.entries(selections)) {
-        const options = getGroupOptions(groupId);
-        const option = options.find(o => o.id === optionId);
-        if (option) total += option.price * qty;
-      }
+      const group = groups.find(g => g.id === groupId);
+      const options = getGroupOptions(groupId);
+      total += calculateGroupPrice(selections, options, group?.price_calculation_type || 'sum');
     }
     return total;
-  }, [selectedComplements]);
+  }, [selectedComplements, groups]);
 
   const unitPrice = basePrice + variationModifier + complementsTotal;
   const totalPrice = unitPrice * quantity;
 
   // Validate required groups
-  const isValid = useMemo(() => {
+  const validation = useMemo(() => {
+    const errors: string[] = [];
     for (const group of groups) {
       if (!group) continue;
       if (group.is_required) {
         const selections = selectedComplements[group.id] || {};
-        const count = Object.keys(selections).length;
-        if (count < (group.min_selections || 1)) return false;
+        const count = Object.values(selections).reduce((s, q) => s + q, 0);
+        const minSel = group.min_selections || 1;
+        if (count < minSel) {
+          errors.push(`Selecione ${minSel} opção(ões) em "${group.name}"`);
+        }
       }
     }
-    if (variations.length > 0 && !selectedVariation) return false;
-    return true;
+    if (variations.length > 0 && !selectedVariation) {
+      errors.push('Selecione um tamanho');
+    }
+    return { valid: errors.length === 0, errors };
   }, [groups, selectedComplements, variations, selectedVariation]);
 
   const handleAdd = () => {
@@ -129,6 +214,7 @@ export function StoreProductDetail({ product, store, open, onClose, onAddToCart 
             group_name: group?.name || '',
             price: link?.price_override ?? option.price,
             quantity: qty,
+            kds_category: group?.kds_category,
           });
         }
       }
@@ -149,159 +235,254 @@ export function StoreProductDetail({ product, store, open, onClose, onAddToCart 
       image_url: product.image_url,
       complements: complements.length > 0 ? complements : undefined,
     });
-
-    // Reset
-    setQuantity(1);
-    setNotes('');
-    setShowNotes(false);
-    setSelectedVariation(null);
-    setSelectedComplements({});
   };
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
-      <SheetContent side="bottom" className="h-[90vh] rounded-t-2xl p-0 overflow-y-auto">
+      <SheetContent side="bottom" className="h-[92vh] rounded-t-3xl p-0 overflow-hidden flex flex-col">
         {/* Product image */}
-        {product.image_url ? (
-          <img src={product.image_url} alt={product.name} className="w-full h-48 object-cover" />
-        ) : (
-          <div className="w-full h-32 bg-muted flex items-center justify-center text-5xl">🍕</div>
-        )}
-
-        <div className="p-4 space-y-4">
-          <SheetHeader className="text-left p-0">
-            <div className="flex items-start justify-between">
-              <div>
-                <SheetTitle className="text-lg">{product.name}</SheetTitle>
-                {product.description && (
-                  <p className="text-sm text-muted-foreground mt-1">{product.description}</p>
-                )}
-              </div>
-              <div className="text-right">
-                {product.is_promotion && product.promotion_price ? (
-                  <>
-                    <p className="text-lg font-bold text-primary">{formatCurrency(product.promotion_price)}</p>
-                    <p className="text-xs text-muted-foreground line-through">{formatCurrency(product.price)}</p>
-                  </>
-                ) : (
-                  <p className="text-lg font-bold text-primary">{formatCurrency(product.price)}</p>
-                )}
-              </div>
-            </div>
-          </SheetHeader>
-
-          {/* Variations */}
-          {variations.length > 0 && (
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold">Tamanho <span className="text-destructive">*</span></Label>
-              <RadioGroup value={selectedVariation || ''} onValueChange={setSelectedVariation}>
-                {variations.map(v => (
-                  <label key={v.id} className="flex items-center justify-between p-3 rounded-lg border border-border hover:border-primary/50 cursor-pointer transition-colors">
-                    <div className="flex items-center gap-3">
-                      <RadioGroupItem value={v.id} />
-                      <span className="text-sm font-medium">{v.name}</span>
-                    </div>
-                    {v.price_modifier > 0 && (
-                      <span className="text-sm text-muted-foreground">+{formatCurrency(v.price_modifier)}</span>
-                    )}
-                  </label>
-                ))}
-              </RadioGroup>
+        <div className="relative flex-shrink-0">
+          {product.image_url ? (
+            <img src={product.image_url} alt={product.name} className="w-full h-52 sm:h-64 object-cover" />
+          ) : (
+            <div className="w-full h-40 bg-gradient-to-br from-amber-100 to-orange-50 flex items-center justify-center text-6xl">
+              🍕
             </div>
           )}
+          {product.is_promotion && (
+            <Badge className="absolute top-3 left-3 bg-red-500 text-white border-none text-xs font-bold px-2.5 py-1">
+              PROMOÇÃO
+            </Badge>
+          )}
+        </div>
 
-          {/* Complement Groups */}
-          {groups.map(group => {
-            if (!group) return null;
-            const options = getGroupOptions(group.id);
-            const selections = selectedComplements[group.id] || {};
-            const selCount = Object.keys(selections).length;
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-4 sm:p-6 space-y-5">
+            {/* Title + Price */}
+            <SheetHeader className="text-left p-0">
+              <SheetTitle className="text-xl font-bold">{product.name}</SheetTitle>
+              {product.description && (
+                <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{product.description}</p>
+              )}
+              <div className="flex items-baseline gap-2 mt-2">
+                {product.is_promotion && product.promotion_price ? (
+                  <>
+                    <span className="text-xl font-bold text-amber-600">{formatCurrency(product.promotion_price)}</span>
+                    <span className="text-sm text-muted-foreground line-through">{formatCurrency(product.price)}</span>
+                  </>
+                ) : product.price > 0 ? (
+                  <span className="text-xl font-bold text-foreground">{formatCurrency(product.price)}</span>
+                ) : null}
+              </div>
+            </SheetHeader>
 
-            return (
-              <div key={group.id} className="space-y-2">
+            {/* Variations */}
+            {variations.length > 0 && (
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm font-semibold">
-                      {group.name}
-                      {group.is_required && <span className="text-destructive ml-1">*</span>}
-                    </Label>
-                    {group.description && (
-                      <p className="text-xs text-muted-foreground">{group.description}</p>
-                    )}
-                  </div>
-                  <Badge variant="outline" className="text-xs">
-                    {selCount}/{group.max_selections || '∞'}
-                  </Badge>
+                  <Label className="text-sm font-bold">Tamanho</Label>
+                  <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 bg-amber-50">Obrigatório</Badge>
                 </div>
+                <RadioGroup value={selectedVariation || ''} onValueChange={setSelectedVariation} className="space-y-1.5">
+                  {variations.map(v => (
+                    <label
+                      key={v.id}
+                      className={`flex items-center justify-between p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
+                        selectedVariation === v.id
+                          ? 'border-amber-500 bg-amber-50/50'
+                          : 'border-border hover:border-amber-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <RadioGroupItem value={v.id} className="border-amber-400 text-amber-600" />
+                        <div>
+                          <span className="text-sm font-medium">{v.name}</span>
+                          {v.description && (
+                            <p className="text-xs text-muted-foreground">{v.description}</p>
+                          )}
+                        </div>
+                      </div>
+                      {v.price_modifier !== 0 && (
+                        <span className="text-sm font-semibold text-muted-foreground">
+                          {v.price_modifier > 0 ? '+' : ''}{formatCurrency(v.price_modifier)}
+                        </span>
+                      )}
+                    </label>
+                  ))}
+                </RadioGroup>
+              </div>
+            )}
 
-                <div className="space-y-1">
-                  {options.map(option => {
-                    const isSelected = !!selections[option.id];
-                    return (
-                      <button
-                        key={option.id}
-                        onClick={() => toggleComplement(group.id, option.id, group)}
-                        className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors text-left ${
-                          isSelected ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/30'
+            {/* Complement Groups */}
+            {groups.map(group => {
+              if (!group) return null;
+              const options = getGroupOptions(group.id);
+              if (options.length === 0) return null;
+              const selections = selectedComplements[group.id] || {};
+              const selCount = Object.values(selections).reduce((s, q) => s + q, 0);
+              const isMultipleWithRepetition = group.selection_type === 'multiple_with_repetition';
+
+              return (
+                <div key={group.id} className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm font-bold">{group.name}</Label>
+                      {group.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{group.description}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {group.is_required 
+                          ? `Escolha ${group.min_selections || 1}${group.max_selections && group.max_selections !== (group.min_selections || 1) ? ` a ${group.max_selections}` : ''} opção(ões)`
+                          : `Até ${group.max_selections || '∞'} opção(ões)`
+                        }
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className={`text-xs ${
+                          group.is_required && selCount < (group.min_selections || 1)
+                            ? 'border-amber-400 text-amber-700 bg-amber-50'
+                            : selCount > 0
+                            ? 'border-green-400 text-green-700 bg-green-50'
+                            : 'border-border'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                            isSelected ? 'border-primary bg-primary' : 'border-muted-foreground/30'
-                          }`}>
-                            {isSelected && <span className="text-primary-foreground text-xs">✓</span>}
+                        {selCount}/{group.max_selections || '∞'}
+                      </Badge>
+                      {group.is_required && (
+                        <Badge className="text-[10px] bg-amber-100 text-amber-800 border-amber-200">Obrigatório</Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {options.map(option => {
+                      const isSelected = !!selections[option.id];
+                      const optionQty = selections[option.id] || 0;
+
+                      return (
+                        <div
+                          key={option.id}
+                          className={`flex items-center justify-between p-3 rounded-xl border-2 transition-all ${
+                            isSelected ? 'border-amber-400 bg-amber-50/50' : 'border-border hover:border-amber-200'
+                          }`}
+                        >
+                          <button
+                            onClick={() => {
+                              if (!isMultipleWithRepetition) {
+                                toggleComplement(group.id, option.id, group);
+                              } else if (!isSelected) {
+                                updateComplementQuantity(group.id, option.id, 1, group);
+                              }
+                            }}
+                            className="flex items-center gap-3 flex-1 text-left"
+                          >
+                            {option.image_url && (
+                              <img src={option.image_url} alt={option.name} className="w-10 h-10 rounded-lg object-cover" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-medium block">{option.name}</span>
+                              {option.description && (
+                                <span className="text-xs text-muted-foreground block truncate">{option.description}</span>
+                              )}
+                            </div>
+                          </button>
+
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {option.price > 0 && (
+                              <span className="text-xs text-muted-foreground">+{formatCurrency(option.price)}</span>
+                            )}
+                            {isMultipleWithRepetition && isSelected ? (
+                              <div className="flex items-center border border-border rounded-lg">
+                                <button
+                                  onClick={() => updateComplementQuantity(group.id, option.id, -1, group)}
+                                  className="h-7 w-7 flex items-center justify-center hover:bg-muted rounded-l-lg"
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </button>
+                                <span className="w-6 text-center text-xs font-semibold">{optionQty}</span>
+                                <button
+                                  onClick={() => updateComplementQuantity(group.id, option.id, 1, group)}
+                                  className="h-7 w-7 flex items-center justify-center hover:bg-muted rounded-r-lg"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div
+                                onClick={() => {
+                                  if (!isMultipleWithRepetition) toggleComplement(group.id, option.id, group);
+                                  else updateComplementQuantity(group.id, option.id, 1, group);
+                                }}
+                                className={`h-5 w-5 rounded-full border-2 flex items-center justify-center cursor-pointer transition-colors ${
+                                  isSelected ? 'border-amber-500 bg-amber-500' : 'border-muted-foreground/30'
+                                }`}
+                              >
+                                {isSelected && <span className="text-white text-xs font-bold">✓</span>}
+                              </div>
+                            )}
                           </div>
-                          <span className="text-sm">{option.name}</span>
                         </div>
-                        {option.price > 0 && (
-                          <span className="text-sm text-muted-foreground">+{formatCurrency(option.price)}</span>
-                        )}
-                      </button>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
 
-          {/* Notes */}
-          <div>
-            {!showNotes ? (
-              <button
-                onClick={() => setShowNotes(true)}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <MessageSquare className="h-4 w-4" />
-                Adicionar observação
-              </button>
-            ) : (
-              <Textarea
-                placeholder="Ex: sem cebola, bem passado..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="text-sm"
-                rows={2}
-              />
-            )}
+            {/* Notes */}
+            <div>
+              {!showNotes ? (
+                <button
+                  onClick={() => setShowNotes(true)}
+                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  Adicionar observação
+                </button>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-semibold">Observações</Label>
+                  <Textarea
+                    placeholder="Ex: sem cebola, bem passado..."
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    className="text-sm rounded-xl"
+                    rows={2}
+                    autoFocus
+                  />
+                </div>
+              )}
+            </div>
           </div>
+        </div>
 
-          {/* Quantity + Add button */}
-          <div className="flex items-center gap-3 pt-2 pb-4">
-            <div className="flex items-center border border-border rounded-lg">
+        {/* Fixed footer */}
+        <div className="flex-shrink-0 border-t border-border p-4 bg-card space-y-2">
+          {!validation.valid && (
+            <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+              <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+              <span>{validation.errors[0]}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center border-2 border-border rounded-xl">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                className="h-10 w-10 rounded-l-lg rounded-r-none"
+                className="h-11 w-11 rounded-l-xl rounded-r-none"
               >
                 <Minus className="h-4 w-4" />
               </Button>
-              <span className="w-10 text-center font-semibold">{quantity}</span>
+              <span className="w-10 text-center font-bold text-base">{quantity}</span>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setQuantity(q => q + 1)}
-                className="h-10 w-10 rounded-r-lg rounded-l-none"
+                className="h-11 w-11 rounded-r-xl rounded-l-none"
               >
                 <Plus className="h-4 w-4" />
               </Button>
@@ -309,8 +490,8 @@ export function StoreProductDetail({ product, store, open, onClose, onAddToCart 
 
             <Button
               onClick={handleAdd}
-              disabled={!isValid}
-              className="flex-1 h-12 text-base font-semibold rounded-xl"
+              disabled={!validation.valid}
+              className="flex-1 h-12 text-base font-bold rounded-xl bg-amber-500 hover:bg-amber-600 text-white shadow-lg"
             >
               Adicionar {formatCurrency(totalPrice)}
             </Button>
