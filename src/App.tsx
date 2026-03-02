@@ -36,6 +36,7 @@ import AcceptInvite from "./pages/AcceptInvite";
 import Production from "./pages/Production";
 import CreateStore from "./pages/CreateStore";
 import NotFound from "./pages/NotFound";
+import StorePage from "./pages/store/StorePage";
 
 // Platform Admin Pages
 import PlatformDashboard from "./pages/platform/PlatformDashboard";
@@ -62,6 +63,7 @@ const App = () => (
                   <Route path="/onboarding" element={<Onboarding />} />
                   <Route path="/invite/:token" element={<AcceptInvite />} />
                   <Route path="/create-store" element={<CreateStore />} />
+                  <Route path="/loja/:slug" element={<StorePage />} />
                   
                   {/* Platform Admin routes */}
                   <Route path="/platform" element={<PlatformDashboard />} />
