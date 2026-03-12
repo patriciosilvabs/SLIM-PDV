@@ -199,7 +199,7 @@ export default function KDS() {
     }
     return new Map();
   });
-  const cancelledSoundIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const cancelledSoundIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
   // Cancellation history - persisted in localStorage
   const [cancellationHistory, setCancellationHistory] = useState<CancellationHistoryItem[]>(() => {
@@ -235,7 +235,7 @@ export default function KDS() {
     }
     return new Map();
   });
-  const itemCancelledSoundIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const itemCancelledSoundIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
   const canChangeStatus = hasPermission('kds_change_status');
   const lastMetricUpdateRef = useRef<string>('');

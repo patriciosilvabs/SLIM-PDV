@@ -178,7 +178,7 @@ export function KdsStationCard({
 }: KdsStationCardProps) {
   // Estado para debounce de cliques por item
   const [clickedItems, setClickedItems] = useState<Set<string>>(new Set());
-  const clickTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const clickTimeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Cleanup timeouts on unmount
   useEffect(() => {

@@ -212,7 +212,7 @@ export function useOrders(status?: OrderStatus[]) {
   });
 
   // Debounced invalidation to prevent multiple rapid refetches
-  const invalidationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const invalidationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   const debouncedInvalidate = useCallback(() => {
     if (invalidationTimeoutRef.current) {
