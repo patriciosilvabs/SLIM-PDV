@@ -1,14 +1,14 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useKdsDevice, KdsDevice } from '@/hooks/useKdsDevice';
 import { useKdsStations } from '@/hooks/useKdsStations';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
+import { deactivateKdsDevice, updateKdsDevice } from '@/lib/firebaseTenantCrud';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
@@ -17,7 +17,6 @@ import {
   Monitor, 
   Pencil, 
   Trash2, 
-  Circle, 
   Wifi, 
   WifiOff, 
   Clock, 
@@ -25,7 +24,7 @@ import {
   Plus,
   KeyRound,
   Copy,
-  RefreshCw
+  RefreshCw,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -33,24 +32,22 @@ import { ptBR } from 'date-fns/locale';
 function isDeviceOnline(lastSeenAt: string): boolean {
   const lastSeen = new Date(lastSeenAt);
   const now = new Date();
-  const diffMinutes = (now.getTime() - lastSeen.getTime()) / (1000 * 60);
-  return diffMinutes < 3;
+  const diffMs = now.getTime() - lastSeen.getTime();
+  return diffMs < 30 * 1000;
 }
 
 export function KdsDevicesSettings() {
-  const { allDevices, device: currentDevice } = useKdsDevice();
-  const { activeStations } = useKdsStations();
+  const { allDevices, device: currentDevice, clearCurrentDeviceRegistration } = useKdsDevice();
+  const { stations } = useKdsStations();
   const { tenantId } = useTenant();
   const queryClient = useQueryClient();
   const [editingDevice, setEditingDevice] = useState<KdsDevice | null>(null);
   const [editName, setEditName] = useState('');
-  const [editStationId, setEditStationId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   
   // New device registration
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newStationId, setNewStationId] = useState<string | null>(null);
 
   // Show codes dialog
   const [showCodesDialog, setShowCodesDialog] = useState(false);
@@ -62,12 +59,11 @@ export function KdsDevicesSettings() {
   const [inlineCodes, setInlineCodes] = useState<Record<string, { verification_code: string; auth_code: string }>>({});
 
   const createDeviceMutation = useMutation({
-    mutationFn: async (params: { name: string; station_id: string | null }) => {
-      const { data, error } = await supabase.functions.invoke('kds-device-auth', {
+    mutationFn: async (params: { name: string }) => {
+      const { data, error } = await backendClient.functions.invoke('kds-device-auth', {
         body: {
           action: 'register',
           name: params.name,
-          station_id: params.station_id,
           tenant_id: tenantId,
         },
       });
@@ -79,7 +75,6 @@ export function KdsDevicesSettings() {
       queryClient.invalidateQueries({ queryKey: ['kds-devices-all'] });
       setShowCreateDialog(false);
       setNewName('');
-      setNewStationId(null);
       // Show codes dialog
       setCodesData({
         verification_code: data.verification_code,
@@ -94,12 +89,17 @@ export function KdsDevicesSettings() {
   });
 
   const updateDeviceMutation = useMutation({
-    mutationFn: async ({ id, name, station_id }: { id: string; name: string; station_id: string | null }) => {
-      const { error } = await supabase
-        .from('kds_devices')
-        .update({ name, station_id })
-        .eq('id', id);
-      if (error) throw error;
+    mutationFn: async ({
+      id,
+      name,
+    }: {
+      id: string;
+      name: string;
+    }) => {
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await updateKdsDevice(tenantId, id, {
+        name,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kds-devices-all'] });
@@ -112,14 +112,14 @@ export function KdsDevicesSettings() {
   });
 
   const deleteDeviceMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('kds_devices')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
+    mutationFn: async ({ id }: { id: string; isCurrentDevice: boolean }) => {
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await deactivateKdsDevice(tenantId, id);
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
+      if (variables.isCurrentDevice) {
+        clearCurrentDeviceRegistration();
+      }
       queryClient.invalidateQueries({ queryKey: ['kds-devices-all'] });
       toast.success('Dispositivo removido');
       setDeleteConfirmId(null);
@@ -131,8 +131,9 @@ export function KdsDevicesSettings() {
 
   const regenerateCodesMutation = useMutation({
     mutationFn: async (device_id: string) => {
-      const { data, error } = await supabase.functions.invoke('kds-device-auth', {
-        body: { action: 'regenerate_codes', device_id },
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      const { data, error } = await backendClient.functions.invoke('kds-device-auth', {
+        body: { action: 'regenerate_codes', device_id, tenant_id: tenantId },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -146,10 +147,10 @@ export function KdsDevicesSettings() {
         deviceName: dev?.name || 'Dispositivo',
       });
       setShowCodesDialog(true);
-      toast.success('Códigos regenerados com sucesso');
+      toast.success('CÃ³digos regenerados com sucesso');
     },
     onError: (error: any) => {
-      toast.error(error.message || 'Erro ao regenerar códigos');
+      toast.error(error.message || 'Erro ao regenerar cÃ³digos');
     },
   });
 
@@ -164,15 +165,16 @@ export function KdsDevicesSettings() {
     }
     setIsLoadingCodes(true);
     try {
-      const { data, error } = await supabase.functions.invoke('kds-device-auth', {
-        body: { action: 'get_codes', device_id: device.id },
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      const { data, error } = await backendClient.functions.invoke('kds-device-auth', {
+        body: { action: 'get_codes', device_id: device.id, tenant_id: tenantId },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       setInlineCodes(prev => ({ ...prev, [device.id]: { verification_code: data.verification_code, auth_code: data.auth_code } }));
       setVisibleCodesDeviceId(device.id);
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao buscar códigos');
+      toast.error(err.message || 'Erro ao buscar cÃ³digos');
     } finally {
       setIsLoadingCodes(false);
     }
@@ -181,8 +183,9 @@ export function KdsDevicesSettings() {
   const handleViewCodes = async (device: KdsDevice) => {
     setIsLoadingCodes(true);
     try {
-      const { data, error } = await supabase.functions.invoke('kds-device-auth', {
-        body: { action: 'get_codes', device_id: device.id },
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      const { data, error } = await backendClient.functions.invoke('kds-device-auth', {
+        body: { action: 'get_codes', device_id: device.id, tenant_id: tenantId },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -193,7 +196,7 @@ export function KdsDevicesSettings() {
       });
       setShowCodesDialog(true);
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao buscar códigos');
+      toast.error(err.message || 'Erro ao buscar cÃ³digos');
     } finally {
       setIsLoadingCodes(false);
     }
@@ -207,7 +210,6 @@ export function KdsDevicesSettings() {
   const openEdit = (device: KdsDevice) => {
     setEditingDevice(device);
     setEditName(device.name);
-    setEditStationId(device.station_id);
   };
 
   const handleSaveEdit = () => {
@@ -215,7 +217,6 @@ export function KdsDevicesSettings() {
     updateDeviceMutation.mutate({
       id: editingDevice.id,
       name: editName,
-      station_id: editStationId,
     });
   };
 
@@ -223,17 +224,13 @@ export function KdsDevicesSettings() {
     if (!newName.trim()) return;
     createDeviceMutation.mutate({
       name: newName,
-      station_id: newStationId,
     });
   };
 
-  const getStationInfo = (stationId: string | null) => {
-    if (!stationId) return null;
-    return activeStations.find(s => s.id === stationId);
-  };
-
-  const onlineDevices = allDevices.filter(d => isDeviceOnline(d.last_seen_at));
-  const offlineDevices = allDevices.filter(d => !isDeviceOnline(d.last_seen_at));
+  const onlineDevices = allDevices.filter((d) => isDeviceOnline(d.last_seen_at));
+  const offlineDevices = allDevices.filter((d) => !isDeviceOnline(d.last_seen_at));
+  const orderedDevices = allDevices;
+  const stationsById = new Map(stations.map((station) => [station.id, station]));
 
   return (
     <>
@@ -248,7 +245,7 @@ export function KdsDevicesSettings() {
                   Dispositivos KDS
                 </CardTitle>
                 <CardDescription>
-                  Cadastre e gerencie os tablets e dispositivos conectados ao KDS. Cada dispositivo recebe códigos automáticos para acesso.
+                  Cadastre os terminais do KDS. O fluxo sai dos setores; cada dispositivo apenas executa o setor vinculado.
                 </CardDescription>
               </div>
               <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
@@ -291,10 +288,11 @@ export function KdsDevicesSettings() {
               </div>
             ) : (
               <div className="space-y-3">
-                {[...onlineDevices, ...offlineDevices].map((dev) => {
+                {orderedDevices.map((dev) => {
                   const online = isDeviceOnline(dev.last_seen_at);
-                  const station = getStationInfo(dev.station_id);
                   const isCurrentDevice = currentDevice?.id === dev.id;
+                  const linkedStation = dev.station_id ? stationsById.get(dev.station_id) ?? null : null;
+                  const linkedStationLabel = linkedStation?.name || 'Sem setor vinculado';
 
                   return (
                     <div key={dev.id} className="space-y-0">
@@ -329,20 +327,18 @@ export function KdsDevicesSettings() {
                             </Badge>
                           </div>
                           <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
-                            {station ? (
-                              <span className="flex items-center gap-1">
-                                <Circle className="h-2.5 w-2.5" style={{ color: station.color, fill: station.color }} />
-                                {station.name}
-                              </span>
-                            ) : (
-                              <span className="text-amber-600">Sem praça atribuída</span>
-                            )}
+                            <span>{linkedStationLabel}</span>
                             {dev.last_seen_at && (
                               <span className="flex items-center gap-1">
                                 <Clock className="h-3 w-3" />
                                 {formatDistanceToNow(new Date(dev.last_seen_at), { locale: ptBR, addSuffix: true })}
                               </span>
                             )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 mt-1 text-xs">
+                            <Badge variant="outline">
+                              Setor: {linkedStationLabel}
+                            </Badge>
                           </div>
                         </div>
 
@@ -354,22 +350,20 @@ export function KdsDevicesSettings() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleToggleInlineCodes(dev)}
-                          title="Ver códigos"
+                          title="Ver cÃ³digos"
                           disabled={isLoadingCodes}
                         >
                           <KeyRound className={cn("h-4 w-4", visibleCodesDeviceId === dev.id && "text-primary")} />
                         </Button>
-                        {!isCurrentDevice && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => setDeleteConfirmId(dev.id)}
-                            title="Excluir"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDeleteConfirmId(dev.id)}
+                          title={isCurrentDevice ? 'Excluir este dispositivo' : 'Excluir'}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                       {/* Inline codes */}
                       {visibleCodesDeviceId === dev.id && inlineCodes[dev.id] && (
@@ -377,14 +371,14 @@ export function KdsDevicesSettings() {
                           <div className="flex items-center gap-2">
                             <span className="text-muted-foreground">Verificador:</span>
                             <span className="font-mono font-bold tracking-wider">{inlineCodes[dev.id].verification_code}</span>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(inlineCodes[dev.id].verification_code, 'Código verificador')}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(inlineCodes[dev.id].verification_code, 'CÃ³digo verificador')}>
                               <Copy className="h-3 w-3" />
                             </Button>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-muted-foreground">Autenticação:</span>
+                            <span className="text-muted-foreground">AutenticaÃ§Ã£o:</span>
                             <span className="font-mono font-bold tracking-wider">{inlineCodes[dev.id].auth_code}</span>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(inlineCodes[dev.id].auth_code, 'Código de autenticação')}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(inlineCodes[dev.id].auth_code, 'CÃ³digo de autenticaÃ§Ã£o')}>
                               <Copy className="h-3 w-3" />
                             </Button>
                           </div>
@@ -412,82 +406,6 @@ export function KdsDevicesSettings() {
             )}
           </CardContent>
         </Card>
-
-        {/* Mapa de praças e dispositivos */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Mapa de Praças × Dispositivos</CardTitle>
-            <CardDescription>
-              Visualize quais dispositivos estão atribuídos a cada praça
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {activeStations.map((station) => {
-                const assignedDevices = allDevices.filter(d => d.station_id === station.id);
-
-                return (
-                  <div
-                    key={station.id}
-                    className="p-3 rounded-lg border"
-                    style={{ borderColor: station.color + '40' }}
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <Circle className="h-3 w-3" style={{ color: station.color, fill: station.color }} />
-                      <span className="font-medium text-sm">{station.name}</span>
-                      <Badge variant="secondary" className="text-[10px] ml-auto">
-                        {assignedDevices.length} dispositivo{assignedDevices.length !== 1 ? 's' : ''}
-                      </Badge>
-                    </div>
-                    {assignedDevices.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">Nenhum dispositivo atribuído</p>
-                    ) : (
-                      <div className="space-y-1">
-                        {assignedDevices.map((d) => (
-                          <div key={d.id} className="flex items-center gap-2 text-xs">
-                            <div className={cn(
-                              "h-2 w-2 rounded-full",
-                              isDeviceOnline(d.last_seen_at) ? "bg-green-500" : "bg-muted-foreground"
-                            )} />
-                            <span className="truncate">{d.name}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* Sem praça */}
-              {(() => {
-                const unassigned = allDevices.filter(d => !d.station_id);
-                if (unassigned.length === 0) return null;
-                return (
-                  <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/5">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Circle className="h-3 w-3 text-amber-500" />
-                      <span className="font-medium text-sm text-amber-700">Sem Praça</span>
-                      <Badge variant="secondary" className="text-[10px] ml-auto">
-                        {unassigned.length}
-                      </Badge>
-                    </div>
-                    <div className="space-y-1">
-                      {unassigned.map((d) => (
-                        <div key={d.id} className="flex items-center gap-2 text-xs">
-                          <div className={cn(
-                            "h-2 w-2 rounded-full",
-                            isDeviceOnline(d.last_seen_at) ? "bg-green-500" : "bg-muted-foreground"
-                          )} />
-                          <span className="truncate">{d.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Dialog de cadastro de novo dispositivo */}
@@ -505,35 +423,8 @@ export function KdsDevicesSettings() {
                 placeholder="Ex: Tablet Cozinha 1"
               />
             </div>
-            <div>
-              <Label>Praça Atribuída (opcional)</Label>
-              <Select
-                value={newStationId || 'none'}
-                onValueChange={(v) => setNewStationId(v === 'none' ? null : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma praça" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">
-                    <div className="flex items-center gap-2">
-                      <Circle className="h-3 w-3 text-muted-foreground" />
-                      Nenhuma (ver todas)
-                    </div>
-                  </SelectItem>
-                  {activeStations.map((station) => (
-                    <SelectItem key={station.id} value={station.id}>
-                      <div className="flex items-center gap-2">
-                        <Circle className="h-3 w-3" style={{ color: station.color, fill: station.color }} />
-                        {station.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             <p className="text-xs text-muted-foreground">
-              Os códigos de acesso serão gerados automaticamente após o cadastro.
+              Os codigos de acesso serao gerados automaticamente apos o cadastro. Depois, vincule o dispositivo ao setor correto em <strong>Setores</strong>.
             </p>
           </div>
           <DialogFooter>
@@ -548,26 +439,26 @@ export function KdsDevicesSettings() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de códigos */}
+      {/* Dialog de cÃ³digos */}
       <Dialog open={showCodesDialog} onOpenChange={setShowCodesDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Códigos de Acesso — {codesData?.deviceName}</DialogTitle>
+            <DialogTitle>CÃ³digos de Acesso â€” {codesData?.deviceName}</DialogTitle>
           </DialogHeader>
           {codesData && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Anote estes códigos. Eles serão necessários para conectar o dispositivo ao KDS.
+                Anote estes cÃ³digos. Eles serÃ£o necessÃ¡rios para conectar o dispositivo ao KDS.
               </p>
               <div className="space-y-3">
                 <div className="p-4 rounded-lg border bg-muted/30">
                   <div className="flex items-center justify-between mb-1">
-                    <Label className="text-xs text-muted-foreground">Código Verificador</Label>
+                    <Label className="text-xs text-muted-foreground">CÃ³digo Verificador</Label>
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-6 px-2 text-xs gap-1"
-                      onClick={() => copyToClipboard(codesData.verification_code, 'Código verificador')}
+                      onClick={() => copyToClipboard(codesData.verification_code, 'CÃ³digo verificador')}
                     >
                       <Copy className="h-3 w-3" />
                       Copiar
@@ -579,12 +470,12 @@ export function KdsDevicesSettings() {
                 </div>
                 <div className="p-4 rounded-lg border bg-muted/30">
                   <div className="flex items-center justify-between mb-1">
-                    <Label className="text-xs text-muted-foreground">Código de Autenticação</Label>
+                    <Label className="text-xs text-muted-foreground">CÃ³digo de AutenticaÃ§Ã£o</Label>
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-6 px-2 text-xs gap-1"
-                      onClick={() => copyToClipboard(codesData.auth_code, 'Código de autenticação')}
+                      onClick={() => copyToClipboard(codesData.auth_code, 'CÃ³digo de autenticaÃ§Ã£o')}
                     >
                       <Copy className="h-3 w-3" />
                       Copiar
@@ -606,7 +497,7 @@ export function KdsDevicesSettings() {
                   disabled={regenerateCodesMutation.isPending}
                 >
                   <RefreshCw className="h-4 w-4" />
-                  Regenerar Códigos
+                  Regenerar CÃ³digos
                 </Button>
               </div>
             </div>
@@ -617,11 +508,14 @@ export function KdsDevicesSettings() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de edição */}
+      {/* Dialog de ediÃ§Ã£o */}
       <Dialog open={!!editingDevice} onOpenChange={() => setEditingDevice(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Editar Dispositivo</DialogTitle>
+            <DialogDescription>
+              Altere o nome do terminal. O setor e o fluxo sao configurados em <strong>Setores</strong>.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -632,32 +526,8 @@ export function KdsDevicesSettings() {
                 placeholder="Ex: Tablet Cozinha 1"
               />
             </div>
-            <div>
-              <Label>Praça Atribuída</Label>
-              <Select
-                value={editStationId || 'none'}
-                onValueChange={(v) => setEditStationId(v === 'none' ? null : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma praça" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">
-                    <div className="flex items-center gap-2">
-                      <Circle className="h-3 w-3 text-muted-foreground" />
-                      Nenhuma (ver todas)
-                    </div>
-                  </SelectItem>
-                  {activeStations.map((station) => (
-                    <SelectItem key={station.id} value={station.id}>
-                      <div className="flex items-center gap-2">
-                        <Circle className="h-3 w-3" style={{ color: station.color, fill: station.color }} />
-                        {station.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="rounded-lg border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
+              Este terminal nao define mais a etapa do fluxo. Ele so executa o setor vinculado em <strong>Setores</strong>.
             </div>
           </div>
           <DialogFooter>
@@ -669,20 +539,28 @@ export function KdsDevicesSettings() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de confirmação de exclusão */}
+      {/* Dialog de confirmaÃ§Ã£o de exclusÃ£o */}
       <Dialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Excluir Dispositivo</DialogTitle>
           </DialogHeader>
           <p className="text-muted-foreground">
-            Tem certeza que deseja remover este dispositivo? Ele não poderá mais fazer login no KDS.
+            {currentDevice?.id === deleteConfirmId
+              ? 'Tem certeza que deseja excluir este dispositivo? Este navegador sera desvinculado do KDS e nao sera registrado novamente automaticamente.'
+              : 'Tem certeza que deseja remover este dispositivo? Ele nao podera mais fazer login no KDS.'}
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>Cancelar</Button>
             <Button
               variant="destructive"
-              onClick={() => deleteConfirmId && deleteDeviceMutation.mutate(deleteConfirmId)}
+              onClick={() =>
+                deleteConfirmId &&
+                deleteDeviceMutation.mutate({
+                  id: deleteConfirmId,
+                  isCurrentDevice: currentDevice?.id === deleteConfirmId,
+                })
+              }
               disabled={deleteDeviceMutation.isPending}
             >
               Excluir
@@ -693,3 +571,9 @@ export function KdsDevicesSettings() {
     </>
   );
 }
+
+
+
+
+
+

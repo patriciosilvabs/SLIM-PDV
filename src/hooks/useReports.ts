@@ -1,6 +1,26 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format, getHours, getDay } from 'date-fns';
+import {
+  endOfDay,
+  endOfMonth,
+  endOfWeek,
+  format,
+  getDay,
+  getHours,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+  subDays,
+} from 'date-fns';
+import {
+  listCashMovements,
+  listCashRegisters,
+  listOrderItemsByOrderIds,
+  listOrdersByStatusAndDateRange,
+  listPaymentsByOrderIds,
+  listProducts,
+  listProfilesByIds,
+} from '@/lib/firebaseTenantCrud';
+import { useTenant } from '@/hooks/useTenant';
 
 export type DateRange = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
 
@@ -39,9 +59,9 @@ export function getDateRange(range: DateRange, customStart?: Date, customEnd?: D
     case 'month':
       return { start: startOfMonth(now), end: endOfMonth(now) };
     case 'custom':
-      return { 
-        start: customStart ? startOfDay(customStart) : startOfDay(now), 
-        end: customEnd ? endOfDay(customEnd) : endOfDay(now) 
+      return {
+        start: customStart ? startOfDay(customStart) : startOfDay(now),
+        end: customEnd ? endOfDay(customEnd) : endOfDay(now),
       };
     default:
       return { start: startOfDay(now), end: endOfDay(now) };
@@ -49,233 +69,174 @@ export function getDateRange(range: DateRange, customStart?: Date, customEnd?: D
 }
 
 export function useSalesReport(range: DateRange, customStart?: Date, customEnd?: Date, employeeId?: string) {
+  const { tenant } = useTenant();
   const { start, end } = getDateRange(range, customStart, customEnd);
-  
+
   return useQuery({
-    queryKey: ['sales-report', range, customStart?.toISOString(), customEnd?.toISOString(), employeeId],
+    queryKey: ['sales-report', tenant?.id, range, customStart?.toISOString(), customEnd?.toISOString(), employeeId],
     queryFn: async (): Promise<SalesReportData> => {
-      // Get orders in range that are delivered
-      let ordersQuery = supabase
-        .from('orders')
-        .select('id, total, created_at')
-        .eq('status', 'delivered')
-        .gte('created_at', start.toISOString())
-        .lte('created_at', end.toISOString());
-      
-      if (employeeId) {
-        ordersQuery = ordersQuery.eq('created_by', employeeId);
+      if (!tenant?.id) {
+        return { totalSales: 0, totalOrders: 0, averageTicket: 0, salesByPaymentMethod: [], salesByDay: [] };
       }
-      
-      const { data: orders, error: ordersError } = await ordersQuery;
-      
-      if (ordersError) throw ordersError;
 
-      // Get payments for these orders
-      const orderIds = orders?.map(o => o.id) || [];
-      const { data: payments, error: paymentsError } = await supabase
-        .from('payments')
-        .select('amount, payment_method, order_id')
-        .in('order_id', orderIds.length > 0 ? orderIds : ['none']);
-      
-      if (paymentsError) throw paymentsError;
+      const orders = await listOrdersByStatusAndDateRange(tenant.id, {
+        statuses: ['delivered'],
+        startIso: start.toISOString(),
+        endIso: end.toISOString(),
+        createdBy: employeeId,
+      });
+      const payments = await listPaymentsByOrderIds(
+        tenant.id,
+        orders.map((o) => o.id)
+      );
 
-      // Calculate totals
-      const totalSales = orders?.reduce((sum, o) => sum + Number(o.total), 0) || 0;
-      const totalOrders = orders?.length || 0;
+      const totalSales = orders.reduce((sum, o) => sum + Number(o.total), 0);
+      const totalOrders = orders.length;
       const averageTicket = totalOrders > 0 ? totalSales / totalOrders : 0;
 
-      // Group by payment method
       const paymentMethodMap = new Map<string, { amount: number; count: number }>();
-      payments?.forEach(p => {
+      payments.forEach((p) => {
         const current = paymentMethodMap.get(p.payment_method) || { amount: 0, count: 0 };
         paymentMethodMap.set(p.payment_method, {
           amount: current.amount + Number(p.amount),
-          count: current.count + 1
+          count: current.count + 1,
         });
       });
       const salesByPaymentMethod = Array.from(paymentMethodMap.entries()).map(([method, data]) => ({
         method,
         amount: data.amount,
-        count: data.count
+        count: data.count,
       }));
 
-      // Group by day
       const dayMap = new Map<string, { amount: number; count: number }>();
-      orders?.forEach(o => {
+      orders.forEach((o) => {
         const date = format(new Date(o.created_at), 'yyyy-MM-dd');
         const current = dayMap.get(date) || { amount: 0, count: 0 };
-        dayMap.set(date, {
-          amount: current.amount + Number(o.total),
-          count: current.count + 1
-        });
+        dayMap.set(date, { amount: current.amount + Number(o.total), count: current.count + 1 });
       });
       const salesByDay = Array.from(dayMap.entries())
         .map(([date, data]) => ({ date, ...data }))
         .sort((a, b) => a.date.localeCompare(b.date));
 
-      return {
-        totalSales,
-        totalOrders,
-        averageTicket,
-        salesByPaymentMethod,
-        salesByDay
-      };
+      return { totalSales, totalOrders, averageTicket, salesByPaymentMethod, salesByDay };
     },
+    enabled: !!tenant?.id,
   });
 }
 
 export function useProductsReport(range: DateRange, customStart?: Date, customEnd?: Date, employeeId?: string) {
+  const { tenant } = useTenant();
   const { start, end } = getDateRange(range, customStart, customEnd);
-  
+
   return useQuery({
-    queryKey: ['products-report', range, customStart?.toISOString(), customEnd?.toISOString(), employeeId],
+    queryKey: ['products-report', tenant?.id, range, customStart?.toISOString(), customEnd?.toISOString(), employeeId],
     queryFn: async (): Promise<ProductReportData[]> => {
-      // Get orders in range
-      let ordersQuery = supabase
-        .from('orders')
-        .select('id')
-        .eq('status', 'delivered')
-        .gte('created_at', start.toISOString())
-        .lte('created_at', end.toISOString());
-      
-      if (employeeId) {
-        ordersQuery = ordersQuery.eq('created_by', employeeId);
-      }
-      
-      const { data: orders, error: ordersError } = await ordersQuery;
-      
-      if (ordersError) throw ordersError;
+      if (!tenant?.id) return [];
+      const orders = await listOrdersByStatusAndDateRange(tenant.id, {
+        statuses: ['delivered'],
+        startIso: start.toISOString(),
+        endIso: end.toISOString(),
+        createdBy: employeeId,
+      });
+      const orderIds = orders.map((o) => o.id);
+      if (!orderIds.length) return [];
 
-      const orderIds = orders?.map(o => o.id) || [];
-      if (orderIds.length === 0) return [];
+      const [items, products] = await Promise.all([listOrderItemsByOrderIds(tenant.id, orderIds), listProducts(tenant.id, true)]);
+      const productMap = new Map(products.map((p) => [p.id, p]));
 
-      // Get order items with products
-      const { data: items, error: itemsError } = await supabase
-        .from('order_items')
-        .select(`
-          quantity,
-          total_price,
-          product:products(id, name, category:categories(name))
-        `)
-        .in('order_id', orderIds);
-      
-      if (itemsError) throw itemsError;
-
-      // Aggregate by product
-      const productMap = new Map<string, ProductReportData>();
-      items?.forEach(item => {
-        if (!item.product) return;
-        const productId = item.product.id;
-        const current = productMap.get(productId) || {
-          id: productId,
-          name: item.product.name,
-          category: item.product.category?.name || null,
+      const agg = new Map<string, ProductReportData>();
+      items.forEach((item) => {
+        if (!item.product_id) return;
+        const product = productMap.get(item.product_id);
+        if (!product) return;
+        const current = agg.get(item.product_id) || {
+          id: item.product_id,
+          name: product.name,
+          category: product.category?.name || null,
           quantitySold: 0,
-          totalRevenue: 0
+          totalRevenue: 0,
         };
-        productMap.set(productId, {
+        agg.set(item.product_id, {
           ...current,
-          quantitySold: current.quantitySold + item.quantity,
-          totalRevenue: current.totalRevenue + Number(item.total_price)
+          quantitySold: current.quantitySold + Number(item.quantity || 0),
+          totalRevenue: current.totalRevenue + Number(item.total_price || 0),
         });
       });
 
-      return Array.from(productMap.values())
-        .sort((a, b) => b.quantitySold - a.quantitySold);
+      return Array.from(agg.values()).sort((a, b) => b.quantitySold - a.quantitySold);
     },
+    enabled: !!tenant?.id,
   });
 }
 
 export function usePeakHoursAnalysis(range: DateRange, customStart?: Date, customEnd?: Date) {
+  const { tenant } = useTenant();
   const { start, end } = getDateRange(range, customStart, customEnd);
-  
-  return useQuery({
-    queryKey: ['peak-hours', range, customStart?.toISOString(), customEnd?.toISOString()],
-    queryFn: async (): Promise<PeakHoursData[]> => {
-      const { data: orders, error } = await supabase
-        .from('orders')
-        .select('created_at, total')
-        .eq('status', 'delivered')
-        .gte('created_at', start.toISOString())
-        .lte('created_at', end.toISOString());
-      
-      if (error) throw error;
 
-      // Group by hour and day of week
+  return useQuery({
+    queryKey: ['peak-hours', tenant?.id, range, customStart?.toISOString(), customEnd?.toISOString()],
+    queryFn: async (): Promise<PeakHoursData[]> => {
+      if (!tenant?.id) return [];
+      const orders = await listOrdersByStatusAndDateRange(tenant.id, {
+        statuses: ['delivered'],
+        startIso: start.toISOString(),
+        endIso: end.toISOString(),
+      });
+
       const heatMap = new Map<string, { count: number; sales: number }>();
-      orders?.forEach(order => {
+      orders.forEach((order) => {
         const date = new Date(order.created_at);
         const hour = getHours(date);
         const dayOfWeek = getDay(date);
         const key = `${dayOfWeek}-${hour}`;
         const current = heatMap.get(key) || { count: 0, sales: 0 };
-        heatMap.set(key, {
-          count: current.count + 1,
-          sales: current.sales + Number(order.total)
-        });
+        heatMap.set(key, { count: current.count + 1, sales: current.sales + Number(order.total || 0) });
       });
 
       return Array.from(heatMap.entries()).map(([key, data]) => {
         const [dayOfWeek, hour] = key.split('-').map(Number);
-        return {
-          hour,
-          dayOfWeek,
-          orderCount: data.count,
-          totalSales: data.sales
-        };
+        return { hour, dayOfWeek, orderCount: data.count, totalSales: data.sales };
       });
     },
+    enabled: !!tenant?.id,
   });
 }
 
 export function useCashRegisterHistory() {
+  const { tenant } = useTenant();
   return useQuery({
-    queryKey: ['cash-register-history'],
+    queryKey: ['cash-register-history', tenant?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('cash_registers')
-        .select(`
-          *,
-          opened_by_profile:profiles!cash_registers_opened_by_fkey(name),
-          closed_by_profile:profiles!cash_registers_closed_by_fkey(name)
-        `)
-        .order('opened_at', { ascending: false })
-        .limit(50);
-      
-      if (error) {
-        // Fallback without profile joins if foreign keys don't exist
-        const { data: fallbackData, error: fallbackError } = await supabase
-          .from('cash_registers')
-          .select('*')
-          .order('opened_at', { ascending: false })
-          .limit(50);
-        
-        if (fallbackError) throw fallbackError;
-        return fallbackData;
-      }
-      return data;
+      if (!tenant?.id) return [];
+      const registers = await listCashRegisters(tenant.id, 50);
+      const userIds = [
+        ...new Set(
+          registers
+            .flatMap((r) => [r.opened_by, r.closed_by])
+            .filter((v): v is string => Boolean(v))
+        ),
+      ];
+      const profiles = userIds.length ? await listProfilesByIds(userIds) : [];
+      const profileMap = new Map((profiles || []).map((p) => [p.id, p.name]));
+      return registers.map((r) => ({
+        ...r,
+        opened_by_profile: { name: profileMap.get(r.opened_by) || null },
+        closed_by_profile: { name: r.closed_by ? profileMap.get(r.closed_by) || null : null },
+      }));
     },
+    enabled: !!tenant?.id,
   });
 }
 
 export function useCashMovements(cashRegisterId?: string) {
+  const { tenant } = useTenant();
   return useQuery({
-    queryKey: ['cash-movements', cashRegisterId],
+    queryKey: ['cash-movements', tenant?.id, cashRegisterId],
     queryFn: async () => {
-      let query = supabase
-        .from('cash_movements')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (cashRegisterId) {
-        query = query.eq('cash_register_id', cashRegisterId);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw error;
-      return data;
+      if (!tenant?.id) return [];
+      return await listCashMovements(tenant.id, cashRegisterId);
     },
-    enabled: !!cashRegisterId,
+    enabled: !!tenant?.id && !!cashRegisterId,
   });
 }
 
@@ -289,63 +250,37 @@ export interface WaiterReportData {
 }
 
 export function useWaiterReport(range: DateRange, customStart?: Date, customEnd?: Date) {
+  const { tenant } = useTenant();
   const { start, end } = getDateRange(range, customStart, customEnd);
-  
+
   return useQuery({
-    queryKey: ['waiter-report', range, customStart?.toISOString(), customEnd?.toISOString()],
+    queryKey: ['waiter-report', tenant?.id, range, customStart?.toISOString(), customEnd?.toISOString()],
     queryFn: async (): Promise<WaiterReportData[]> => {
-      // Get delivered orders in range
-      const { data: orders, error: ordersError } = await supabase
-        .from('orders')
-        .select('id')
-        .eq('status', 'delivered')
-        .gte('created_at', start.toISOString())
-        .lte('created_at', end.toISOString());
-      
-      if (ordersError) throw ordersError;
+      if (!tenant?.id) return [];
+      const orders = await listOrdersByStatusAndDateRange(tenant.id, {
+        statuses: ['delivered'],
+        startIso: start.toISOString(),
+        endIso: end.toISOString(),
+      });
+      const orderIds = orders.map((o) => o.id);
+      if (!orderIds.length) return [];
 
-      const orderIds = orders?.map(o => o.id) || [];
-      if (orderIds.length === 0) return [];
+      const items = await listOrderItemsByOrderIds(tenant.id, orderIds);
+      const waiterItems = items.filter((i) => i.added_by);
+      if (!waiterItems.length) return [];
 
-      // Get order items with added_by
-      const { data: items, error: itemsError } = await supabase
-        .from('order_items')
-        .select('added_by, quantity, total_price, order_id')
-        .in('order_id', orderIds)
-        .not('added_by', 'is', null);
-      
-      if (itemsError) throw itemsError;
-      if (!items || items.length === 0) return [];
+      const waiterIds = [...new Set(waiterItems.map((i) => i.added_by as string))];
+      const profiles = await listProfilesByIds(waiterIds);
+      const profileMap = new Map((profiles || []).map((p) => [p.id, p.name]));
 
-      // Get unique waiter ids
-      const waiterIds = [...new Set(items.map(i => i.added_by).filter(Boolean))] as string[];
-
-      // Get waiter profiles
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, name')
-        .in('id', waiterIds);
-
-      const profileMap = new Map(profiles?.map(p => [p.id, p.name]) || []);
-
-      // Aggregate by waiter
-      const waiterMap = new Map<string, { 
-        totalItems: number; 
-        totalRevenue: number; 
-        orders: Set<string>;
-      }>();
-
-      items.forEach(item => {
-        if (!item.added_by) return;
-        const existing = waiterMap.get(item.added_by) || { 
-          totalItems: 0, 
-          totalRevenue: 0, 
-          orders: new Set<string>() 
-        };
-        existing.totalItems += item.quantity;
-        existing.totalRevenue += Number(item.total_price);
+      const waiterMap = new Map<string, { totalItems: number; totalRevenue: number; orders: Set<string> }>();
+      waiterItems.forEach((item) => {
+        const waiterId = item.added_by as string;
+        const existing = waiterMap.get(waiterId) || { totalItems: 0, totalRevenue: 0, orders: new Set<string>() };
+        existing.totalItems += Number(item.quantity || 0);
+        existing.totalRevenue += Number(item.total_price || 0);
         existing.orders.add(item.order_id);
-        waiterMap.set(item.added_by, existing);
+        waiterMap.set(waiterId, existing);
       });
 
       return Array.from(waiterMap.entries())
@@ -359,5 +294,7 @@ export function useWaiterReport(range: DateRange, customStart?: Date, customEnd?
         }))
         .sort((a, b) => b.totalRevenue - a.totalRevenue);
     },
+    enabled: !!tenant?.id,
   });
 }
+

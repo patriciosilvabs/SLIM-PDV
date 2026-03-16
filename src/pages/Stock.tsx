@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,9 +13,10 @@ import { useIngredients, useIngredientMutations, useLowStockIngredients, Ingredi
 import { useAllProductsWithIngredients, useProductIngredientMutations } from '@/hooks/useProductIngredients';
 import { useProducts } from '@/hooks/useProducts';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { AccessDenied } from '@/components/auth/AccessDenied';
+import { useTenant } from '@/hooks/useTenant';
+import { listStockMovements } from '@/lib/firebaseTenantCrud';
 import { 
   Plus, 
   Package, 
@@ -34,7 +35,7 @@ function formatCurrency(value: number) {
 }
 
 const stockStatusConfig = {
-  critical: { label: 'Crítico', color: 'bg-destructive text-destructive-foreground' },
+  critical: { label: 'CrÃ­tico', color: 'bg-destructive text-destructive-foreground' },
   low: { label: 'Baixo', color: 'bg-warning text-warning-foreground' },
   normal: { label: 'Normal', color: 'bg-accent text-accent-foreground' },
 };
@@ -48,6 +49,7 @@ function getStockStatus(current: number, min: number): 'critical' | 'low' | 'nor
 export default function Stock() {
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
+  const { tenantId } = useTenant();
   const [activeTab, setActiveTab] = useState('ingredients');
   const [isNewIngredientOpen, setIsNewIngredientOpen] = useState(false);
   const [isMovementOpen, setIsMovementOpen] = useState(false);
@@ -85,19 +87,12 @@ export default function Stock() {
 
   // Stock movements history
   const { data: movements } = useQuery({
-    queryKey: ['stock-movements'],
+    queryKey: ['stock-movements', tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('stock_movements')
-        .select(`
-          *,
-          ingredient:ingredients(name, unit)
-        `)
-        .order('created_at', { ascending: false })
-        .limit(50);
-      if (error) throw error;
-      return data;
-    }
+      if (!tenantId) return [];
+      return await listStockMovements(tenantId, 50);
+    },
+    enabled: !!tenantId,
   });
 
   // Permission check AFTER all hooks
@@ -152,7 +147,7 @@ export default function Stock() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Estoque</h1>
-            <p className="text-muted-foreground">Controle de ingredientes e fichas técnicas</p>
+            <p className="text-muted-foreground">Controle de ingredientes e fichas tÃ©cnicas</p>
           </div>
           {(canAddIngredient || canManageStock) && (
             <Dialog open={isNewIngredientOpen} onOpenChange={setIsNewIngredientOpen}>
@@ -195,7 +190,7 @@ export default function Stock() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Estoque Mínimo</Label>
+                    <Label>Estoque MÃ­nimo</Label>
                     <Input
                       type="number"
                       value={newIngredient.min_stock}
@@ -263,9 +258,9 @@ export default function Stock() {
             <TabsList>
               <TabsTrigger value="ingredients">Ingredientes</TabsTrigger>
               {(canViewMovements || canManageStock) && (
-                <TabsTrigger value="movements">Movimentações</TabsTrigger>
+                <TabsTrigger value="movements">MovimentaÃ§Ãµes</TabsTrigger>
               )}
-              <TabsTrigger value="techsheets">Fichas Técnicas</TabsTrigger>
+              <TabsTrigger value="techsheets">Fichas TÃ©cnicas</TabsTrigger>
             </TabsList>
 
           {/* Ingredients Tab */}
@@ -299,7 +294,7 @@ export default function Stock() {
                           <span className="font-medium">{ingredient.current_stock} {ingredient.unit}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Mínimo</span>
+                          <span className="text-muted-foreground">MÃ­nimo</span>
                           <span>{ingredient.min_stock} {ingredient.unit}</span>
                         </div>
                         <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -333,7 +328,7 @@ export default function Stock() {
                           onClick={() => openMovementDialog(ingredient, 'exit')}
                         >
                           <ArrowDownCircle className="h-4 w-4 mr-1" />
-                          Saída
+                          SaÃ­da
                         </Button>
                         <Button 
                           size="sm" 
@@ -354,7 +349,7 @@ export default function Stock() {
           <TabsContent value="movements" className="mt-4">
             <Card>
               <CardHeader>
-                <CardTitle>Histórico de Movimentações</CardTitle>
+                <CardTitle>HistÃ³rico de MovimentaÃ§Ãµes</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
@@ -375,7 +370,7 @@ export default function Stock() {
                           <p className="font-medium">{m.ingredient?.name}</p>
                           <p className="text-sm text-muted-foreground">
                             {m.movement_type === 'entry' ? 'Entrada' : 
-                             m.movement_type === 'exit' ? 'Saída' : 'Ajuste'}
+                             m.movement_type === 'exit' ? 'SaÃ­da' : 'Ajuste'}
                             {m.notes && ` - ${m.notes}`}
                           </p>
                         </div>
@@ -397,7 +392,7 @@ export default function Stock() {
                   ))}
                   {(!movements || movements.length === 0) && (
                     <p className="text-center py-8 text-muted-foreground">
-                      Nenhuma movimentação registrada
+                      Nenhuma movimentaÃ§Ã£o registrada
                     </p>
                   )}
                 </div>
@@ -427,7 +422,7 @@ export default function Stock() {
                     <div className="flex items-center justify-between">
                       <CardTitle className="flex items-center gap-2">
                         <FileText className="h-5 w-5" />
-                        Ficha Técnica
+                        Ficha TÃ©cnica
                       </CardTitle>
                     </div>
                   </CardHeader>
@@ -473,7 +468,7 @@ export default function Stock() {
                                 <div>
                                   <p className="font-medium">{pi.ingredient?.name}</p>
                                   <p className="text-sm text-muted-foreground">
-                                    {pi.quantity} {pi.ingredient?.unit} × {formatCurrency(pi.ingredient?.cost_per_unit || 0)}
+                                    {pi.quantity} {pi.ingredient?.unit} Ã— {formatCurrency(pi.ingredient?.cost_per_unit || 0)}
                                   </p>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -495,13 +490,13 @@ export default function Stock() {
                           
                           {product.ingredients.length > 0 && (
                             <div className="flex justify-between items-center p-3 bg-primary/10 rounded-lg">
-                              <span className="font-semibold">Custo de Produção</span>
+                              <span className="font-semibold">Custo de ProduÃ§Ã£o</span>
                               <div className="text-right">
                                 <p className="text-xl font-bold text-primary">
                                   {formatCurrency(product.productionCost)}
                                 </p>
                                 <p className="text-sm text-muted-foreground">
-                                  Preço de venda: {formatCurrency(product.price)}
+                                  PreÃ§o de venda: {formatCurrency(product.price)}
                                 </p>
                                 <p className="text-sm font-medium text-accent">
                                   Margem: {((1 - product.productionCost / product.price) * 100).toFixed(1)}%
@@ -537,7 +532,7 @@ export default function Stock() {
                             <span className="text-destructive">{formatCurrency(product.productionCost)}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">Preço:</span>
+                            <span className="text-muted-foreground">PreÃ§o:</span>
                             <span className="text-accent">{formatCurrency(product.price)}</span>
                           </div>
                         </div>
@@ -556,7 +551,7 @@ export default function Stock() {
             <DialogHeader>
               <DialogTitle>
                 {movementData.type === 'entry' ? 'Entrada de Estoque' :
-                 movementData.type === 'exit' ? 'Saída de Estoque' : 'Ajuste de Estoque'}
+                 movementData.type === 'exit' ? 'SaÃ­da de Estoque' : 'Ajuste de Estoque'}
               </DialogTitle>
             </DialogHeader>
             {selectedIngredient && (
@@ -581,11 +576,11 @@ export default function Stock() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Observação</Label>
+                  <Label>ObservaÃ§Ã£o</Label>
                   <Textarea
                     placeholder={
                       movementData.type === 'entry' ? "Ex: Compra do fornecedor X" :
-                      movementData.type === 'exit' ? "Ex: Uso na produção" : "Ex: Inventário realizado"
+                      movementData.type === 'exit' ? "Ex: Uso na produÃ§Ã£o" : "Ex: InventÃ¡rio realizado"
                     }
                     value={movementData.notes}
                     onChange={(e) => setMovementData({ ...movementData, notes: e.target.value })}
@@ -607,3 +602,7 @@ export default function Stock() {
     </PDVLayout>
   );
 }
+
+
+
+

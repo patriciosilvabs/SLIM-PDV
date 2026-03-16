@@ -1,7 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTenant } from '@/hooks/useTenant';
+import {
+  addUserRole,
+  listProfilesByIds,
+  listTenantMembers,
+  listUserRoles,
+  listUserRolesByUser,
+  removeUserRole,
+} from '@/lib/firebaseTenantCrud';
 
 export type AppRole = 'admin' | 'cashier' | 'waiter' | 'kitchen' | 'kds';
 
@@ -12,35 +19,24 @@ export interface UserRole {
   tenant_id: string | null;
 }
 
-export function useUserRole() {
+export function useUserRole(options?: { enabled?: boolean }) {
   const { user } = useAuth();
   const { tenantId } = useTenant();
+  const enabled = options?.enabled ?? true;
 
   const query = useQuery({
     queryKey: ['user-roles', user?.id, tenantId],
     queryFn: async () => {
       if (!user?.id) return [];
-      
-      let queryBuilder = supabase
-        .from('user_roles')
-        .select('*')
-        .eq('user_id', user.id);
-      
-      // Filter by tenant if user belongs to one
-      if (tenantId) {
-        queryBuilder = queryBuilder.eq('tenant_id', tenantId);
-      }
-      
-      const { data, error } = await queryBuilder;
-      
-      if (error) throw error;
-      return data as UserRole[];
+      if (!tenantId) return [];
+      const roles = await listUserRolesByUser(tenantId, user.id);
+      return roles as UserRole[];
     },
-    enabled: !!user?.id,
+    enabled: enabled && !!user?.id && !!tenantId,
   });
 
-  const roles = query.data?.map(r => r.role) || [];
-  
+  const roles = query.data?.map((r) => r.role) || [];
+
   return {
     ...query,
     roles,
@@ -50,7 +46,7 @@ export function useUserRole() {
     isKitchen: roles.includes('kitchen'),
     isKds: roles.includes('kds'),
     hasRole: (role: AppRole) => roles.includes(role),
-    hasAnyRole: (allowedRoles: AppRole[]) => allowedRoles.some(r => roles.includes(r)),
+    hasAnyRole: (allowedRoles: AppRole[]) => allowedRoles.some((r) => roles.includes(r)),
   };
 }
 
@@ -71,36 +67,18 @@ export function useAllUsers() {
     queryFn: async () => {
       if (!tenantId) return [];
 
-      // Fetch only members of the current tenant
-      const { data: members, error: membersError } = await supabase
-        .from('tenant_members')
-        .select('user_id')
-        .eq('tenant_id', tenantId);
+      const members = await listTenantMembers(tenantId);
+      if (!members.length) return [];
 
-      if (membersError) throw membersError;
-      if (!members?.length) return [];
+      const userIds = members.map((m) => m.user_id);
+      const [profiles, allRoles] = await Promise.all([
+        listProfilesByIds(userIds),
+        listUserRoles(tenantId),
+      ]);
 
-      const userIds = members.map(m => m.user_id);
-
-      // Fetch profiles only for tenant members
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('*')
-        .in('id', userIds);
-      
-      if (profilesError) throw profilesError;
-
-      // Fetch roles filtered by tenant
-      const { data: allRoles, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('*')
-        .eq('tenant_id', tenantId);
-      
-      if (rolesError) throw rolesError;
-
-      // Combine data
       const usersWithRoles: UserWithRoles[] = (profiles || []).map((profile) => ({
         ...profile,
+        name: profile.name || 'Usuario',
         user_roles: (allRoles || [])
           .filter((role) => role.user_id === profile.id)
           .map((r) => ({ role: r.role as AppRole })),
@@ -114,24 +92,17 @@ export function useAllUsers() {
 
 export function useUserRoleMutations() {
   const { refetch } = useUserRole();
+  const { tenantId } = useTenant();
 
   const assignRole = async (userId: string, role: AppRole) => {
-    const { error } = await supabase
-      .from('user_roles')
-      .insert({ user_id: userId, role });
-    
-    if (error) throw error;
+    if (!tenantId) throw new Error('Tenant nao encontrado');
+    await addUserRole(tenantId, userId, role);
     refetch();
   };
 
   const removeRole = async (userId: string, role: AppRole) => {
-    const { error } = await supabase
-      .from('user_roles')
-      .delete()
-      .eq('user_id', userId)
-      .eq('role', role);
-    
-    if (error) throw error;
+    if (!tenantId) throw new Error('Tenant nao encontrado');
+    await removeUserRole(tenantId, userId, role);
     refetch();
   };
 

@@ -17,7 +17,7 @@ import { BADGE_COLOR_OPTIONS, getBadgeColorClasses } from '@/lib/badgeColors';
 export function KdsSettingsSection() {
   const { settings, updateSettings, updateDeviceSettings, updateBottleneckSettings, updateStationOverride, isLoading } = useKdsSettings();
   const { activeStations } = useKdsStations();
-  const { device, assignToStation, renameDevice } = useKdsDevice();
+  const { device, renameDevice } = useKdsDevice();
   const [newKeyword, setNewKeyword] = useState('');
   const [expandedStations, setExpandedStations] = useState<Set<string>>(new Set());
 
@@ -124,8 +124,8 @@ export function KdsSettingsSection() {
                 <span className="font-medium">Linha de Produção</span>
               </div>
               <p className="text-sm text-muted-foreground mb-3">
-                Cada dispositivo mostra apenas sua praça. O item avança conforme a etapa
-                é concluída. Ideal para alta demanda.
+                Cada dispositivo mostra apenas o seu setor. O item avanca de setor em setor,
+                e dentro de cada setor o sistema escolhe o dispositivo adequado.
               </p>
               {/* Preview Linha de Produção */}
               <div className="flex gap-1 h-12 rounded overflow-hidden border border-border/50">
@@ -151,15 +151,15 @@ export function KdsSettingsSection() {
                   <>
                     <div className="flex-1 bg-primary/20 flex flex-col items-center justify-center">
                       <Circle className="h-3 w-3 text-primary mb-0.5" />
-                      <span className="text-[8px] text-primary font-medium">Praça 1</span>
+                      <span className="text-[8px] text-primary font-medium">Setor 1</span>
                     </div>
                     <div className="flex-1 bg-primary/20 flex flex-col items-center justify-center">
                       <Circle className="h-3 w-3 text-primary mb-0.5" />
-                      <span className="text-[8px] text-primary font-medium">Praça 2</span>
+                      <span className="text-[8px] text-primary font-medium">Setor 2</span>
                     </div>
                     <div className="flex-1 bg-primary/20 flex flex-col items-center justify-center">
                       <Circle className="h-3 w-3 text-primary mb-0.5" />
-                      <span className="text-[8px] text-primary font-medium">Praça 3</span>
+                      <span className="text-[8px] text-primary font-medium">Setor 3</span>
                     </div>
                   </>
                 )}
@@ -170,7 +170,7 @@ export function KdsSettingsSection() {
           {settings.operationMode === 'production_line' && (
             <div className="mt-4 p-4 bg-muted/50 rounded-lg">
               <p className="text-sm text-muted-foreground">
-                <strong>Dica:</strong> No modo Linha de Produção, configure a praça atribuída na seção "Configuração do Dispositivo" abaixo.
+                <strong>Dica:</strong> No modo Linha de Producao, o fluxo sai dos setores. Os dispositivos so executam um setor vinculado.
               </p>
             </div>
           )}
@@ -185,7 +185,7 @@ export function KdsSettingsSection() {
             Configuração do Dispositivo
           </CardTitle>
           <CardDescription>
-            Configure este dispositivo para exibir uma praça específica
+            O dispositivo executa um setor especifico do fluxo
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -208,42 +208,8 @@ export function KdsSettingsSection() {
             </p>
           </div>
 
-          <div>
-            <Label className="font-medium flex items-center gap-2">
-              <Layers className="h-4 w-4" />
-              Praça atribuída
-            </Label>
-            <Select
-              value={settings.assignedStationId || 'none'}
-              onValueChange={(value) => assignToStation(value === 'none' ? null : value)}
-            >
-              <SelectTrigger className="mt-1">
-                <SelectValue placeholder="Selecione uma praça" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">
-                  <div className="flex items-center gap-2">
-                    <Circle className="h-3 w-3 text-muted-foreground" />
-                    Nenhuma (ver todas)
-                  </div>
-                </SelectItem>
-                {activeStations.map((station) => (
-                  <SelectItem key={station.id} value={station.id}>
-                    <div className="flex items-center gap-2">
-                      <Circle 
-                        className="h-3 w-3" 
-                        style={{ color: station.color, fill: station.color }} 
-                      />
-                      {station.name}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground mt-1">
-              Quando atribuído, este dispositivo mostrará apenas os itens desta praça.
-              Funciona em ambos os modos (Kanban e Linha de Produção).
-            </p>
+          <div className="rounded-lg border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
+            A regra operacional sai dos <strong>Setores</strong>. Em <strong>Dispositivos</strong> voce cadastra o terminal e vincula ele a um setor.
           </div>
         </CardContent>
       </Card>
@@ -1103,3 +1069,4 @@ export function KdsSettingsSection() {
     </div>
   );
 }
+

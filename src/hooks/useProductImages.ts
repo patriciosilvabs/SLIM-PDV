@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { extractBucketPathFromUrl, removeFromBucket, uploadToBucket } from '@/lib/firebaseStorageCompat';
 
 const BUCKET_NAME = 'product-images';
 
@@ -10,17 +10,12 @@ export function useProductImages() {
       const fileExt = file.name.split('.').pop();
       const fileName = `${folder}/${crypto.randomUUID()}.${fileExt}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from(BUCKET_NAME)
-        .upload(fileName, file, { upsert: false });
-
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage
-        .from(BUCKET_NAME)
-        .getPublicUrl(fileName);
-
-      return data.publicUrl;
+      return uploadToBucket({
+        bucket: BUCKET_NAME,
+        filePath: fileName,
+        file,
+        contentType: file.type || undefined,
+      });
     },
     onError: (error) => {
       toast({ title: 'Erro ao fazer upload', description: error.message, variant: 'destructive' });
@@ -29,16 +24,9 @@ export function useProductImages() {
 
   const deleteImage = useMutation({
     mutationFn: async (url: string) => {
-      // Extract file path from URL
-      const urlParts = url.split(`/${BUCKET_NAME}/`);
-      if (urlParts.length < 2) return;
-      
-      const filePath = urlParts[1];
-      const { error } = await supabase.storage
-        .from(BUCKET_NAME)
-        .remove([filePath]);
-
-      if (error) throw error;
+      const filePath = extractBucketPathFromUrl(url, BUCKET_NAME);
+      if (!filePath) return;
+      await removeFromBucket({ bucket: BUCKET_NAME, paths: [filePath] });
     },
     onError: (error) => {
       toast({ title: 'Erro ao remover imagem', description: error.message, variant: 'destructive' });

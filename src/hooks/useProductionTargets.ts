@@ -1,7 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/hooks/useTenant';
+import {
+  copyIngredientDailyTargets,
+  deleteIngredientDailyTarget,
+  listIngredientDailyTargets,
+  listIngredients,
+  upsertIngredientDailyTarget,
+} from '@/lib/firebaseTenantCrud';
 
 export interface IngredientDailyTarget {
   id: string;
@@ -22,9 +28,8 @@ export interface TargetWithIngredient extends IngredientDailyTarget {
   };
 }
 
-// Day names in Portuguese
-export const DAY_NAMES = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] as const;
-export const FULL_DAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'] as const;
+export const DAY_NAMES = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'] as const;
+export const FULL_DAY_NAMES = ['Domingo', 'Segunda', 'Terca', 'Quarta', 'Quinta', 'Sexta', 'Sabado'] as const;
 
 export function useProductionTargets(ingredientId?: string) {
   const { tenant } = useTenant();
@@ -33,30 +38,27 @@ export function useProductionTargets(ingredientId?: string) {
     queryKey: ['production-targets', tenant?.id, ingredientId],
     queryFn: async () => {
       if (!tenant?.id) return [];
-      
-      let query = supabase
-        .from('ingredient_daily_targets')
-        .select(`
-          *,
-          ingredient:ingredients(id, name, unit, current_stock)
-        `)
-        .eq('tenant_id', tenant.id)
-        .order('day_of_week');
-      
-      if (ingredientId) {
-        query = query.eq('ingredient_id', ingredientId);
-      }
-      
-      const { data, error } = await query;
-      
-      if (error) throw error;
-      return data as unknown as TargetWithIngredient[];
+      const [targets, ingredients] = await Promise.all([
+        listIngredientDailyTargets(tenant.id),
+        listIngredients(tenant.id),
+      ]);
+      const ingredientMap = new Map(ingredients.map((i) => [i.id, i]));
+      const filtered = ingredientId ? targets.filter((t) => t.ingredient_id === ingredientId) : targets;
+      return filtered
+        .map((t) => ({
+          ...t,
+          ingredient: (() => {
+            const i = ingredientMap.get(t.ingredient_id);
+            if (!i) return { id: t.ingredient_id, name: 'Ingrediente', unit: '', current_stock: null };
+            return { id: i.id, name: i.name, unit: i.unit, current_stock: i.current_stock };
+          })(),
+        }))
+        .sort((a, b) => a.day_of_week - b.day_of_week) as TargetWithIngredient[];
     },
     enabled: !!tenant?.id,
   });
 }
 
-// Get targets organized by ingredient for the grid view
 export function useProductionTargetsGrid() {
   const { tenant } = useTenant();
 
@@ -64,38 +66,13 @@ export function useProductionTargetsGrid() {
     queryKey: ['production-targets-grid', tenant?.id],
     queryFn: async () => {
       if (!tenant?.id) return { ingredients: [], targetsMap: {} };
-      
-      // Get all ingredients
-      const { data: ingredients, error: ingredientsError } = await supabase
-        .from('ingredients')
-        .select('id, name, unit, current_stock')
-        .eq('tenant_id', tenant.id)
-        .order('name');
-      
-      if (ingredientsError) throw ingredientsError;
-      
-      // Get all targets
-      const { data: targets, error: targetsError } = await supabase
-        .from('ingredient_daily_targets')
-        .select('*')
-        .eq('tenant_id', tenant.id);
-      
-      if (targetsError) throw targetsError;
-      
-      // Create a map: ingredient_id -> { day_of_week: target }
+      const [ingredients, targets] = await Promise.all([listIngredients(tenant.id), listIngredientDailyTargets(tenant.id)]);
       const targetsMap: Record<string, Record<number, IngredientDailyTarget>> = {};
-      
-      for (const target of targets || []) {
-        if (!targetsMap[target.ingredient_id]) {
-          targetsMap[target.ingredient_id] = {};
-        }
-        targetsMap[target.ingredient_id][target.day_of_week] = target;
+      for (const target of targets) {
+        if (!targetsMap[target.ingredient_id]) targetsMap[target.ingredient_id] = {};
+        targetsMap[target.ingredient_id][target.day_of_week] = target as IngredientDailyTarget;
       }
-      
-      return { 
-        ingredients: ingredients || [], 
-        targetsMap 
-      };
+      return { ingredients: ingredients || [], targetsMap };
     },
     enabled: !!tenant?.id,
   });
@@ -107,33 +84,21 @@ export function useProductionTargetMutations() {
   const { tenant } = useTenant();
 
   const upsertTarget = useMutation({
-    mutationFn: async ({ 
-      ingredientId, 
-      dayOfWeek, 
-      targetQuantity 
-    }: { 
-      ingredientId: string; 
-      dayOfWeek: number; 
+    mutationFn: async ({
+      ingredientId,
+      dayOfWeek,
+      targetQuantity,
+    }: {
+      ingredientId: string;
+      dayOfWeek: number;
       targetQuantity: number;
     }) => {
-      if (!tenant?.id) throw new Error('Tenant não encontrado');
-      
-      const { data, error } = await supabase
-        .from('ingredient_daily_targets')
-        .upsert({
-          tenant_id: tenant.id,
-          ingredient_id: ingredientId,
-          day_of_week: dayOfWeek,
-          target_quantity: targetQuantity,
-          updated_at: new Date().toISOString(),
-        }, {
-          onConflict: 'tenant_id,ingredient_id,day_of_week',
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenant?.id) throw new Error('Tenant nao encontrado');
+      return await upsertIngredientDailyTarget(tenant.id, {
+        ingredient_id: ingredientId,
+        day_of_week: dayOfWeek,
+        target_quantity: targetQuantity,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['production-targets'] });
@@ -141,54 +106,16 @@ export function useProductionTargetMutations() {
       queryClient.invalidateQueries({ queryKey: ['production-demand'] });
     },
     onError: (error: Error) => {
-      toast({
-        title: 'Erro ao salvar meta',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro ao salvar meta', description: error.message, variant: 'destructive' });
     },
   });
 
   const copyDayTargets = useMutation({
-    mutationFn: async ({ 
-      fromDay, 
-      toDay 
-    }: { 
-      fromDay: number; 
-      toDay: number;
-    }) => {
-      if (!tenant?.id) throw new Error('Tenant não encontrado');
-      
-      // Get targets from source day
-      const { data: sourceTargets, error: fetchError } = await supabase
-        .from('ingredient_daily_targets')
-        .select('*')
-        .eq('tenant_id', tenant.id)
-        .eq('day_of_week', fromDay);
-      
-      if (fetchError) throw fetchError;
-      if (!sourceTargets?.length) {
-        throw new Error('Nenhuma meta encontrada no dia de origem');
-      }
-      
-      // Upsert all targets to destination day
-      const newTargets = sourceTargets.map(t => ({
-        tenant_id: tenant.id,
-        ingredient_id: t.ingredient_id,
-        day_of_week: toDay,
-        target_quantity: t.target_quantity,
-        updated_at: new Date().toISOString(),
-      }));
-      
-      const { error: upsertError } = await supabase
-        .from('ingredient_daily_targets')
-        .upsert(newTargets, {
-          onConflict: 'tenant_id,ingredient_id,day_of_week',
-        });
-      
-      if (upsertError) throw upsertError;
-      
-      return newTargets.length;
+    mutationFn: async ({ fromDay, toDay }: { fromDay: number; toDay: number }) => {
+      if (!tenant?.id) throw new Error('Tenant nao encontrado');
+      const count = await copyIngredientDailyTargets(tenant.id, fromDay, toDay);
+      if (!count) throw new Error('Nenhuma meta encontrada no dia de origem');
+      return count;
     },
     onSuccess: (count, { fromDay, toDay }) => {
       toast({
@@ -199,22 +126,14 @@ export function useProductionTargetMutations() {
       queryClient.invalidateQueries({ queryKey: ['production-targets-grid'] });
     },
     onError: (error: Error) => {
-      toast({
-        title: 'Erro ao copiar metas',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro ao copiar metas', description: error.message, variant: 'destructive' });
     },
   });
 
   const deleteTarget = useMutation({
     mutationFn: async (targetId: string) => {
-      const { error } = await supabase
-        .from('ingredient_daily_targets')
-        .delete()
-        .eq('id', targetId);
-      
-      if (error) throw error;
+      if (!tenant?.id) throw new Error('Tenant nao encontrado');
+      await deleteIngredientDailyTarget(tenant.id, targetId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['production-targets'] });
@@ -222,17 +141,10 @@ export function useProductionTargetMutations() {
       queryClient.invalidateQueries({ queryKey: ['production-demand'] });
     },
     onError: (error: Error) => {
-      toast({
-        title: 'Erro ao remover meta',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Erro ao remover meta', description: error.message, variant: 'destructive' });
     },
   });
 
-  return {
-    upsertTarget,
-    copyDayTargets,
-    deleteTarget,
-  };
+  return { upsertTarget, copyDayTargets, deleteTarget };
 }
+

@@ -14,8 +14,10 @@ import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { useGlobalSettings } from '@/hooks/useGlobalSettings';
 import { AccessDenied } from '@/components/auth/AccessDenied';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/hooks/useTenant';
+import { createCashMovement, getOrderById, listPaymentsByCashRegister, listProfilesByIds, listTables } from '@/lib/firebaseTenantCrud';
 import { 
   DollarSign, 
   CreditCard, 
@@ -43,6 +45,7 @@ function formatCurrency(value: number) {
 }
 
 export default function CashRegister() {
+  const { tenantId } = useTenant();
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const { getSetting, isLoading: settingsLoading } = useGlobalSettings();
@@ -85,26 +88,46 @@ export default function CashRegister() {
 
   // Fetch partial payments for this cash register WITH receiver profile
   const { data: partialPayments } = useQuery({
-    queryKey: ['partial-payments', openRegister?.id],
+    queryKey: ['partial-payments', tenantId, openRegister?.id],
     queryFn: async () => {
-      if (!openRegister?.id) return [];
-      const { data, error } = await supabase
-        .from('payments')
-        .select(`
-          *,
-          order:orders!inner(
-            id, customer_name, table_id, total,
-            table:tables(number)
-          )
-        `)
-        .eq('is_partial', true)
-        .eq('cash_register_id', openRegister.id)
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      return data || [];
+      if (!tenantId || !openRegister?.id) return [];
+      const payments = await listPaymentsByCashRegister(tenantId, openRegister.id);
+      const partial = payments.filter((p) => p.is_partial);
+      if (!partial.length) return [];
+
+      const orderIds = [...new Set(partial.map((p) => p.order_id))];
+      const receiverIds = [...new Set(partial.map((p) => p.received_by).filter(Boolean) as string[])];
+      const [orders, tables, profiles] = await Promise.all([
+        Promise.all(orderIds.map((orderId) => getOrderById(tenantId, orderId))),
+        listTables(tenantId),
+        receiverIds.length ? listProfilesByIds(receiverIds) : Promise.resolve([]),
+      ]);
+
+      const tableMap = new Map(tables.map((table) => [table.id, table]));
+      const profileMap = new Map(profiles.map((profile) => [profile.id, profile]));
+      const orderMap = new Map(
+        orders
+          .filter((order): order is NonNullable<typeof order> => Boolean(order))
+          .map((order) => [
+            order.id,
+            {
+              id: order.id,
+              customer_name: order.customer_name || null,
+              total: order.total,
+              table: order.table_id ? { number: tableMap.get(order.table_id)?.number || null } : null,
+            },
+          ])
+      );
+      return partial
+        .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''))
+        .reverse()
+        .map((p) => ({
+          ...p,
+          order: orderMap.get(p.order_id) || null,
+          received_by_profile: p.received_by ? { name: profileMap.get(p.received_by)?.name || null } : null,
+        }));
     },
-    enabled: !!openRegister?.id,
+    enabled: !!tenantId && !!openRegister?.id,
   });
 
   // Permission check AFTER all hooks
@@ -135,20 +158,17 @@ export default function CashRegister() {
   const addCashMovement = useMutation({
     mutationFn: async ({ type, amount, reason }: { type: 'withdrawal' | 'supply'; amount: number; reason: string }) => {
       if (!openRegister) throw new Error('Caixa não está aberto');
+      if (!tenantId) throw new Error('Tenant nao encontrado');
       
-      const { data: userData } = await supabase.auth.getUser();
-      
-      const { error } = await supabase
-        .from('cash_movements')
-        .insert({
-          cash_register_id: openRegister.id,
-          movement_type: type,
-          amount,
-          reason,
-          created_by: userData.user?.id
-        });
-      
-      if (error) throw error;
+      const { data: userData } = await backendClient.auth.getUser();
+
+      await createCashMovement(tenantId, {
+        cash_register_id: openRegister.id,
+        movement_type: type,
+        amount,
+        reason,
+        created_by: userData.user?.id || null,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cash-movements'] });
@@ -709,3 +729,7 @@ export default function CashRegister() {
     </PDVLayout>
   );
 }
+
+
+
+

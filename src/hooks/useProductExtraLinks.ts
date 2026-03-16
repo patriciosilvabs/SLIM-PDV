@@ -1,7 +1,13 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
 import { useTenant } from '@/hooks/useTenant';
+import {
+  linkProductExtra,
+  listExtrasForProduct,
+  listProductExtraLinks,
+  replaceProductsForExtra,
+  unlinkProductExtra,
+} from '@/lib/firebaseTenantCrud';
 
 export interface ProductExtraLink {
   id: string;
@@ -11,39 +17,28 @@ export interface ProductExtraLink {
 }
 
 export function useProductExtraLinks(extraId?: string) {
+  const { tenantId } = useTenant();
+
   return useQuery({
-    queryKey: ['product-extra-links', extraId],
+    queryKey: ['product-extra-links', tenantId, extraId],
     queryFn: async () => {
-      let query = supabase
-        .from('product_extra_links')
-        .select('*');
-      
-      if (extraId) {
-        query = query.eq('extra_id', extraId);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as ProductExtraLink[];
-    }
+      if (!tenantId) return [];
+      return (await listProductExtraLinks(tenantId, extraId)) as ProductExtraLink[];
+    },
+    enabled: !!tenantId,
   });
 }
 
 export function useExtrasForProduct(productId?: string) {
+  const { tenantId } = useTenant();
+
   return useQuery({
-    queryKey: ['extras-for-product', productId],
+    queryKey: ['extras-for-product', tenantId, productId],
     queryFn: async () => {
-      if (!productId) return [];
-      
-      const { data, error } = await supabase
-        .from('product_extra_links')
-        .select('extra_id, product_extras(*)')
-        .eq('product_id', productId);
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId || !productId) return [];
+      return await listExtrasForProduct(tenantId, productId);
     },
-    enabled: !!productId
+    enabled: !!tenantId && !!productId,
   });
 }
 
@@ -53,14 +48,8 @@ export function useProductExtraLinksMutations() {
 
   const linkExtra = useMutation({
     mutationFn: async ({ productId, extraId }: { productId: string; extraId: string }) => {
-      const { data, error } = await supabase
-        .from('product_extra_links')
-        .insert({ product_id: productId, extra_id: extraId, tenant_id: tenantId })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await linkProductExtra(tenantId, productId, extraId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-extra-links'] });
@@ -68,18 +57,13 @@ export function useProductExtraLinksMutations() {
     },
     onError: (error) => {
       toast({ title: 'Erro ao vincular', description: error.message, variant: 'destructive' });
-    }
+    },
   });
 
   const unlinkExtra = useMutation({
     mutationFn: async ({ productId, extraId }: { productId: string; extraId: string }) => {
-      const { error } = await supabase
-        .from('product_extra_links')
-        .delete()
-        .eq('product_id', productId)
-        .eq('extra_id', extraId);
-      
-      if (error) throw error;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await unlinkProductExtra(tenantId, productId, extraId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-extra-links'] });
@@ -87,42 +71,22 @@ export function useProductExtraLinksMutations() {
     },
     onError: (error) => {
       toast({ title: 'Erro ao desvincular', description: error.message, variant: 'destructive' });
-    }
+    },
   });
 
   const setLinkedProducts = useMutation({
     mutationFn: async ({ extraId, productIds }: { extraId: string; productIds: string[] }) => {
-      // Remove all existing links for this extra
-      const { error: deleteError } = await supabase
-        .from('product_extra_links')
-        .delete()
-        .eq('extra_id', extraId);
-      
-      if (deleteError) throw deleteError;
-
-      // Add new links if any
-      if (productIds.length > 0) {
-        const links = productIds.map(productId => ({
-          product_id: productId,
-          extra_id: extraId,
-          tenant_id: tenantId
-        }));
-
-        const { error: insertError } = await supabase
-          .from('product_extra_links')
-          .insert(links);
-        
-        if (insertError) throw insertError;
-      }
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await replaceProductsForExtra(tenantId, extraId, productIds);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-extra-links'] });
       queryClient.invalidateQueries({ queryKey: ['extras-for-product'] });
-      toast({ title: 'Vínculos atualizados' });
+      toast({ title: 'Vinculos atualizados' });
     },
     onError: (error) => {
-      toast({ title: 'Erro ao atualizar vínculos', description: error.message, variant: 'destructive' });
-    }
+      toast({ title: 'Erro ao atualizar vinculos', description: error.message, variant: 'destructive' });
+    },
   });
 
   return { linkExtra, unlinkExtra, setLinkedProducts };

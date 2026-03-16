@@ -1,8 +1,13 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { backendClient } from '@/integrations/backend/client';
 import { useTenant } from '@/hooks/useTenant';
 import { useToast } from '@/hooks/use-toast';
 import { AppRole } from '@/hooks/useUserRole';
+import {
+  createTenantInvitation,
+  deleteTenantInvitation,
+  listPendingTenantInvitations,
+} from '@/lib/firebaseTenantCrud';
 
 export interface TenantInvitation {
   id: string;
@@ -25,15 +30,7 @@ export function useTenantInvitations() {
     queryKey: ['tenant-invitations', tenantId],
     queryFn: async () => {
       if (!tenantId) return [];
-
-      const { data, error } = await supabase
-        .from('tenant_invitations')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .is('accepted_at', null)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await listPendingTenantInvitations(tenantId);
       return data as TenantInvitation[];
     },
     enabled: !!tenantId,
@@ -41,61 +38,44 @@ export function useTenantInvitations() {
 
   const createInvitation = useMutation({
     mutationFn: async ({ email, role }: { email: string; role: AppRole }) => {
-      if (!tenantId) throw new Error('Tenant não encontrado');
+      if (!tenantId) throw new Error('Tenant nao encontrado');
 
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) throw new Error('Usuário não autenticado');
+      const { data: userData } = await backendClient.auth.getUser();
+      if (!userData.user) throw new Error('Usuario nao autenticado');
 
-      const { data, error } = await supabase
-        .from('tenant_invitations')
-        .insert({
-          tenant_id: tenantId,
-          email: email.toLowerCase().trim(),
-          role,
-          invited_by: userData.user.id,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        if (error.code === '23505') {
-          throw new Error('Este email já foi convidado');
-        }
-        throw error;
-      }
-      return data;
+      return await createTenantInvitation({
+        tenant_id: tenantId,
+        email,
+        role,
+        invited_by: userData.user.id,
+      });
     },
     onSuccess: () => {
       toast({ title: 'Convite enviado com sucesso!' });
       queryClient.invalidateQueries({ queryKey: ['tenant-invitations', tenantId] });
     },
     onError: (error: Error) => {
-      toast({ 
-        title: 'Erro ao enviar convite', 
-        description: error.message, 
-        variant: 'destructive' 
+      toast({
+        title: 'Erro ao enviar convite',
+        description: error.message,
+        variant: 'destructive',
       });
     },
   });
 
   const deleteInvitation = useMutation({
     mutationFn: async (invitationId: string) => {
-      const { error } = await supabase
-        .from('tenant_invitations')
-        .delete()
-        .eq('id', invitationId);
-
-      if (error) throw error;
+      await deleteTenantInvitation(invitationId);
     },
     onSuccess: () => {
       toast({ title: 'Convite cancelado!' });
       queryClient.invalidateQueries({ queryKey: ['tenant-invitations', tenantId] });
     },
     onError: (error: Error) => {
-      toast({ 
-        title: 'Erro ao cancelar convite', 
-        description: error.message, 
-        variant: 'destructive' 
+      toast({
+        title: 'Erro ao cancelar convite',
+        description: error.message,
+        variant: 'destructive',
       });
     },
   });
@@ -109,88 +89,32 @@ export function useTenantInvitations() {
   };
 }
 
-// Hook for accepting invitations (used on accept page)
 export function useAcceptInvitation() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (token: string) => {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) throw new Error('Você precisa estar logado para aceitar o convite');
+      const response = await backendClient.functions.invoke('accept-tenant-invitation', {
+        body: { token },
+      });
 
-      // First, get the invitation
-      const { data: invitation, error: fetchError } = await supabase
-        .from('tenant_invitations')
-        .select('*')
-        .eq('token', token)
-        .is('accepted_at', null)
-        .single();
-
-      if (fetchError || !invitation) {
-        throw new Error('Convite não encontrado ou já foi aceito');
+      if (response.error) {
+        throw response.error;
       }
 
-      // Check if invitation expired
-      if (new Date(invitation.expires_at) < new Date()) {
-        throw new Error('Este convite expirou');
-      }
-
-      // Check if user email matches invitation email
-      if (userData.user.email?.toLowerCase() !== invitation.email.toLowerCase()) {
-        throw new Error('Este convite foi enviado para outro email');
-      }
-
-      // Add user to tenant_members
-      const { error: memberError } = await supabase
-        .from('tenant_members')
-        .insert({
-          tenant_id: invitation.tenant_id,
-          user_id: userData.user.id,
-          is_owner: false,
-          joined_at: new Date().toISOString(),
-          invited_by: invitation.invited_by,
-        });
-
-      if (memberError) {
-        if (memberError.code === '23505') {
-          throw new Error('Você já é membro deste restaurante');
-        }
-        throw memberError;
-      }
-
-      // Add user role
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .insert({
-          user_id: userData.user.id,
-          tenant_id: invitation.tenant_id,
-          role: invitation.role,
-        });
-
-      if (roleError && roleError.code !== '23505') {
-        throw roleError;
-      }
-
-      // Mark invitation as accepted
-      const { error: updateError } = await supabase
-        .from('tenant_invitations')
-        .update({ accepted_at: new Date().toISOString() })
-        .eq('id', invitation.id);
-
-      if (updateError) throw updateError;
-
-      return invitation;
+      return response.data;
     },
     onSuccess: () => {
       toast({ title: 'Convite aceito com sucesso!' });
-      queryClient.invalidateQueries({ queryKey: ['tenant-membership'] });
+      queryClient.invalidateQueries({ queryKey: ['all-tenant-memberships'] });
+      queryClient.invalidateQueries({ queryKey: ['user-roles'] });
     },
     onError: (error: Error) => {
-      toast({ 
-        title: 'Erro ao aceitar convite', 
-        description: error.message, 
-        variant: 'destructive' 
+      toast({
+        title: 'Erro ao aceitar convite',
+        description: error.message,
+        variant: 'destructive',
       });
     },
   });

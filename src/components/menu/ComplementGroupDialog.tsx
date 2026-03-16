@@ -79,6 +79,38 @@ const PRICE_CALCULATION_TYPES = [
   { value: 'lowest', label: 'O preço da opção', description: 'mais barata escolhida' },
 ];
 
+function normalizeSelectionRules(
+  form: Partial<ComplementGroup>,
+  overrides: Partial<ComplementGroup> = {}
+): Partial<ComplementGroup> {
+  const nextForm = { ...form, ...overrides };
+  const selectionType = nextForm.selection_type ?? 'single';
+  const isRequired = nextForm.is_required ?? false;
+
+  if (selectionType === 'single') {
+    return {
+      ...nextForm,
+      min_selections: isRequired ? 1 : 0,
+      max_selections: 1,
+    };
+  }
+
+  const minSelections = Math.max(
+    isRequired ? 1 : 0,
+    Number(nextForm.min_selections ?? (isRequired ? 1 : 0)) || 0
+  );
+  const maxSelections = Math.max(
+    minSelections,
+    Number(nextForm.max_selections ?? Math.max(1, minSelections)) || 1
+  );
+
+  return {
+    ...nextForm,
+    min_selections: minSelections,
+    max_selections: maxSelections,
+  };
+}
+
 interface InlineOptionRowProps {
   option: ComplementOption;
   maxQty: number;
@@ -257,7 +289,7 @@ export function ComplementGroupDialog({
   React.useEffect(() => {
     if (open) {
       if (group) {
-        setForm({
+        setForm(normalizeSelectionRules({
           name: group.name || '',
           description: group.description || '',
           selection_type: group.selection_type || 'single',
@@ -278,7 +310,7 @@ export function ComplementGroupDialog({
           ],
           applicable_flavor_counts: group.applicable_flavor_counts ?? [1, 2],
           kds_category: group.kds_category ?? 'complement',
-        });
+        }));
         setIsAdvancedOpen(
           (group.price_calculation_type !== 'sum' && group.price_calculation_type !== null) ||
           group.applies_per_unit === true
@@ -324,7 +356,7 @@ export function ComplementGroupDialog({
       };
     });
     
-    onSave(form, configs);
+    onSave(normalizeSelectionRules(form), configs);
   };
 
   const toggleOption = (optionId: string) => {
@@ -660,7 +692,11 @@ export function ComplementGroupDialog({
                   type="button"
                   variant={form.selection_type === type.value ? 'default' : 'outline'}
                   className="h-auto py-3 flex flex-col items-start text-left"
-                  onClick={() => setForm({ ...form, selection_type: type.value as ComplementGroup['selection_type'] })}
+                  onClick={() =>
+                    setForm((prev) =>
+                      normalizeSelectionRules(prev, { selection_type: type.value as ComplementGroup['selection_type'] })
+                    )
+                  }
                 >
                   <span className="font-medium">{type.label}</span>
                   <span className="text-xs opacity-70 font-normal">{type.description}</span>
@@ -673,7 +709,9 @@ export function ComplementGroupDialog({
           <div className="flex items-center gap-3 p-4 border rounded-lg">
             <Switch
               checked={form.is_required ?? false}
-              onCheckedChange={(checked) => setForm({ ...form, is_required: checked })}
+              onCheckedChange={(checked) =>
+                setForm((prev) => normalizeSelectionRules(prev, { is_required: checked }))
+              }
             />
             <div>
               <p className="font-medium">Obrigatório</p>
@@ -692,7 +730,11 @@ export function ComplementGroupDialog({
                   type="number"
                   min={0}
                   value={form.min_selections ?? 0}
-                  onChange={(e) => setForm({ ...form, min_selections: parseInt(e.target.value) || 0 })}
+                  onChange={(e) =>
+                    setForm((prev) =>
+                      normalizeSelectionRules(prev, { min_selections: parseInt(e.target.value) || 0 })
+                    )
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -701,7 +743,11 @@ export function ComplementGroupDialog({
                   type="number"
                   min={1}
                   value={form.max_selections ?? 1}
-                  onChange={(e) => setForm({ ...form, max_selections: parseInt(e.target.value) || 1 })}
+                  onChange={(e) =>
+                    setForm((prev) =>
+                      normalizeSelectionRules(prev, { max_selections: parseInt(e.target.value) || 1 })
+                    )
+                  }
                 />
               </div>
             </div>

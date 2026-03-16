@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { backendClient } from '@/integrations/backend/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
+import { getProfileById, upsertProfile } from '@/lib/firebaseTenantCrud';
 
 interface Profile {
   id: string;
@@ -20,29 +20,16 @@ export function useProfile() {
     queryKey: ['profile', user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
-      
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (error) throw error;
-      return data as Profile;
+      const data = await getProfileById(user.id);
+      return data as Profile | null;
     },
     enabled: !!user?.id,
   });
 
   const updateProfileMutation = useMutation({
     mutationFn: async ({ name }: { name: string }) => {
-      if (!user?.id) throw new Error('Usuário não autenticado');
-
-      const { error } = await supabase
-        .from('profiles')
-        .update({ name: name.trim().toUpperCase() })
-        .eq('id', user.id);
-
-      if (error) throw error;
+      if (!user?.id) throw new Error('Usuario nao autenticado');
+      await upsertProfile(user.id, { name: name.trim().toUpperCase() });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profile', user?.id] });
@@ -62,10 +49,9 @@ export function useProfile() {
 
   const changePasswordMutation = useMutation({
     mutationFn: async ({ currentPassword, newPassword }: { currentPassword: string; newPassword: string }) => {
-      if (!user?.email) throw new Error('Usuário não autenticado');
+      if (!user?.email) throw new Error('Usuario nao autenticado');
 
-      // Verify current password by re-authenticating
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { error: signInError } = await backendClient.auth.signInWithPassword({
         email: user.email,
         password: currentPassword,
       });
@@ -74,8 +60,7 @@ export function useProfile() {
         throw new Error('Senha atual incorreta');
       }
 
-      // Update password
-      const { error } = await supabase.auth.updateUser({
+      const { error } = await backendClient.auth.updateUser({
         password: newPassword,
       });
 
@@ -98,14 +83,13 @@ export function useProfile() {
 
   const deleteAccountMutation = useMutation({
     mutationFn: async ({ password }: { password: string }) => {
-      if (!user?.id) throw new Error('Usuário não autenticado');
+      if (!user?.id) throw new Error('Usuario nao autenticado');
 
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await backendClient.auth.getSession();
       const token = sessionData?.session?.access_token;
+      if (!token) throw new Error('Sessao invalida');
 
-      if (!token) throw new Error('Sessão inválida');
-
-      const response = await supabase.functions.invoke('delete-user', {
+      const response = await backendClient.functions.invoke('delete-user', {
         body: { password },
       });
 
@@ -120,10 +104,10 @@ export function useProfile() {
       return response.data;
     },
     onSuccess: async () => {
-      await supabase.auth.signOut();
+      await backendClient.auth.signOut();
       toast({
-        title: 'Conta excluída',
-        description: 'Sua conta foi excluída permanentemente.',
+        title: 'Conta excluida',
+        description: 'Sua conta foi excluida permanentemente.',
       });
     },
     onError: (error: Error) => {

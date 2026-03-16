@@ -1,29 +1,37 @@
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+﻿import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  getPlatformAdminByEmail,
+  getPlatformAdminByUserId,
+  getSubscriptionByTenant,
+  listProfilesByIds,
+  listSubscriptionPlans,
+  listSubscriptions,
+  listTenantMembers,
+  listTenants,
+} from '@/lib/firebaseTenantCrud';
 
 export function usePlatformAdmin() {
   const { user } = useAuth();
 
   const { data: isPlatformAdmin, isLoading } = useQuery({
-    queryKey: ['platform-admin', user?.id],
+    queryKey: ['platform-admin', user?.id, user?.email],
     queryFn: async () => {
-      if (!user?.id) return false;
+      if (!user) return false;
 
-      const { data, error } = await supabase
-        .from('platform_admins')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error checking platform admin:', error);
-        return false;
+      if (user.id) {
+        const byUserId = await getPlatformAdminByUserId(user.id);
+        if (byUserId) return true;
       }
 
-      return !!data;
+      if (user.email) {
+        const byEmail = await getPlatformAdminByEmail(user.email);
+        if (byEmail) return true;
+      }
+
+      return false;
     },
-    enabled: !!user?.id,
+    enabled: !!user,
   });
 
   return {
@@ -59,69 +67,35 @@ export function usePlatformTenants() {
   return useQuery({
     queryKey: ['platform-tenants'],
     queryFn: async () => {
-      // Buscar tenants
-      const { data: tenants, error: tenantsError } = await supabase
-        .from('tenants')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const [tenants, plans] = await Promise.all([listTenants(), listSubscriptionPlans()]);
+      const planMap = new Map(plans.map((plan) => [plan.id, plan]));
 
-      if (tenantsError) throw tenantsError;
-
-      // Buscar membros e assinaturas para cada tenant
       const tenantsWithDetails: TenantWithDetails[] = await Promise.all(
-        (tenants || []).map(async (tenant) => {
-          // Buscar owner
-          const { data: owner } = await supabase
-            .from('tenant_members')
-            .select('user_id')
-            .eq('tenant_id', tenant.id)
-            .eq('is_owner', true)
-            .maybeSingle();
+        tenants.map(async (tenant) => {
+          const members = await listTenantMembers(tenant.id);
+          const owner = members.find((m) => m.is_owner);
 
           let ownerProfile = null;
           if (owner?.user_id) {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('name')
-              .eq('id', owner.user_id)
-              .maybeSingle();
-            ownerProfile = profile;
+            const profiles = await listProfilesByIds([owner.user_id]);
+            ownerProfile = profiles[0] ?? null;
           }
 
-          // Contar membros
-          const { count: memberCount } = await supabase
-            .from('tenant_members')
-            .select('*', { count: 'exact', head: true })
-            .eq('tenant_id', tenant.id);
-
-          // Buscar assinatura
-          const { data: subscription } = await supabase
-            .from('subscriptions')
-            .select(`
-              id,
-              status,
-              plan_id,
-              trial_ends_at,
-              current_period_end,
-              subscription_plans (
-                name,
-                price_monthly
-              )
-            `)
-            .eq('tenant_id', tenant.id)
-            .maybeSingle();
+          const memberCount = members.length;
+          const subscription = await getSubscriptionByTenant(tenant.id);
+          const plan = subscription ? planMap.get(subscription.plan_id) : null;
 
           return {
             ...tenant,
             owner_name: ownerProfile?.name,
-            member_count: memberCount || 0,
+            member_count: memberCount,
             subscription: subscription ? {
               id: subscription.id,
               status: subscription.status || 'inactive',
               plan_id: subscription.plan_id,
               trial_ends_at: subscription.trial_ends_at,
               current_period_end: subscription.current_period_end,
-              plan: subscription.subscription_plans as { name: string; price_monthly: number } | undefined,
+              plan: plan ? { name: plan.name, price_monthly: Number(plan.price_monthly || 0) } : undefined,
             } : null,
           };
         })
@@ -136,24 +110,26 @@ export function usePlatformSubscriptions() {
   return useQuery({
     queryKey: ['platform-subscriptions'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('subscriptions')
-        .select(`
-          *,
-          subscription_plans (
-            name,
-            price_monthly
-          ),
-          tenants (
-            id,
-            name,
-            slug
-          )
-        `)
-        .order('created_at', { ascending: false });
+      const [subscriptions, plans, tenants] = await Promise.all([
+        listSubscriptions(),
+        listSubscriptionPlans(),
+        listTenants(),
+      ]);
 
-      if (error) throw error;
-      return data || [];
+      const planMap = new Map(plans.map((plan) => [plan.id, plan]));
+      const tenantMap = new Map(tenants.map((tenant) => [tenant.id, tenant]));
+
+      return subscriptions.map((subscription) => ({
+        ...subscription,
+        subscription_plans: (() => {
+          const plan = planMap.get(subscription.plan_id);
+          return plan ? { name: plan.name, price_monthly: Number(plan.price_monthly || 0) } : null;
+        })(),
+        tenants: (() => {
+          const tenant = tenantMap.get(subscription.tenant_id);
+          return tenant ? { id: tenant.id, name: tenant.name, slug: tenant.slug } : null;
+        })(),
+      }));
     },
   });
 }
@@ -162,43 +138,19 @@ export function usePlatformStats() {
   return useQuery({
     queryKey: ['platform-stats'],
     queryFn: async () => {
-      // Total de tenants
-      const { count: totalTenants } = await supabase
-        .from('tenants')
-        .select('*', { count: 'exact', head: true });
-
-      // Tenants ativos
-      const { count: activeTenants } = await supabase
-        .from('tenants')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
-
-      // Assinaturas ativas
-      const { count: activeSubscriptions } = await supabase
-        .from('subscriptions')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'active');
-
-      // Em trial
-      const { count: trialSubscriptions } = await supabase
-        .from('subscriptions')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'trialing');
-
-      // Calcular MRR (Monthly Recurring Revenue)
-      const { data: activeSubsWithPlans } = await supabase
-        .from('subscriptions')
-        .select(`
-          subscription_plans (
-            price_monthly
-          )
-        `)
-        .eq('status', 'active');
-
-      const mrr = (activeSubsWithPlans || []).reduce((acc, sub) => {
-        const plan = sub.subscription_plans as { price_monthly: number } | null;
-        return acc + (plan?.price_monthly || 0);
-      }, 0);
+      const [tenants, subscriptions, plans] = await Promise.all([
+        listTenants(),
+        listSubscriptions(),
+        listSubscriptionPlans(),
+      ]);
+      const totalTenants = tenants.length;
+      const activeTenants = tenants.filter((t) => t.is_active).length;
+      const activeSubscriptions = subscriptions.filter((subscription) => subscription.status === 'active').length;
+      const trialSubscriptions = subscriptions.filter((subscription) => subscription.status === 'trialing').length;
+      const planMap = new Map(plans.map((plan) => [plan.id, plan]));
+      const mrr = subscriptions
+        .filter((subscription) => subscription.status === 'active')
+        .reduce((acc, subscription) => acc + Number(planMap.get(subscription.plan_id)?.price_monthly || 0), 0);
 
       return {
         totalTenants: totalTenants || 0,
@@ -210,3 +162,7 @@ export function usePlatformStats() {
     },
   });
 }
+
+
+
+

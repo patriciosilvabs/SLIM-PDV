@@ -1,8 +1,7 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
-import { useEffect } from 'react';
 import { useTenant } from './useTenant';
+import { createTable, deleteTable, listTables, updateTable } from '@/lib/firebaseTenantCrud';
 
 export type TableStatus = 'available' | 'occupied' | 'reserved' | 'bill_requested';
 
@@ -17,35 +16,17 @@ export interface Table {
 }
 
 export function useTables() {
-  const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
 
-  const query = useQuery({
-    queryKey: ['tables'],
+  return useQuery({
+    queryKey: ['tables', tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('tables')
-        .select('*')
-        .order('number');
-      
-      if (error) throw error;
-      return data as Table[];
+      if (!tenantId) return [];
+      return (await listTables(tenantId)) as Table[];
     },
+    enabled: !!tenantId,
+    refetchInterval: 5000,
   });
-
-  useEffect(() => {
-    const channel = supabase
-      .channel('tables-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['tables'] });
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
-
-  return query;
 }
 
 export function useTableMutations() {
@@ -53,18 +34,10 @@ export function useTableMutations() {
   const { toast } = useToast();
   const { tenantId } = useTenant();
 
-  const createTable = useMutation({
+  const createTableMutation = useMutation({
     mutationFn: async (table: Omit<Table, 'id' | 'created_at'>) => {
-      if (!tenantId) throw new Error('Tenant não encontrado');
-      
-      const { data, error } = await supabase
-        .from('tables')
-        .insert({ ...table, tenant_id: tenantId })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      return await createTable(tenantId, table);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tables'] });
@@ -75,17 +48,10 @@ export function useTableMutations() {
     },
   });
 
-  const updateTable = useMutation({
+  const updateTableMutation = useMutation({
     mutationFn: async ({ id, ...table }: Partial<Table> & { id: string }) => {
-      const { data, error } = await supabase
-        .from('tables')
-        .update(table)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      return await updateTable(tenantId, id, table);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tables'] });
@@ -95,23 +61,19 @@ export function useTableMutations() {
     },
   });
 
-  const deleteTable = useMutation({
+  const deleteTableMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('tables')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await deleteTable(tenantId, id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tables'] });
-      toast({ title: 'Mesa excluída!' });
+      toast({ title: 'Mesa excluida!' });
     },
     onError: (error: Error) => {
       toast({ title: 'Erro ao excluir mesa', description: error.message, variant: 'destructive' });
     },
   });
 
-  return { createTable, updateTable, deleteTable };
+  return { createTable: createTableMutation, updateTable: updateTableMutation, deleteTable: deleteTableMutation };
 }

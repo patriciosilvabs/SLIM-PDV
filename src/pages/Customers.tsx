@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+﻿import { useState, useMemo } from 'react';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,10 +31,11 @@ import {
 } from 'lucide-react';
 import { useCustomers, useCustomerMutations, Customer } from '@/hooks/useCustomers';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format, subDays, isAfter, isBefore, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useTenant } from '@/hooks/useTenant';
+import { listOrderItemsByOrderIds, listOrdersByStatusAndDateRange, listProducts } from '@/lib/firebaseTenantCrud';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -59,6 +60,7 @@ export default function Customers() {
   const { data: customers, isLoading } = useCustomers();
   const { createCustomer, updateCustomer } = useCustomerMutations();
   const { toast } = useToast();
+  const { tenantId } = useTenant();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -82,34 +84,41 @@ export default function Customers() {
 
   // Fetch customer orders for history dialog
   const { data: customerOrders } = useQuery({
-    queryKey: ['customer-orders', selectedCustomer?.id],
+    queryKey: ['customer-orders', tenantId, selectedCustomer?.id],
     queryFn: async () => {
-      if (!selectedCustomer) return [];
-      
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          id,
-          created_at,
-          order_type,
-          status,
-          total,
-          order_items (
-            id,
-            quantity,
-            unit_price,
-            total_price,
-            product:products(name)
-          )
-        `)
-        .or(`customer_phone.eq.${selectedCustomer.phone},customer_name.eq.${selectedCustomer.name}`)
-        .order('created_at', { ascending: false })
-        .limit(50);
-      
-      if (error) throw error;
-      return data || [];
+      if (!tenantId || !selectedCustomer) return [];
+
+      let orders = await listOrdersByStatusAndDateRange(tenantId, {});
+      orders = orders
+        .filter(
+          (order) =>
+            (selectedCustomer.phone && (order as { customer_phone?: string | null }).customer_phone === selectedCustomer.phone) ||
+            order.customer_name === selectedCustomer.name
+        )
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 50);
+
+      const [orderItems, products] = await Promise.all([
+        listOrderItemsByOrderIds(tenantId, orders.map((order) => order.id)),
+        listProducts(tenantId, true),
+      ]);
+      const productMap = new Map(products.map((product) => [product.id, product]));
+      const itemsByOrderId = new Map<string, typeof orderItems>();
+      orderItems.forEach((item) => {
+        const current = itemsByOrderId.get(item.order_id) || [];
+        current.push(item);
+        itemsByOrderId.set(item.order_id, current);
+      });
+
+      return orders.map((order) => ({
+        ...order,
+        order_items: (itemsByOrderId.get(order.id) || []).map((item) => ({
+          ...item,
+          product: item.product_id ? { name: productMap.get(item.product_id)?.name || 'Produto' } : { name: 'Produto' },
+        })),
+      }));
     },
-    enabled: !!selectedCustomer && historyDialogOpen,
+    enabled: !!tenantId && !!selectedCustomer && historyDialogOpen,
   });
 
   // Helper to check if customer is "active" (ordered in last 30 days)
@@ -205,7 +214,7 @@ export default function Customers() {
 
   const handleCreate = async () => {
     if (!formName.trim()) {
-      toast({ title: 'Nome é obrigatório', variant: 'destructive' });
+      toast({ title: 'Nome Ã© obrigatÃ³rio', variant: 'destructive' });
       return;
     }
 
@@ -243,9 +252,9 @@ export default function Customers() {
 
   const getOrderTypeLabel = (type: string | null) => {
     switch (type) {
-      case 'delivery': return '🚚 Delivery';
-      case 'takeaway': return '📦 Retirada';
-      case 'dine_in': return '🍽️ Mesa';
+      case 'delivery': return 'ðŸšš Delivery';
+      case 'takeaway': return 'ðŸ“¦ Retirada';
+      case 'dine_in': return 'ðŸ½ï¸ Mesa';
       default: return type || '-';
     }
   };
@@ -273,7 +282,7 @@ export default function Customers() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Clientes</h1>
-            <p className="text-muted-foreground">Gerencie seus clientes e veja o histórico de pedidos</p>
+            <p className="text-muted-foreground">Gerencie seus clientes e veja o histÃ³rico de pedidos</p>
           </div>
           <Button onClick={openCreateDialog}>
             <Plus className="h-4 w-4 mr-2" />
@@ -314,7 +323,7 @@ export default function Customers() {
               <Card className="p-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Gasto mínimo (R$)</Label>
+                    <Label className="text-xs text-muted-foreground">Gasto mÃ­nimo (R$)</Label>
                     <Input
                       type="number"
                       placeholder="0"
@@ -323,7 +332,7 @@ export default function Customers() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Gasto máximo (R$)</Label>
+                    <Label className="text-xs text-muted-foreground">Gasto mÃ¡ximo (R$)</Label>
                     <Input
                       type="number"
                       placeholder="Sem limite"
@@ -332,7 +341,7 @@ export default function Customers() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Mín. de pedidos</Label>
+                    <Label className="text-xs text-muted-foreground">MÃ­n. de pedidos</Label>
                     <Input
                       type="number"
                       placeholder="0"
@@ -341,17 +350,17 @@ export default function Customers() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Último pedido</Label>
+                    <Label className="text-xs text-muted-foreground">Ãšltimo pedido</Label>
                     <Select value={filterLastOrderDays} onValueChange={setFilterLastOrderDays}>
                       <SelectTrigger>
                         <SelectValue placeholder="Qualquer data" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="">Qualquer data</SelectItem>
-                        <SelectItem value="7">Últimos 7 dias</SelectItem>
-                        <SelectItem value="30">Últimos 30 dias</SelectItem>
-                        <SelectItem value="60">Últimos 60 dias</SelectItem>
-                        <SelectItem value="90">Últimos 90 dias</SelectItem>
+                        <SelectItem value="7">Ãšltimos 7 dias</SelectItem>
+                        <SelectItem value="30">Ãšltimos 30 dias</SelectItem>
+                        <SelectItem value="60">Ãšltimos 60 dias</SelectItem>
+                        <SelectItem value="90">Ãšltimos 90 dias</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -456,8 +465,8 @@ export default function Customers() {
                       <th className="pb-3 font-medium">Telefone</th>
                       <th className="pb-3 font-medium text-center">Pedidos</th>
                       <th className="pb-3 font-medium text-right">Total Gasto</th>
-                      <th className="pb-3 font-medium">Último Pedido</th>
-                      <th className="pb-3 font-medium text-right">Ações</th>
+                      <th className="pb-3 font-medium">Ãšltimo Pedido</th>
+                      <th className="pb-3 font-medium text-right">AÃ§Ãµes</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -508,7 +517,7 @@ export default function Customers() {
                         <td className="py-3">
                           {customer.last_order_at ? (
                             <span className="text-sm text-muted-foreground">
-                              {format(new Date(customer.last_order_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                              {format(new Date(customer.last_order_at), "dd/MM/yyyy 'Ã s' HH:mm", { locale: ptBR })}
                             </span>
                           ) : (
                             <span className="text-muted-foreground">-</span>
@@ -530,7 +539,7 @@ export default function Customers() {
                               size="icon"
                               className="h-8 w-8"
                               onClick={() => openHistoryDialog(customer)}
-                              title="Histórico de Pedidos"
+                              title="HistÃ³rico de Pedidos"
                             >
                               <History className="h-4 w-4" />
                             </Button>
@@ -585,11 +594,11 @@ export default function Customers() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Endereço</Label>
+              <Label>EndereÃ§o</Label>
               <div className="relative">
                 <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Textarea
-                  placeholder="Endereço completo"
+                  placeholder="EndereÃ§o completo"
                   value={formAddress}
                   onChange={(e) => setFormAddress(e.target.value)}
                   className="pl-10"
@@ -598,7 +607,7 @@ export default function Customers() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Observações</Label>
+              <Label>ObservaÃ§Ãµes</Label>
               <Textarea
                 placeholder="Notas sobre o cliente..."
                 value={formNotes}
@@ -657,11 +666,11 @@ export default function Customers() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Endereço</Label>
+              <Label>EndereÃ§o</Label>
               <div className="relative">
                 <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Textarea
-                  placeholder="Endereço completo"
+                  placeholder="EndereÃ§o completo"
                   value={formAddress}
                   onChange={(e) => setFormAddress(e.target.value)}
                   className="pl-10"
@@ -670,7 +679,7 @@ export default function Customers() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Observações</Label>
+              <Label>ObservaÃ§Ãµes</Label>
               <Textarea
                 placeholder="Notas sobre o cliente..."
                 value={formNotes}
@@ -684,7 +693,7 @@ export default function Customers() {
               Cancelar
             </Button>
             <Button onClick={handleUpdate} disabled={updateCustomer.isPending}>
-              {updateCustomer.isPending ? 'Salvando...' : 'Salvar Alterações'}
+              {updateCustomer.isPending ? 'Salvando...' : 'Salvar AlteraÃ§Ãµes'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -696,7 +705,7 @@ export default function Customers() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <History className="h-5 w-5" />
-              Histórico - {selectedCustomer?.name}
+              HistÃ³rico - {selectedCustomer?.name}
             </DialogTitle>
           </DialogHeader>
           
@@ -718,7 +727,7 @@ export default function Customers() {
                       : formatCurrency(0)
                     }
                   </p>
-                  <p className="text-xs text-muted-foreground">Ticket médio</p>
+                  <p className="text-xs text-muted-foreground">Ticket mÃ©dio</p>
                 </div>
               </div>
             </div>
@@ -739,7 +748,7 @@ export default function Customers() {
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm">
-                            {format(new Date(order.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                            {format(new Date(order.created_at), "dd/MM/yyyy 'Ã s' HH:mm", { locale: ptBR })}
                           </span>
                         </div>
                         <span className="text-sm text-muted-foreground">
@@ -776,3 +785,7 @@ export default function Customers() {
     </PDVLayout>
   );
 }
+
+
+
+

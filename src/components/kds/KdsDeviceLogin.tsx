@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
 import { toast } from 'sonner';
 import { Tablet, LogIn, Loader2, Home } from 'lucide-react';
 import logoSlim from '@/assets/logo-slim.png';
@@ -39,7 +39,7 @@ export function KdsDeviceLogin({ onLoginSuccess }: KdsDeviceLoginProps) {
 
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('kds-device-auth', {
+      const { data, error } = await backendClient.functions.invoke('kds-device-auth', {
         body: {
           action: 'login_by_codes',
           verification_code: verificationCode,
@@ -149,3 +149,4 @@ export function KdsDeviceLogin({ onLoginSuccess }: KdsDeviceLoginProps) {
     </div>
   );
 }
+

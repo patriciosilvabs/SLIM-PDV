@@ -107,6 +107,9 @@ interface KdsStationCardProps {
   stationType: string;
   isFirstStation?: boolean;
   isLastStation?: boolean;
+  nextStationName?: string | null;
+  nextStationType?: string | null;
+  onStartItem: (itemId: string) => void;
   onMoveToNext: (itemId: string, orderType: string) => void;
   onSkipItem?: (itemId: string) => void;
   isProcessing?: boolean;
@@ -169,6 +172,9 @@ export function KdsStationCard({
   stationType,
   isFirstStation,
   isLastStation,
+  nextStationName,
+  nextStationType,
+  onStartItem,
   onMoveToNext,
   onSkipItem,
   isProcessing,
@@ -177,7 +183,7 @@ export function KdsStationCard({
   totalOrderItems,
 }: KdsStationCardProps) {
   // Estado para debounce de cliques por item
-  const [clickedItems, setClickedItems] = useState<Set<string>>(new Set());
+  const [clickedItems, setClickedItems] = useState<Map<string, 'start' | 'move'>>(new Map());
   const clickTimeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Cleanup timeouts on unmount
@@ -188,28 +194,37 @@ export function KdsStationCard({
   }, []);
 
   // Handler otimizado com debounce visual
-  const handleMoveToNext = useCallback((itemId: string) => {
-    // Ignora se já foi clicado recentemente
-    if (clickedItems.has(itemId)) return;
-    
-    // Marca como clicado imediatamente (feedback visual instantâneo)
-    setClickedItems(prev => new Set(prev).add(itemId));
-    
-    // Chama a ação passando o order_type do pedido
-    onMoveToNext(itemId, order.order_type);
-    
-    // Reset após 3000ms (tempo suficiente para a ação completar)
+  const registerPendingAction = useCallback((itemId: string, action: 'start' | 'move') => {
+    if (clickedItems.has(itemId)) return false;
+
+    setClickedItems(prev => {
+      const next = new Map(prev);
+      next.set(itemId, action);
+      return next;
+    });
+
     const timeout = setTimeout(() => {
       setClickedItems(prev => {
-        const next = new Set(prev);
+        const next = new Map(prev);
         next.delete(itemId);
         return next;
       });
       clickTimeouts.current.delete(itemId);
     }, 3000);
-    
+
     clickTimeouts.current.set(itemId, timeout);
-  }, [clickedItems, onMoveToNext]);
+    return true;
+  }, [clickedItems]);
+
+  const handleStartItem = useCallback((itemId: string) => {
+    if (!registerPendingAction(itemId, 'start')) return;
+    onStartItem(itemId);
+  }, [onStartItem, registerPendingAction]);
+
+  const handleMoveToNext = useCallback((itemId: string) => {
+    if (!registerPendingAction(itemId, 'move')) return;
+    onMoveToNext(itemId, order.order_type);
+  }, [onMoveToNext, order.order_type, registerPendingAction]);
   const { hasSpecialBorder: hookHasSpecialBorder, settings: hookSettings } = useKdsSettings();
   
   // Use overrideSettings when provided (device-only mode bypasses RLS)
@@ -246,8 +261,21 @@ export function KdsStationCard({
 
   const getOrderOriginLabel = () => {
     if (order.order_type === 'delivery') return 'DELIVERY';
-    if (order.order_type === 'takeaway') return 'BALCÃO';
+    if (order.order_type === 'takeaway') return 'BALCAO';
     return `MESA ${order.table?.number || '?'}`;
+  };
+
+  const getAdvanceLabel = () => {
+    if (nextStationType === 'oven_expedite') return 'Ir para Forno';
+    if (nextStationType === 'item_assembly') return 'Ir para Montagem';
+    if (nextStationType === 'assembly') return 'Ir para Produção';
+    if (nextStationType === 'prep_start') return 'Ir para Preparação';
+    if (nextStationType === 'order_status') return 'Marcar Pronto';
+    if (nextStationName) return `Ir para ${nextStationName}`;
+    if (isLastStation) return 'Pronto';
+    if (stationType === 'prep_start') return 'Montagem';
+    if (stationType === 'item_assembly' || stationType === 'assembly') return 'Forno';
+    return 'Proximo';
   };
 
   // Renderização contextual de item baseada no tipo da estação
@@ -345,35 +373,59 @@ export function KdsStationCard({
               )}
             >
               {renderItemContent(item)}
+
+              {item.station_status === 'in_progress' && (
+                <div className="mt-2 flex items-center justify-end">
+                  <StationTimer
+                    startedAt={item.station_started_at}
+                    createdAt={item.created_at}
+                    greenMinutes={settings.timerGreenMinutes}
+                    yellowMinutes={settings.timerYellowMinutes}
+                  />
+                </div>
+              )}
               
-              <Button 
-                size={compact ? "sm" : "default"}
-                onClick={() => handleMoveToNext(item.id)}
-                disabled={clickedItems.has(item.id)}
-                className={cn(
-                  "w-full mt-3 transition-all duration-150", 
-                  compact && "h-8 text-xs mt-2",
-                  clickedItems.has(item.id) && "opacity-50 scale-95"
-                )}
-                style={{ backgroundColor: stationColor }}
-              >
-                {clickedItems.has(item.id) ? (
-                  <>
-                    <CheckCircle className={cn("h-4 w-4 mr-2 animate-pulse", compact && "h-3 w-3 mr-1")} />
-                    Movendo...
-                  </>
-                ) : isLastStation ? (
-                  <>
-                    <CheckCircle className={cn("h-4 w-4 mr-2", compact && "h-3 w-3 mr-1")} />
-                    Pronto
-                  </>
-                ) : (
-                  <>
-                    <ArrowRight className={cn("h-4 w-4 mr-2", compact && "h-3 w-3 mr-1")} />
-                    Próximo
-                  </>
-                )}
-              </Button>
+              {(() => {
+                const pendingAction = clickedItems.get(item.id);
+                const isItemInProgress = item.station_status === 'in_progress';
+                const canCompleteDirectly = !!isLastStation && !isItemInProgress;
+                const advanceLabel = getAdvanceLabel();
+
+                return (
+                  <Button 
+                    size={compact ? "sm" : "default"}
+                    onClick={() => ((isItemInProgress || canCompleteDirectly) ? handleMoveToNext(item.id) : handleStartItem(item.id))}
+                    disabled={clickedItems.has(item.id)}
+                    className={cn(
+                      "w-full mt-3 transition-all duration-150", 
+                      compact && "h-8 text-xs mt-2",
+                      clickedItems.has(item.id) && "opacity-50 scale-95"
+                    )}
+                    style={{ backgroundColor: stationColor }}
+                  >
+                    {pendingAction ? (
+                      <>
+                        <CheckCircle className={cn("h-4 w-4 mr-2 animate-pulse", compact && "h-3 w-3 mr-1")} />
+                        {pendingAction === 'start' ? 'Iniciando...' : 'Movendo...'}
+                      </>
+                    ) : (isItemInProgress || canCompleteDirectly) ? (
+                      <>
+                        {isLastStation ? (
+                          <CheckCircle className={cn("h-4 w-4 mr-2", compact && "h-3 w-3 mr-1")} />
+                        ) : (
+                          <ArrowRight className={cn("h-4 w-4 mr-2", compact && "h-3 w-3 mr-1")} />
+                        )}
+                        {advanceLabel}
+                      </>
+                    ) : (
+                      <>
+                        <Circle className={cn("h-4 w-4 mr-2", compact && "h-3 w-3 mr-1")} />
+                        Iniciar
+                      </>
+                    )}
+                  </Button>
+                );
+              })()}
             </div>
           ))}
           {compact && items.length > 3 && (
@@ -391,3 +443,5 @@ export function KdsStationCard({
     </Card>
   );
 }
+
+

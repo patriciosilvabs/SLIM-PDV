@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
+import { firebaseAuth, getFirebaseFunctionUrl } from '@/integrations/firebase/client';
 
 export interface OpenAIVoice {
   id: string;
@@ -47,14 +48,14 @@ export function useOpenAITTS() {
     setIsLoading(true);
     
     try {
+      const token = firebaseAuth.currentUser ? await firebaseAuth.currentUser.getIdToken() : null;
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openai-tts`,
+        getFirebaseFunctionUrl('openai-tts'),
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({ text, voice, model }),
         }

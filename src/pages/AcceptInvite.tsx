@@ -1,18 +1,18 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+﻿import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAcceptInvitation } from '@/hooks/useTenantInvitations';
-import { supabase } from '@/integrations/supabase/client';
-import { Loader2, CheckCircle2, XCircle, Mail, LogIn } from 'lucide-react';
+import { backendClient } from '@/integrations/backend/client';
+import { CheckCircle2, Loader2, LogIn, Mail, XCircle } from 'lucide-react';
 
 export default function AcceptInvite() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const acceptInvitation = useAcceptInvitation();
-  
+
   const [invitationInfo, setInvitationInfo] = useState<{
     email: string;
     tenant_name: string;
@@ -25,45 +25,40 @@ export default function AcceptInvite() {
   useEffect(() => {
     async function fetchInvitationInfo() {
       if (!token) {
-        setInfoError('Token de convite inválido');
+        setInfoError('Token de convite invalido');
         setLoadingInfo(false);
         return;
       }
 
       try {
-        const { data, error } = await supabase
-          .from('tenant_invitations')
-          .select(`
-            email,
-            expires_at,
-            accepted_at,
-            tenant:tenants(name)
-          `)
-          .eq('token', token)
-          .single();
+        const response = await backendClient.functions.invoke('tenant-invitation-info', {
+          body: { token },
+        });
 
-        if (error || !data) {
-          setInfoError('Convite não encontrado');
-          return;
+        if (response.error) {
+          throw response.error;
         }
 
-        if (data.accepted_at) {
-          setInfoError('Este convite já foi aceito');
-          return;
-        }
+        const invitation = response.data as
+          | {
+              email?: string;
+              tenant_name?: string;
+              expires_at?: string;
+            }
+          | null;
 
-        if (new Date(data.expires_at) < new Date()) {
-          setInfoError('Este convite expirou');
-          return;
+        if (!invitation?.email || !invitation.tenant_name || !invitation.expires_at) {
+          throw new Error('Convite nao encontrado');
         }
 
         setInvitationInfo({
-          email: data.email,
-          tenant_name: (data.tenant as any)?.name || 'Restaurante',
-          expires_at: data.expires_at,
+          email: invitation.email,
+          tenant_name: invitation.tenant_name,
+          expires_at: invitation.expires_at,
         });
-      } catch (err) {
-        setInfoError('Erro ao carregar convite');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Erro ao carregar convite';
+        setInfoError(message);
       } finally {
         setLoadingInfo(false);
       }
@@ -74,13 +69,13 @@ export default function AcceptInvite() {
 
   const handleAccept = async () => {
     if (!token) return;
-    
+
     try {
       await acceptInvitation.mutateAsync(token);
       setAccepted(true);
       setTimeout(() => navigate('/'), 2000);
-    } catch (err) {
-      // Error handled by mutation
+    } catch {
+      // handled in mutation
     }
   };
 
@@ -100,12 +95,12 @@ export default function AcceptInvite() {
             <div className="mx-auto w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mb-4">
               <XCircle className="h-8 w-8 text-destructive" />
             </div>
-            <CardTitle>Convite Inválido</CardTitle>
+            <CardTitle>Convite invalido</CardTitle>
             <CardDescription>{infoError}</CardDescription>
           </CardHeader>
           <CardContent className="text-center">
             <Button asChild>
-              <Link to="/">Ir para o Início</Link>
+              <Link to="/">Ir para o inicio</Link>
             </Button>
           </CardContent>
         </Card>
@@ -121,9 +116,9 @@ export default function AcceptInvite() {
             <div className="mx-auto w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mb-4">
               <CheckCircle2 className="h-8 w-8 text-green-500" />
             </div>
-            <CardTitle>Convite Aceito!</CardTitle>
+            <CardTitle>Convite aceito</CardTitle>
             <CardDescription>
-              Você agora faz parte de {invitationInfo?.tenant_name}. Redirecionando...
+              Voce agora faz parte de {invitationInfo?.tenant_name}. Redirecionando...
             </CardDescription>
           </CardHeader>
         </Card>
@@ -139,9 +134,9 @@ export default function AcceptInvite() {
             <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
               <Mail className="h-8 w-8 text-primary" />
             </div>
-            <CardTitle>Você foi convidado!</CardTitle>
+            <CardTitle>Voce foi convidado</CardTitle>
             <CardDescription>
-              {invitationInfo?.tenant_name} convidou você para se juntar à equipe.
+              {invitationInfo?.tenant_name} convidou voce para se juntar a equipe.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -150,7 +145,7 @@ export default function AcceptInvite() {
               <p className="font-medium">{invitationInfo?.email}</p>
             </div>
             <p className="text-sm text-muted-foreground text-center">
-              Faça login ou crie uma conta com o email acima para aceitar o convite.
+              Faca login ou crie uma conta com o email acima para aceitar o convite.
             </p>
             <Button asChild className="w-full">
               <Link to={`/auth?redirect=/invite/${token}`}>
@@ -164,7 +159,6 @@ export default function AcceptInvite() {
     );
   }
 
-  // User is logged in, show accept button
   const emailMatches = user.email?.toLowerCase() === invitationInfo?.email.toLowerCase();
 
   return (
@@ -174,10 +168,8 @@ export default function AcceptInvite() {
           <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
             <Mail className="h-8 w-8 text-primary" />
           </div>
-          <CardTitle>Aceitar Convite</CardTitle>
-          <CardDescription>
-            Você foi convidado para {invitationInfo?.tenant_name}
-          </CardDescription>
+          <CardTitle>Aceitar convite</CardTitle>
+          <CardDescription>Voce foi convidado para {invitationInfo?.tenant_name}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="bg-muted p-4 rounded-lg text-center">
@@ -187,20 +179,16 @@ export default function AcceptInvite() {
 
           {!emailMatches && (
             <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 text-sm">
-              <p className="text-warning font-medium">Atenção</p>
+              <p className="text-warning font-medium">Atencao</p>
               <p className="text-muted-foreground">
-                Você está logado como {user.email}, mas o convite foi enviado para{' '}
-                {invitationInfo?.email}. Faça login com o email correto.
+                Voce esta logado como {user.email}, mas o convite foi enviado para {invitationInfo?.email}.
+                Faca login com o email correto.
               </p>
             </div>
           )}
 
           {emailMatches ? (
-            <Button 
-              className="w-full" 
-              onClick={handleAccept}
-              disabled={acceptInvitation.isPending}
-            >
+            <Button className="w-full" onClick={handleAccept} disabled={acceptInvitation.isPending}>
               {acceptInvitation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -212,9 +200,7 @@ export default function AcceptInvite() {
             </Button>
           ) : (
             <Button asChild variant="outline" className="w-full">
-              <Link to={`/auth?redirect=/invite/${token}`}>
-                Fazer login com outro email
-              </Link>
+              <Link to={`/auth?redirect=/invite/${token}`}>Fazer login com outro email</Link>
             </Button>
           )}
         </CardContent>

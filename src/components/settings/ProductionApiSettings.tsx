@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useProductionApiKeys, ProductionApiKey } from '@/hooks/useProductionApiKeys';
-import { 
+import {
   Key, 
   Plus, 
   Copy, 
@@ -38,9 +38,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { getFirebaseFunctionsBaseUrl } from '@/integrations/firebase/client';
 
-const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || 'pgfeffykhanujyqymmir';
-const API_BASE_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
+const API_BASE_URL = getFirebaseFunctionsBaseUrl();
 
 export function ProductionApiSettings() {
   const { apiKeys, logs, isLoading, logsLoading, createKey, updateKey, deleteKey } = useProductionApiKeys();

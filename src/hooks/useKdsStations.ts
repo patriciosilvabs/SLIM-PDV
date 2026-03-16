@@ -1,7 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
 import { useTenant } from './useTenant';
+import { useAuth } from '@/contexts/AuthContext';
+import { backendClient } from '@/integrations/backend/client';
+import { getStoredKdsDeviceTenantId, hasActiveKdsDeviceSession } from '@/lib/kdsDeviceSession';
+import { resolveCurrentTenantId } from '@/lib/tenantResolver';
+import { toast } from 'sonner';
 
 export interface KdsStation {
   id: string;
@@ -19,155 +22,211 @@ export interface KdsStation {
 export type StationType = 'prep_start' | 'item_assembly' | 'assembly' | 'oven_expedite' | 'order_status' | 'custom';
 
 export const STATION_TYPE_LABELS: Record<StationType, string> = {
-  prep_start: 'Em preparação',
+  prep_start: 'Em preparacao',
   item_assembly: 'Item em montagem',
-  assembly: 'Em Produção',
-  oven_expedite: 'Item em Finalização',
+  assembly: 'Em Producao',
+  oven_expedite: 'Item em Finalizacao',
   order_status: 'Item Pronto',
   custom: 'Personalizada',
 };
 
-export function useKdsStations() {
-  const { toast } = useToast();
+async function invokeKdsStationsAdmin<T = unknown>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await backendClient.functions.invoke('kds-data', { body });
+  if (error) throw error;
+  if (data && typeof data === 'object' && 'error' in data && typeof data.error === 'string') {
+    throw new Error(data.error);
+  }
+  return data as T;
+}
+
+export function useKdsStations(options?: { enabled?: boolean; tenantIdOverride?: string | null }) {
   const queryClient = useQueryClient();
   const { tenantId } = useTenant();
+  const { user } = useAuth();
+  const effectiveTenantId = options?.tenantIdOverride || tenantId || getStoredKdsDeviceTenantId() || null;
+  const enabled = options?.enabled ?? !hasActiveKdsDeviceSession();
+  const canQueryStations = enabled && !!user?.id;
+
+  const resolveTenantIdForWrite = async () => {
+    const tenantIdForWrite = effectiveTenantId || await resolveCurrentTenantId();
+    if (!tenantIdForWrite) {
+      throw new Error('Tenant nao encontrado');
+    }
+    return tenantIdForWrite;
+  };
 
   const { data: stations = [], isLoading, error } = useQuery({
-    queryKey: ['kds-stations'],
+    queryKey: ['kds-stations', effectiveTenantId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('kds_stations')
-        .select('*')
-        .order('sort_order', { ascending: true });
-
-      if (error) throw error;
-      return data as KdsStation[];
+      const tenantIdForQuery = effectiveTenantId || await resolveCurrentTenantId();
+      if (!tenantIdForQuery) return [];
+      const result = await invokeKdsStationsAdmin<{ stations: KdsStation[] }>({
+        action: 'list_stations',
+        tenant_id: tenantIdForQuery,
+      });
+      return result.stations ?? [];
     },
+    enabled: canQueryStations,
   });
 
-  const activeStations = stations.filter(s => s.is_active);
-  
-  // Estações de produção (exclui order_status)
-  const productionStations = activeStations.filter(s => s.station_type !== 'order_status');
-  
-  // Estações de status do pedido (pode haver múltiplas)
-  const orderStatusStations = activeStations.filter(s => s.station_type === 'order_status');
-  
-  // Primeira estação de status (para compatibilidade)
+  const activeStations = stations.filter((s) => s.is_active);
+  const productionStations = activeStations.filter((s) => s.station_type !== 'order_status');
+  const orderStatusStations = activeStations.filter((s) => s.station_type === 'order_status');
   const orderStatusStation = orderStatusStations[0];
 
   const createStation = useMutation({
     mutationFn: async (station: Omit<KdsStation, 'id' | 'created_at' | 'updated_at'>) => {
-      if (!tenantId) throw new Error('Tenant não encontrado');
-      
-      const { data, error } = await supabase
-        .from('kds_stations')
-        .insert({ ...station, tenant_id: tenantId })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      const tenantIdForWrite = await resolveTenantIdForWrite();
+      const result = await invokeKdsStationsAdmin<{ station: KdsStation }>({
+        action: 'create_station',
+        tenant_id: tenantIdForWrite,
+        ...station,
+      });
+      return result.station;
     },
-    onSuccess: () => {
+    onSuccess: (createdStation) => {
       queryClient.invalidateQueries({ queryKey: ['kds-stations'] });
-      toast({ title: 'Praça criada com sucesso' });
+      if (createdStation?.id && effectiveTenantId) {
+        queryClient.setQueryData<KdsStation[]>(
+          ['kds-stations', effectiveTenantId],
+          (current = []) => [...current, createdStation].sort((a, b) => a.sort_order - b.sort_order)
+        );
+      }
+      toast.success('Setor criado com sucesso');
     },
     onError: (error) => {
-      toast({ title: 'Erro ao criar praça', description: error.message, variant: 'destructive' });
+      toast.error(`Erro ao criar setor: ${error.message}`);
     },
   });
 
   const updateStation = useMutation({
     mutationFn: async ({ id, ...updates }: Partial<KdsStation> & { id: string }) => {
-      const { data, error } = await supabase
-        .from('kds_stations')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      const tenantIdForWrite = await resolveTenantIdForWrite();
+      const result = await invokeKdsStationsAdmin<{ station: KdsStation }>({
+        action: 'update_station',
+        tenant_id: tenantIdForWrite,
+        station_id: id,
+        ...updates,
+      });
+      return result.station;
     },
-    onSuccess: () => {
+    onSuccess: (updatedStation) => {
       queryClient.invalidateQueries({ queryKey: ['kds-stations'] });
-      toast({ title: 'Praça atualizada com sucesso' });
+      if (updatedStation?.id && effectiveTenantId) {
+        queryClient.setQueryData<KdsStation[]>(
+          ['kds-stations', effectiveTenantId],
+          (current = []) => current.map((station) => (
+            station.id === updatedStation.id ? updatedStation : station
+          ))
+        );
+      }
+      toast.success('Setor atualizado com sucesso');
     },
     onError: (error) => {
-      toast({ title: 'Erro ao atualizar praça', description: error.message, variant: 'destructive' });
+      toast.error(`Erro ao atualizar setor: ${error.message}`);
     },
   });
 
   const deleteStation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('kds_stations')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      const tenantIdForWrite = await resolveTenantIdForWrite();
+      await invokeKdsStationsAdmin({
+        action: 'delete_station',
+        tenant_id: tenantIdForWrite,
+        station_id: id,
+      });
     },
-    onSuccess: () => {
+    onSuccess: (_data, deletedId) => {
       queryClient.invalidateQueries({ queryKey: ['kds-stations'] });
-      toast({ title: 'Praça excluída com sucesso' });
+      if (effectiveTenantId) {
+        queryClient.setQueryData<KdsStation[]>(
+          ['kds-stations', effectiveTenantId],
+          (current = []) => current.filter((station) => station.id !== deletedId)
+        );
+      }
+      toast.success('Setor excluido com sucesso');
     },
     onError: (error) => {
-      toast({ title: 'Erro ao excluir praça', description: error.message, variant: 'destructive' });
+      toast.error(`Erro ao excluir setor: ${error.message}`);
     },
   });
 
   const toggleStationActive = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      const { error } = await supabase
-        .from('kds_stations')
-        .update({ is_active })
-        .eq('id', id);
-
-      if (error) throw error;
+      const tenantIdForWrite = await resolveTenantIdForWrite();
+      const result = await invokeKdsStationsAdmin<{ station: KdsStation }>({
+        action: 'toggle_station_active',
+        tenant_id: tenantIdForWrite,
+        station_id: id,
+        is_active,
+      });
+      return result.station;
     },
-    onSuccess: () => {
+    onSuccess: (updatedStation) => {
       queryClient.invalidateQueries({ queryKey: ['kds-stations'] });
+      if (updatedStation?.id && effectiveTenantId) {
+        queryClient.setQueryData<KdsStation[]>(
+          ['kds-stations', effectiveTenantId],
+          (current = []) => current.map((station) => (
+            station.id === updatedStation.id ? updatedStation : station
+          ))
+        );
+      }
     },
   });
 
-  // Buscar praça por tipo
   const getStationByType = (type: StationType): KdsStation | undefined => {
-    return stations.find(s => s.station_type === type && s.is_active);
+    return stations.find((s) => s.station_type === type && s.is_active);
   };
 
-  // Buscar próxima praça na sequência (apenas praças de produção)
   const getNextStation = (currentStationId: string): KdsStation | undefined => {
-    const currentIndex = productionStations.findIndex(s => s.id === currentStationId);
+    const currentIndex = productionStations.findIndex((s) => s.id === currentStationId);
     if (currentIndex === -1 || currentIndex >= productionStations.length - 1) return undefined;
     return productionStations[currentIndex + 1];
   };
-  
-  // Verificar se é a última estação de produção
+
   const isLastProductionStation = (stationId: string): boolean => {
-    const currentIndex = productionStations.findIndex(s => s.id === stationId);
+    const currentIndex = productionStations.findIndex((s) => s.id === stationId);
     return currentIndex === productionStations.length - 1;
   };
 
   const reorderStations = useMutation({
     mutationFn: async (orderedIds: string[]) => {
-      const updates = orderedIds.map((id, index) =>
-        supabase
-          .from('kds_stations')
-          .update({ sort_order: index })
-          .eq('id', id)
-      );
+      const tenantIdForWrite = await resolveTenantIdForWrite();
+      await invokeKdsStationsAdmin({
+        action: 'reorder_stations',
+        tenant_id: tenantIdForWrite,
+        ordered_ids: orderedIds,
+      });
+    },
+    onMutate: async (orderedIds) => {
+      await queryClient.cancelQueries({ queryKey: ['kds-stations', effectiveTenantId] });
+      const previousStations = queryClient.getQueryData<KdsStation[]>(['kds-stations', effectiveTenantId]);
 
-      const results = await Promise.all(updates);
-      const error = results.find((r) => r.error)?.error;
-      if (error) throw error;
+      if (effectiveTenantId && previousStations) {
+        const orderMap = new Map(orderedIds.map((id, index) => [id, index]));
+        queryClient.setQueryData<KdsStation[]>(
+          ['kds-stations', effectiveTenantId],
+          previousStations
+            .map((station) => ({
+              ...station,
+              sort_order: orderMap.get(station.id) ?? station.sort_order,
+            }))
+            .sort((a, b) => a.sort_order - b.sort_order)
+        );
+      }
+
+      return { previousStations };
+    },
+    onError: (error, _orderedIds, context) => {
+      if (effectiveTenantId && context?.previousStations) {
+        queryClient.setQueryData(['kds-stations', effectiveTenantId], context.previousStations);
+      }
+      toast.error(`Erro ao reordenar setores: ${error.message}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kds-stations'] });
-      toast({ title: 'Ordem das praças atualizada' });
-    },
-    onError: (error) => {
-      toast({ title: 'Erro ao reordenar praças', description: error.message, variant: 'destructive' });
+      toast.success('Ordem dos setores atualizada');
     },
   });
 

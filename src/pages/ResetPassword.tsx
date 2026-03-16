@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,7 +36,7 @@ export default function ResetPassword() {
   useEffect(() => {
     // Check if user arrived via recovery link
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await backendClient.auth.getSession();
       
       // User should have a valid session from the recovery link
       if (session) {
@@ -48,7 +48,7 @@ export default function ResetPassword() {
     checkSession();
 
     // Listen for auth state changes (recovery link will trigger this)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = backendClient.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
         setIsValidSession(true);
         setIsCheckingSession(false);
@@ -85,7 +85,7 @@ export default function ResetPassword() {
 
     setIsSubmitting(true);
     
-    const { error } = await supabase.auth.updateUser({
+    const { error } = await backendClient.auth.updateUser({
       password: formData.password
     });
 
@@ -232,3 +232,4 @@ export default function ResetPassword() {
     </div>
   );
 }
+

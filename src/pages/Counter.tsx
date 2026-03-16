@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +31,7 @@ import { usePrinterOptional, SectorPrintItem } from '@/contexts/PrinterContext';
 import { KitchenTicketData, CancellationTicketData } from '@/utils/escpos';
 import { usePrintSectors } from '@/hooks/usePrintSectors';
 import { useProfile } from '@/hooks/useProfile';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
 import { calculateFullComplementsPrice, ComplementForCalc, SubItemForCalc } from '@/lib/complementPriceUtils';
 import { usePizzaProducts } from '@/hooks/usePizzaProducts';
 import { 
@@ -113,7 +112,6 @@ type OrderType = 'takeaway' | 'delivery';
 export default function Counter() {
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
-  const queryClient = useQueryClient();
   const { data: products } = useProducts();
   const { data: categories } = useCategories();
   const { data: variations } = useProductVariations();
@@ -510,20 +508,16 @@ export default function Counter() {
     
     setIsCancelling(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      const { error } = await supabase
-        .from('orders')
-        .update({
-          status: 'cancelled',
-          cancellation_reason: reason,
-          cancelled_by: user?.id,
-          cancelled_at: new Date().toISOString(),
-          status_before_cancellation: orderToCancel.status,
-        })
-        .eq('id', orderToCancel.id);
-      
-      if (error) throw error;
+      const { data: { user } } = await backendClient.auth.getUser();
+
+      await updateOrder.mutateAsync({
+        id: orderToCancel.id,
+        status: 'cancelled',
+        cancellation_reason: reason,
+        cancelled_by: user?.id,
+        cancelled_at: new Date().toISOString(),
+        status_before_cancellation: orderToCancel.status,
+      });
       
       // Print cancellation ticket to kitchen (if enabled in settings)
       const autoPrint = kdsSettings.autoPrintCancellations ?? true;
@@ -550,7 +544,6 @@ export default function Counter() {
         }
       }
       
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
       toast({ title: 'Pedido cancelado', description: `Motivo: ${reason}` });
       setCancelDialogOpen(false);
       setOrderToCancel(null);
@@ -1620,3 +1613,7 @@ export default function Counter() {
     </PDVLayout>
   );
 }
+
+
+
+

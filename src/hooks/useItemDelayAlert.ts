@@ -1,53 +1,45 @@
 import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAudioNotification } from './useAudioNotification';
 import { useKdsSettings } from './useKdsSettings';
 import { differenceInMinutes } from 'date-fns';
+import { resolveCurrentTenantId } from '@/lib/tenantResolver';
+import { listOrderItemsByOrderIds, listOrdersByStatusAndDateRange } from '@/lib/firebaseTenantCrud';
 
-/**
- * Hook para monitorar itens atrasados e tocar som de alerta
- * Verifica periodicamente se há itens acima do tempo limite na estação
- */
-export function useItemDelayAlert() {
-  const { playItemDelayAlertSound } = useAudioNotification();
-  const { settings } = useKdsSettings();
+export function useItemDelayAlert(enabled: boolean = true, tenantIdOverride?: string | null) {
+  const { playItemDelayAlertSound } = useAudioNotification({
+    enableRemote: enabled,
+    tenantIdOverride,
+  });
+  const { settings } = useKdsSettings(tenantIdOverride, { enableTenantQuery: enabled });
   const lastAlertRef = useRef<number>(0);
-  const alertCooldownMs = 60000; // 1 minuto entre alertas
+  const alertCooldownMs = 60000;
 
-  // Query para buscar itens em estações (não finalizados)
   const { data: activeItems } = useQuery({
     queryKey: ['kds-active-items-for-alert'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('order_items')
-        .select(`
-          id,
-          station_started_at,
-          created_at,
-          current_station_id,
-          station_status,
-          order:orders!inner(status, is_draft)
-        `)
-        .not('current_station_id', 'is', null)
-        .eq('station_status', 'waiting')
-        .not('order.status', 'in', '("delivered","cancelled")')
-        .eq('order.is_draft', false);
+      const tenantId = await resolveCurrentTenantId();
+      if (!tenantId) return [];
 
-      if (error) throw error;
-      return data || [];
+      const activeOrders = await listOrdersByStatusAndDateRange(tenantId, {
+        statuses: ['pending', 'preparing', 'ready'],
+      });
+      const orderIds = activeOrders.filter((order) => !order.is_draft).map((order) => order.id);
+      if (!orderIds.length) return [];
+
+      const items = await listOrderItemsByOrderIds(tenantId, orderIds);
+      return items.filter((item) => item.current_station_id && item.station_status === 'waiting');
     },
-    refetchInterval: 30000, // Verifica a cada 30 segundos
-    enabled: settings.delayAlertEnabled,
+    refetchInterval: 30000,
+    enabled: enabled && settings.delayAlertEnabled,
   });
 
   useEffect(() => {
-    if (!settings.delayAlertEnabled || !activeItems?.length) return;
+    if (!enabled || !settings.delayAlertEnabled || !activeItems?.length) return;
 
     const now = Date.now();
     const delayThreshold = settings.delayAlertMinutes;
 
-    // Verificar se algum item ultrapassou o tempo limite
     const hasDelayedItems = activeItems.some((item) => {
       const refTime = item.station_started_at || item.created_at;
       if (!refTime) return false;
@@ -55,12 +47,11 @@ export function useItemDelayAlert() {
       return elapsed >= delayThreshold;
     });
 
-    // Tocar som se houver itens atrasados e passou o cooldown
     if (hasDelayedItems && now - lastAlertRef.current > alertCooldownMs) {
       playItemDelayAlertSound();
       lastAlertRef.current = now;
     }
-  }, [activeItems, settings.delayAlertEnabled, settings.delayAlertMinutes, playItemDelayAlertSound]);
+  }, [activeItems, enabled, settings.delayAlertEnabled, settings.delayAlertMinutes, playItemDelayAlertSound]);
 
   return null;
 }

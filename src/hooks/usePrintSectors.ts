@@ -1,7 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/hooks/useTenant';
+import {
+  createPrintSector as createPrintSectorDoc,
+  deletePrintSector as deletePrintSectorDoc,
+  listPrintSectors,
+  updatePrintSector as updatePrintSectorDoc,
+} from '@/lib/firebaseTenantCrud';
+import { resolveCurrentTenantId } from '@/lib/tenantResolver';
 
 export interface PrintSector {
   id: string;
@@ -15,22 +21,18 @@ export interface PrintSector {
   created_at: string | null;
 }
 
-export function usePrintSectors() {
-  return useQuery({
-    queryKey: ['print-sectors'],
-    queryFn: async () => {
-      const { data: tenantId } = await supabase.rpc('get_user_tenant_id');
-      if (!tenantId) return [];
+export function usePrintSectors(options?: { enabled?: boolean }) {
+  const { tenantId } = useTenant();
+  const enabled = options?.enabled ?? true;
 
-      const { data, error } = await supabase
-        .from('print_sectors')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order('sort_order', { ascending: true });
-      
-      if (error) throw error;
-      return data as PrintSector[];
+  return useQuery({
+    queryKey: ['print-sectors', tenantId],
+    queryFn: async () => {
+      const currentTenantId = tenantId || (await resolveCurrentTenantId());
+      if (!currentTenantId) return [];
+      return (await listPrintSectors(currentTenantId)) as PrintSector[];
     },
+    enabled,
   });
 }
 
@@ -41,14 +43,16 @@ export function usePrintSectorMutations() {
 
   const createSector = useMutation({
     mutationFn: async (sector: Omit<PrintSector, 'id' | 'created_at'>) => {
-      const { data, error } = await supabase
-        .from('print_sectors')
-        .insert({ ...sector, tenant_id: tenantId })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      return await createPrintSectorDoc(tenantId, {
+        name: sector.name,
+        description: sector.description ?? null,
+        printer_name: sector.printer_name ?? null,
+        is_active: sector.is_active ?? true,
+        sort_order: sector.sort_order ?? null,
+        icon: sector.icon ?? null,
+        color: sector.color ?? null,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['print-sectors'] });
@@ -61,15 +65,8 @@ export function usePrintSectorMutations() {
 
   const updateSector = useMutation({
     mutationFn: async ({ id, ...sector }: Partial<PrintSector> & { id: string }) => {
-      const { data, error } = await supabase
-        .from('print_sectors')
-        .update(sector)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      return await updatePrintSectorDoc(tenantId, id, sector as any);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['print-sectors'] });
@@ -82,16 +79,12 @@ export function usePrintSectorMutations() {
 
   const deleteSector = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('print_sectors')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await deletePrintSectorDoc(tenantId, id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['print-sectors'] });
-      toast({ title: 'Setor excluído!' });
+      toast({ title: 'Setor excluido!' });
     },
     onError: (error: Error) => {
       toast({ title: 'Erro ao excluir setor', description: error.message, variant: 'destructive' });

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/hooks/useTenant';
 import { useCallback } from 'react';
+import { getGlobalSettingByKey, upsertGlobalSetting } from '@/lib/firebaseTenantCrud';
 
 interface IdleTableSettings {
   enabled: boolean;
@@ -28,32 +28,22 @@ export function useIdleTableSettings() {
     queryFn: async () => {
       if (!tenantId) return { settings: defaultSettings };
 
-      const { data: record, error } = await supabase
-        .from('global_settings')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .eq('key', SETTINGS_KEY)
-        .maybeSingle();
+      const record = await getGlobalSettingByKey(tenantId, SETTINGS_KEY);
+      if (!record) return { settings: defaultSettings };
 
-      if (error) {
-        console.error('Error fetching idle table settings:', error);
-        return { settings: defaultSettings };
-      }
-
-      if (!record) {
-        return { settings: defaultSettings };
-      }
-
-      // Merge inteligente: usa 'in' operator para preservar valores explícitos
-      const storedValue = record.value as Record<string, unknown>;
+      const storedValue = (record.value || {}) as Record<string, unknown>;
       return {
         settings: {
           enabled: 'enabled' in storedValue ? !!storedValue.enabled : defaultSettings.enabled,
-          thresholdMinutes: 'thresholdMinutes' in storedValue && typeof storedValue.thresholdMinutes === 'number' 
-            ? storedValue.thresholdMinutes : defaultSettings.thresholdMinutes,
+          thresholdMinutes:
+            'thresholdMinutes' in storedValue && typeof storedValue.thresholdMinutes === 'number'
+              ? storedValue.thresholdMinutes
+              : defaultSettings.thresholdMinutes,
           autoClose: 'autoClose' in storedValue ? !!storedValue.autoClose : defaultSettings.autoClose,
-          includeDeliveredOrders: 'includeDeliveredOrders' in storedValue 
-            ? !!storedValue.includeDeliveredOrders : defaultSettings.includeDeliveredOrders,
+          includeDeliveredOrders:
+            'includeDeliveredOrders' in storedValue
+              ? !!storedValue.includeDeliveredOrders
+              : defaultSettings.includeDeliveredOrders,
         },
       };
     },
@@ -67,20 +57,7 @@ export function useIdleTableSettings() {
 
       const currentSettings = data?.settings ?? defaultSettings;
       const newSettings = { ...currentSettings, ...updates };
-
-      const { error } = await supabase
-        .from('global_settings')
-        .upsert(
-          {
-            tenant_id: tenantId,
-            key: SETTINGS_KEY,
-            value: newSettings,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'tenant_id,key' }
-        );
-
-      if (error) throw error;
+      await upsertGlobalSetting(tenantId, SETTINGS_KEY, newSettings);
       return newSettings;
     },
     onSuccess: () => {
@@ -88,12 +65,15 @@ export function useIdleTableSettings() {
     },
   });
 
-  const updateSettings = useCallback((updates: Partial<IdleTableSettings>) => {
-    updateMutation.mutate(updates);
-  }, [updateMutation]);
+  const updateSettings = useCallback(
+    (updates: Partial<IdleTableSettings>) => {
+      updateMutation.mutate(updates);
+    },
+    [updateMutation]
+  );
 
-  return { 
-    settings: data?.settings ?? defaultSettings, 
+  return {
+    settings: data?.settings ?? defaultSettings,
     updateSettings,
     isLoading,
     isSaving: updateMutation.isPending,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -10,9 +10,10 @@ import { ScheduledAnnouncementsSettings } from '@/components/ScheduledAnnounceme
 import { PrinterSettings } from '@/components/PrinterSettings';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTenant } from '@/hooks/useTenant';
 import { Crown, Sparkles, AlertTriangle, Settings as SettingsIcon } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { addUserRole, hasAdminRole } from '@/lib/firebaseTenantCrud';
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -26,7 +27,6 @@ import {
 import { SettingsSidebar, SettingsSection, SECTION_INFO } from '@/components/settings/SettingsSidebar';
 import { TablesSettings } from '@/components/settings/TablesSettings';
 import { KdsSettingsSection } from '@/components/settings/KdsSettingsSection';
-import { KdsStationsSettings } from '@/components/settings/KdsStationsSettings';
 import { OrderSettingsSection } from '@/components/settings/OrderSettingsSection';
 import { UsersSettings } from '@/components/settings/UsersSettings';
 import { RolesSettings } from '@/components/settings/RolesSettings';
@@ -37,23 +37,20 @@ import { ProductionTargetsSettings } from '@/components/settings/ProductionTarge
 import { ProductionApiSettings } from '@/components/settings/ProductionApiSettings';
 import { StoresSettings } from '@/components/settings/StoresSettings';
 import { KdsDevicesSettings } from '@/components/settings/KdsDevicesSettings';
+import { KdsStationsSettings } from '@/components/settings/KdsStationsSettings';
 
 const VALID_SECTIONS: SettingsSection[] = ['stores', 'tables', 'kds', 'kds-stations', 'kds-devices', 'orders', 'printers', 'cash-register', 'production-targets', 'production-api', 'notifications', 'announcements', 'push', 'users', 'roles', 'invitations', 'integrations'];
 
 // Hook to check if system has any admins
 function useHasAdmins() {
+  const { tenantId } = useTenant();
   return useQuery({
-    queryKey: ['has-admins'],
+    queryKey: ['has-admins', tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('id')
-        .eq('role', 'admin')
-        .limit(1);
-      
-      if (error) throw error;
-      return (data?.length || 0) > 0;
+      if (!tenantId) return false;
+      return hasAdminRole(tenantId);
     },
+    enabled: !!tenantId,
   });
 }
 
@@ -61,14 +58,17 @@ export default function Settings() {
   const { section } = useParams<{ section?: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { tenantId } = useTenant();
   const { data: hasAdmins, isLoading: checkingAdmins, refetch: refetchAdmins } = useHasAdmins();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isBootstrapping, setIsBootstrapping] = useState(false);
   
+  const normalizedSection = section;
+
   // Validate section from URL or default to 'stores'
-  const activeSection: SettingsSection = VALID_SECTIONS.includes(section as SettingsSection) 
-    ? (section as SettingsSection) 
+  const activeSection: SettingsSection = VALID_SECTIONS.includes(normalizedSection as SettingsSection) 
+    ? (normalizedSection as SettingsSection) 
     : 'stores';
 
   // Redirect to valid URL if section is missing or invalid
@@ -86,19 +86,15 @@ export default function Settings() {
   const canBootstrap = !checkingAdmins && hasAdmins === false && user?.id;
 
   const handleBootstrapAdmin = async () => {
-    if (!user?.id || !canBootstrap) return;
+    if (!user?.id || !canBootstrap || !tenantId) return;
     
     setIsBootstrapping(true);
     try {
-      const { error } = await supabase
-        .from('user_roles')
-        .insert({ user_id: user.id, role: 'admin' });
-      
-      if (error) throw error;
+      await addUserRole(tenantId, user.id, 'admin');
       
       toast({ 
-        title: 'Parabéns! 🎉', 
-        description: 'Você agora é o administrador do sistema!' 
+        title: 'ParabÃ©ns! ðŸŽ‰', 
+        description: 'VocÃª agora Ã© o administrador do sistema!' 
       });
       
       refetchAdmins();
@@ -126,17 +122,17 @@ export default function Settings() {
               </div>
               <CardTitle className="text-2xl">Bem-vindo ao PDV Pizzaria!</CardTitle>
               <CardDescription className="text-base">
-                Você é o primeiro usuário do sistema. Configure-se como administrador para começar.
+                VocÃª Ã© o primeiro usuÃ¡rio do sistema. Configure-se como administrador para comeÃ§ar.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 flex gap-3">
                 <AlertTriangle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
                 <div className="text-sm">
-                  <p className="font-medium text-warning">Atenção</p>
+                  <p className="font-medium text-warning">AtenÃ§Ã£o</p>
                   <p className="text-muted-foreground">
-                    Como administrador, você terá acesso total ao sistema e poderá gerenciar outros usuários.
-                    Esta ação só pode ser feita uma vez.
+                    Como administrador, vocÃª terÃ¡ acesso total ao sistema e poderÃ¡ gerenciar outros usuÃ¡rios.
+                    Esta aÃ§Ã£o sÃ³ pode ser feita uma vez.
                   </p>
                 </div>
               </div>
@@ -216,7 +212,7 @@ export default function Settings() {
                     }}
                   >
                     <SettingsIcon className="h-4 w-4" />
-                    Configurações
+                    ConfiguraÃ§Ãµes
                   </BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator />
@@ -228,7 +224,7 @@ export default function Settings() {
                 </BreadcrumbItem>
               </BreadcrumbList>
             </Breadcrumb>
-            <p className="text-muted-foreground mt-1">Gerencie usuários, permissões e mesas do sistema</p>
+            <p className="text-muted-foreground mt-1">Gerencie usuÃ¡rios, permissÃµes e mesas do sistema</p>
           </div>
 
           <div className="flex gap-6">
@@ -253,26 +249,26 @@ export default function Settings() {
                 <optgroup label="Sistema">
                   <option value="tables">Mesas</option>
                   <option value="kds">KDS</option>
-                  <option value="kds-stations">Praças</option>
+                  <option value="kds-stations">Setores</option>
                   <option value="kds-devices">Dispositivos</option>
                   <option value="orders">Pedidos</option>
                   <option value="printers">Impressoras</option>
                   <option value="cash-register">Caixa</option>
-                  <option value="production-targets">Metas de Produção</option>
-                  <option value="production-api">API de Produção</option>
+                  <option value="production-targets">Metas de ProduÃ§Ã£o</option>
+                  <option value="production-api">API de ProduÃ§Ã£o</option>
                 </optgroup>
-                <optgroup label="Notificações">
+                <optgroup label="NotificaÃ§Ãµes">
                   <option value="notifications">Sons</option>
                   <option value="announcements">Avisos Agendados</option>
                   <option value="push">Push</option>
                 </optgroup>
                 <optgroup label="Equipe">
-                  <option value="users">Usuários</option>
-                  <option value="roles">Funções</option>
+                  <option value="users">UsuÃ¡rios</option>
+                  <option value="roles">FunÃ§Ãµes</option>
                   <option value="invitations">Convites</option>
                 </optgroup>
-                <optgroup label="Integrações">
-                  <option value="integrations">CardápioWeb</option>
+                <optgroup label="IntegraÃ§Ãµes">
+                  <option value="integrations">CardÃ¡pioWeb</option>
                 </optgroup>
               </select>
             </div>
@@ -289,3 +285,8 @@ export default function Settings() {
     </PDVLayout>
   );
 }
+
+
+
+
+

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -19,6 +19,7 @@ interface OrderItem {
   quantity: number;
   notes: string | null;
   status: string;
+  current_device_id?: string | null;
   current_station_id?: string | null;
   station_status?: string;
   station_started_at?: string | null;
@@ -27,6 +28,9 @@ interface OrderItem {
   variation?: { name: string } | null;
   extras?: Array<{ extra_name: string; price: number }>;
   served_at?: string | null;
+  cancelled_at?: string | null;
+  next_device_name?: string | null;
+  next_device_station_type?: string | null;
 }
 
 interface Order {
@@ -58,8 +62,12 @@ interface KdsProductionLineViewProps {
   isLoading: boolean;
   overrideTenantId?: string | null;
   overrideStations?: any[];
+  deviceStageName?: string | null;
+  singleDeviceId?: string | null;
+  forceSingleStationView?: boolean;
   overrideSettings?: OverrideSettings;
   overrideWorkflow?: {
+    startItemAtStation: { mutate: (params: { itemId: string; stationId: string }) => void; isPending: boolean };
     moveItemToNextStation: { mutate: (params: { itemId: string; currentStationId: string }) => void; isPending: boolean };
     skipItemToNextStation: { mutate: (params: { itemId: string; currentStationId: string }) => void };
     finalizeOrderFromStatus: { mutate: (params: { orderId: string; orderType?: string; currentStationId?: string }) => void; isPending: boolean };
@@ -67,7 +75,17 @@ interface KdsProductionLineViewProps {
   };
 }
 
-export function KdsProductionLineView({ orders, isLoading, overrideTenantId, overrideStations, overrideSettings, overrideWorkflow }: KdsProductionLineViewProps) {
+export function KdsProductionLineView({
+  orders,
+  isLoading,
+  overrideTenantId,
+  overrideStations,
+  deviceStageName,
+  singleDeviceId,
+  forceSingleStationView = false,
+  overrideSettings,
+  overrideWorkflow,
+}: KdsProductionLineViewProps) {
   const { activeStations: hookActiveStations, productionStations: hookProductionStations, orderStatusStation: hookOrderStatusStation, isLoading: stationsLoading } = useKdsStations();
   const { settings: hookSettings } = useKdsSettings(overrideTenantId);
   const hookWorkflow = useKdsWorkflow();
@@ -78,22 +96,26 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
     return { ...hookSettings, ...overrideSettings };
   }, [hookSettings, overrideSettings]);
 
+  const sortStationsByOrder = (stations: any[]) =>
+    [...stations].sort((left, right) => (left.sort_order ?? 0) - (right.sort_order ?? 0));
+
   // Use override stations if provided (device-only mode), otherwise use hook data
   const hasOverrideStations = overrideStations && overrideStations.length > 0;
   const activeStations = hasOverrideStations
-    ? overrideStations.filter((s: any) => s.is_active)
-    : hookActiveStations;
+    ? sortStationsByOrder(overrideStations.filter((s: any) => s.is_active))
+    : sortStationsByOrder(hookActiveStations);
   const productionStations = hasOverrideStations
-    ? overrideStations.filter((s: any) => s.is_active && s.station_type !== 'order_status')
-    : hookProductionStations;
+    ? sortStationsByOrder(overrideStations.filter((s: any) => s.is_active && s.station_type !== 'order_status'))
+    : sortStationsByOrder(hookProductionStations);
   // All order_status stations (for general view multi-column dispatch)
   const allOrderStatusStations = hasOverrideStations
-    ? overrideStations.filter((s: any) => s.is_active && s.station_type === 'order_status')
-    : activeStations.filter(s => s.station_type === 'order_status');
+    ? sortStationsByOrder(overrideStations.filter((s: any) => s.is_active && s.station_type === 'order_status'))
+    : sortStationsByOrder(activeStations.filter(s => s.station_type === 'order_status'));
   const orderStatusStation = allOrderStatusStations[0] || null;
 
   // Use override workflow if provided (device-only mode)
   const workflow = overrideWorkflow || {
+    startItemAtStation: hookWorkflow.startItemAtStation,
     moveItemToNextStation: hookWorkflow.moveItemToNextStation,
     skipItemToNextStation: hookWorkflow.skipItemToNextStation,
     finalizeOrderFromStatus: hookWorkflow.finalizeOrderFromStatus,
@@ -102,47 +124,57 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
 
   // Cast orders to local type for internal use
   const typedOrders = orders as unknown as Order[];
+  const nonDraftOrders = useMemo(
+    () => typedOrders.filter((order) => (order as any).is_draft !== true),
+    [typedOrders]
+  );
+  const scopedOrders = useMemo(() => {
+    if (!forceSingleStationView || !singleDeviceId) {
+      return nonDraftOrders;
+    }
 
-  // Filtrar pedidos - mostra pedidos que têm itens com praça atribuída (pending, preparing, ready)
+    return nonDraftOrders
+      .map((order) => ({
+        ...order,
+        order_items: (order.order_items || []).filter((item) => item.current_device_id === singleDeviceId),
+      }))
+      .filter((order) => (order.order_items?.length ?? 0) > 0);
+  }, [forceSingleStationView, nonDraftOrders, singleDeviceId]);
+
+  // Filtrar pedidos - mostra pedidos que tÃªm itens com praÃ§a atribuÃ­da (pending, preparing, ready)
   const filteredOrders = useMemo(() => {
-    // Excluir pedidos em rascunho primeiro
-    const nonDraftOrders = typedOrders.filter(o => (o as any).is_draft !== true);
-
+    const ordersToFilter = scopedOrders;
     if (!settings.assignedStationId) {
-      // Se não tiver praça atribuída, mostra pedidos que têm itens nas praças (pending, preparing, ready)
-      return nonDraftOrders.filter(o => {
-        // Sempre inclui se está em preparing ou ready
+      return ordersToFilter.filter(o => {
         if (o.status === 'preparing' || o.status === 'ready') return true;
-        // Para pending, só inclui se algum item já tem current_station_id
         if (o.status === 'pending') {
           return o.order_items?.some(item => item.current_station_id !== null);
         }
         return false;
       });
     }
-
-    // Filtrar pedidos que têm itens nesta praça
-    return nonDraftOrders.filter(order => {
+    return ordersToFilter.filter(order => {
       return order.order_items?.some(
         item => item.current_station_id === settings.assignedStationId
       );
     });
-  }, [typedOrders, settings.assignedStationId]);
+  }, [scopedOrders, settings.assignedStationId]);
 
-  // Pedidos no buffer (aguardando - sem current_station_id ou com status pendente sem praça)
+  // Pedidos no buffer (aguardando - sem current_station_id ou com status pendente sem praÃ§a)
   const bufferOrders = useMemo(() => {
-    const nonDraftOrders = typedOrders.filter(o => (o as any).is_draft !== true);
+    if (forceSingleStationView) {
+      return [];
+    }
     return nonDraftOrders.filter(order => {
       if (order.status === 'pending') {
-        // Pedido pending que não tem nenhum item com station
         const hasStationItems = order.order_items?.some(item => item.current_station_id !== null);
         return !hasStationItems && (order.order_items?.length ?? 0) > 0;
       }
       return false;
     });
-  }, [typedOrders]);
+  }, [forceSingleStationView, nonDraftOrders]);
 
-  // Explodir itens individualmente por praça (cada item = 1 card separado)
+  // Explodir itens individualmente por praÃ§a (cada item = 1 card separado)
   const itemsByStation = useMemo(() => {
     const map = new Map<string, { order: Order; items: OrderItem[]; totalOrderItems: number }[]>();
     
@@ -151,13 +183,13 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
     });
 
     filteredOrders.forEach(order => {
-      // Conta total de itens ativos do pedido nesta praça (para exibir "Item X de Y")
-      const allActiveItems = order.order_items?.filter(i => i.status !== 'cancelled') || [];
+      // Conta total de itens ativos do pedido nesta praÃ§a (para exibir "Item X de Y")
+      const allActiveItems = order.order_items?.filter(i => i.status !== 'cancelled' && !i.cancelled_at) || [];
       
       order.order_items?.forEach(item => {
         if (item.current_station_id && map.has(item.current_station_id)) {
           const stationItems = map.get(item.current_station_id)!;
-          // Cada item gera um card separado (para distribuição entre bancadas)
+          // Cada item gera um card separado (para distribuiÃ§Ã£o entre bancadas)
           stationItems.push({ order, items: [item], totalOrderItems: allActiveItems.length });
         }
       });
@@ -166,16 +198,27 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
     return map;
   }, [filteredOrders, activeStations]);
 
-  // Praça atual baseada na configuração do dispositivo
+  // PraÃ§a atual baseada na configuraÃ§Ã£o do dispositivo
   // Busca primeiro em activeStations, depois em overrideStations como fallback
-  const currentStation = settings.assignedStationId 
-    ? (activeStations.find(s => s.id === settings.assignedStationId) 
-       || overrideStations?.find((s: any) => s.id === settings.assignedStationId)
+  const currentStationId = settings.assignedStationId || (
+    forceSingleStationView && singleDeviceId
+      ? scopedOrders
+          .flatMap((order) => order.order_items || [])
+          .find((item) => item.current_device_id === singleDeviceId && item.current_station_id)?.current_station_id || null
+      : null
+  );
+  const currentStation = currentStationId
+    ? (activeStations.find(s => s.id === currentStationId)
+       || overrideStations?.find((s: any) => s.id === currentStationId)
        || null)
     : null;
 
   const handleMoveToNext = (itemId: string, stationId: string, orderType?: string) => {
     workflow.moveItemToNextStation.mutate({ itemId, currentStationId: stationId, orderType });
+  };
+
+  const handleStartItem = (itemId: string, stationId: string) => {
+    workflow.startItemAtStation.mutate({ itemId, stationId });
   };
 
   const handleSkipItem = (itemId: string, stationId: string) => {
@@ -192,7 +235,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
     workflow.finalizeOrderFromStatus.mutate({ orderId, orderType, currentStationId });
   };
 
-  // IDs de todas as estações order_status
+  // IDs de todas as estaÃ§Ãµes order_status
   const orderStatusStationIds = useMemo(() => {
     const allOrderStatusStations = activeStations.filter(s => s.station_type === 'order_status');
     return allOrderStatusStations.map(s => s.id);
@@ -200,6 +243,39 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
 
   const handleServeItem = (itemId: string) => {
     workflow.serveItem.mutate(itemId);
+  };
+
+  const getNextStation = (stationId: string) => {
+    const currentStation = activeStations.find((station) => station.id === stationId);
+    if (!currentStation) return null;
+    return (
+      activeStations
+        .filter((station) => (station.sort_order ?? 0) > (currentStation.sort_order ?? 0))
+        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))[0] ?? null
+    );
+  };
+
+  const resolveCardFlow = (
+    item: OrderItem | undefined,
+    fallbackNextStation: KdsStation | null
+  ) => {
+    const itemNextName = item?.next_device_name ?? null;
+    const itemNextType = item?.next_device_station_type ?? null;
+    const hasDeviceScopedFlow = !!item?.current_device_id;
+
+    if (hasDeviceScopedFlow) {
+      return {
+        isLastStation: !itemNextName && !itemNextType,
+        nextStationName: itemNextName,
+        nextStationType: itemNextType,
+      };
+    }
+
+    return {
+      isLastStation: !fallbackNextStation,
+      nextStationName: itemNextName || fallbackNextStation?.name || null,
+      nextStationType: itemNextType || fallbackNextStation?.station_type || null,
+    };
   };
 
   // Pedidos no despacho - per station map for general view (all order_status stations)
@@ -210,12 +286,12 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
       const stationOrders = filteredOrders
         .filter(order => {
           const items = order.order_items || [];
-          const activeItems = items.filter(i => i.status !== 'cancelled');
+          const activeItems = items.filter(i => i.status !== 'cancelled' && !i.cancelled_at);
           if (activeItems.length === 0) return false;
           return activeItems.some(item => item.current_station_id === station.id);
         })
         .map(order => {
-          const activeItems = (order.order_items || []).filter(i => i.status !== 'cancelled');
+          const activeItems = (order.order_items || []).filter(i => i.status !== 'cancelled' && !i.cancelled_at);
           return { order, items: activeItems };
         })
         .filter(entry => entry.items.length > 0);
@@ -248,22 +324,43 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
     return (
       <div className="flex flex-col items-center justify-center h-64 text-center">
         <Factory className="h-12 w-12 text-muted-foreground mb-4" />
-        <h3 className="font-semibold text-lg">Nenhuma praça configurada</h3>
+        <h3 className="font-semibold text-lg">Nenhum dispositivo de fluxo configurado</h3>
         <p className="text-muted-foreground text-sm mt-1">
-          Configure praças de produção em Configurações → Praças
+          Configure os dispositivos do fluxo em Configuracoes / Dispositivos
         </p>
       </div>
     );
   }
 
-  // Se tiver praça atribuída, mostra apenas ela
+  if (forceSingleStationView && !currentStation) {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="flex items-center gap-3 p-4 mb-4 rounded-lg border bg-muted/30">
+          <div className="h-10 w-10 rounded-full flex items-center justify-center bg-primary/10">
+            <Circle className="h-5 w-5 text-primary fill-primary" />
+          </div>
+          <div>
+            <h2 className="font-bold text-lg">{deviceStageName || 'Dispositivo KDS'}</h2>
+            <p className="text-sm text-muted-foreground">Esta tela mostra somente a fila deste dispositivo.</p>
+          </div>
+          <Badge variant="outline" className="ml-auto">0 itens</Badge>
+        </div>
+        <div className="flex flex-1 flex-col items-center justify-center text-center text-muted-foreground">
+          <Circle className="h-8 w-8 mb-2 text-primary" />
+          <p>Nenhum item nesta etapa</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Se tiver praÃ§a atribuÃ­da, mostra apenas ela
   if (currentStation) {
     const stationOrders = itemsByStation.get(currentStation.id) || [];
     // Recalculate from filtered orders if not in map (station from overrideStations)
     const effectiveStationOrders = stationOrders.length > 0 ? stationOrders : (() => {
       const result: { order: Order; items: OrderItem[]; totalOrderItems: number }[] = [];
       filteredOrders.forEach(order => {
-        const allActiveItems = order.order_items?.filter(i => i.status !== 'cancelled') || [];
+        const allActiveItems = order.order_items?.filter(i => i.status !== 'cancelled' && !i.cancelled_at) || [];
         const stationItems = order.order_items?.filter(item => item.current_station_id === currentStation.id) || [];
         // Explodir: cada item vira um card separado
         stationItems.forEach(item => {
@@ -274,13 +371,14 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
     })();
     const stationIndex = activeStations.findIndex(s => s.id === currentStation.id);
     const isFirstStation = stationIndex <= 0;
-    const isLastStation = stationIndex === activeStations.length - 1 || stationIndex === -1;
+    const nextStation = getNextStation(currentStation.id);
+    const displayStageName = deviceStageName || currentStation.name;
 
     const isOrderStatusStation = currentStation.station_type === 'order_status';
 
     return (
       <div className="h-full flex flex-col">
-        {/* Header da praça */}
+        {/* Header da praÃ§a */}
         <div 
           className="flex items-center gap-3 p-4 mb-4 rounded-lg"
           style={{ backgroundColor: currentStation.color + '15' }}
@@ -293,7 +391,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
           </div>
           <div>
             <h2 className="font-bold text-lg" style={{ color: currentStation.color }}>
-              {currentStation.name}
+              {displayStageName}
             </h2>
             <p className="text-sm text-muted-foreground">{currentStation.description}</p>
           </div>
@@ -311,7 +409,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
               </TabsTrigger>
               <TabsTrigger value="historico" className="gap-1.5">
                 <History className="h-3.5 w-3.5" />
-                Histórico
+                HistÃ³rico
               </TabsTrigger>
             </TabsList>
             <TabsContent value="ativos" className="flex-1 mt-0">
@@ -352,26 +450,34 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
             {effectiveStationOrders.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
                 <Circle className="h-8 w-8 mb-2" style={{ color: currentStation.color }} />
-                <p>Nenhum item nesta praça</p>
+                <p>Nenhum item nesta etapa</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {effectiveStationOrders.map(({ order, items, totalOrderItems }) => (
+                  (() => {
+                    const cardFlow = resolveCardFlow(items[0], nextStation);
+                    return (
                   <KdsStationCard
                     key={`${items[0]?.id}-${currentStation.id}`}
                     order={order}
                     items={items}
                     stationColor={currentStation.color}
-                    stationName={currentStation.name}
+                    stationName={displayStageName}
                     stationType={currentStation.station_type}
                     isFirstStation={isFirstStation}
-                    isLastStation={isLastStation}
+                    isLastStation={cardFlow.isLastStation}
+                    nextStationName={cardFlow.nextStationName}
+                    nextStationType={cardFlow.nextStationType}
+                    onStartItem={(itemId) => handleStartItem(itemId, currentStation.id)}
                     onMoveToNext={(itemId, orderType) => handleMoveToNext(itemId, currentStation.id, orderType)}
                     onSkipItem={(itemId) => handleSkipItem(itemId, currentStation.id)}
-                    isProcessing={workflow.moveItemToNextStation.isPending}
+                    isProcessing={workflow.startItemAtStation.isPending || workflow.moveItemToNextStation.isPending}
                     overrideSettings={overrideSettings}
                     totalOrderItems={totalOrderItems}
                   />
+                    );
+                  })()
                 ))}
               </div>
             )}
@@ -381,7 +487,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
     );
   }
 
-  // Visão geral de todas as praças (quando não tem praça atribuída)
+  // VisÃ£o geral de todas as praÃ§as (quando nÃ£o tem praÃ§a atribuÃ­da)
   return (
     <div className="space-y-6">
       {/* Buffer de Espera */}
@@ -405,7 +511,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
                   </span>
                   <Badge variant="outline" className="text-[10px]">
                     {order.order_type === 'delivery' ? 'DELIVERY' : 
-                     order.order_type === 'takeaway' ? 'BALCÃO' : 
+                     order.order_type === 'takeaway' ? 'BALCÃƒO' : 
                      `MESA ${order.table?.number || '?'}`}
                   </Badge>
                 </div>
@@ -421,7 +527,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
         </div>
       )}
 
-      {/* Colunas por praça de produção */}
+      {/* Colunas por praÃ§a de produÃ§Ã£o */}
       <div className={cn(
         "grid gap-6",
         allOrderStatusStations.length > 0
@@ -434,7 +540,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
           const stationOrders = itemsByStation.get(station.id) || [];
           const totalItems = stationOrders.reduce((acc, o) => acc + o.items.length, 0);
           const isFirstStation = idx === 0;
-          const isLastStation = idx === productionStations.length - 1;
+          const nextStation = getNextStation(station.id);
 
           return (
             <div key={station.id}>
@@ -462,6 +568,9 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
                 ) : (
                   <div className="space-y-3">
                     {stationOrders.map(({ order, items, totalOrderItems }) => (
+                      (() => {
+                        const cardFlow = resolveCardFlow(items[0], nextStation);
+                        return (
                       <KdsStationCard
                         key={`${items[0]?.id}-${station.id}`}
                         order={order}
@@ -470,13 +579,18 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
                         stationName={station.name}
                         stationType={station.station_type}
                         isFirstStation={isFirstStation}
-                        isLastStation={isLastStation}
-                      onMoveToNext={(itemId, orderType) => handleMoveToNext(itemId, station.id, orderType)}
-                      onSkipItem={(itemId) => handleSkipItem(itemId, station.id)}
-                      isProcessing={workflow.moveItemToNextStation.isPending}
-                      overrideSettings={overrideSettings}
-                      totalOrderItems={totalOrderItems}
-                    />
+                        isLastStation={cardFlow.isLastStation}
+                        nextStationName={cardFlow.nextStationName}
+                        nextStationType={cardFlow.nextStationType}
+                        onStartItem={(itemId) => handleStartItem(itemId, station.id)}
+                        onMoveToNext={(itemId, orderType) => handleMoveToNext(itemId, station.id, orderType)}
+                        onSkipItem={(itemId) => handleSkipItem(itemId, station.id)}
+                        isProcessing={workflow.startItemAtStation.isPending || workflow.moveItemToNextStation.isPending}
+                        overrideSettings={overrideSettings}
+                        totalOrderItems={totalOrderItems}
+                      />
+                        );
+                      })()
                     ))}
                   </div>
                 )}
@@ -485,7 +599,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
           );
         })}
 
-        {/* Colunas de Despacho (todas as estações order_status) */}
+        {/* Colunas de Despacho (todas as estaÃ§Ãµes order_status) */}
         {allOrderStatusStations.map((dispatchStation) => {
           const stationOrders = readyOrdersByStation.get(dispatchStation.id) || [];
           return (
@@ -514,7 +628,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
                   </TabsTrigger>
                   <TabsTrigger value="historico" className="gap-1.5 text-xs">
                     <History className="h-3 w-3" />
-                    Histórico
+                    HistÃ³rico
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="ativos" className="mt-0">
@@ -556,3 +670,7 @@ export function KdsProductionLineView({ orders, isLoading, overrideTenantId, ove
     </div>
   );
 }
+
+
+
+

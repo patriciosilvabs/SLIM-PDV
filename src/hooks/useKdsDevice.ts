@@ -1,99 +1,91 @@
 import { useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useKdsSettings } from './useKdsSettings';
 import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/hooks/useTenant';
+import { clearStoredKdsDeviceAuth } from '@/lib/kdsDeviceSession';
+import {
+  getKdsDeviceByDeviceId,
+  listKdsDevices,
+  updateKdsDevice,
+} from '@/lib/firebaseTenantCrud';
 
 export interface KdsDevice {
   id: string;
   device_id: string;
   name: string;
   station_id: string | null;
+  stage_type?: 'prep_start' | 'item_assembly' | 'assembly' | 'oven_expedite' | 'order_status' | 'custom';
+  display_order?: number | null;
+  is_terminal?: boolean;
   operation_mode: string;
+  routing_mode?: 'default' | 'keywords';
+  routing_keywords?: string[];
+  is_entry_device?: boolean;
+  next_device_ids?: string[];
+  next_device_id?: string | null;
   last_seen_at: string;
   is_active: boolean;
+  deleted_at?: string | null;
   created_at: string;
+  updated_at?: string | null;
 }
 
 export function useKdsDevice() {
-  const { settings, updateDeviceSettings } = useKdsSettings();
+  const { settings, updateDeviceSettings, clearDeviceRegistration } = useKdsSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { tenantId } = useTenant();
 
-  // Buscar ou criar registro do dispositivo no banco
   const { data: device, isLoading } = useQuery({
-    queryKey: ['kds-device', settings.deviceId],
+    queryKey: ['kds-device', settings.deviceId, tenantId],
     queryFn: async () => {
-      if (!settings.deviceId) return null;
+      if (!settings.deviceId || !tenantId) return null;
 
-      // Tentar buscar dispositivo existente
-      const { data: existing, error: fetchError } = await supabase
-        .from('kds_devices')
-        .select('*')
-        .eq('device_id', settings.deviceId)
-        .maybeSingle();
-
-      if (fetchError) throw fetchError;
-
+      const existing = await getKdsDeviceByDeviceId(tenantId, settings.deviceId);
       if (existing) {
-        // Atualizar last_seen_at
-        await supabase
-          .from('kds_devices')
-          .update({ last_seen_at: new Date().toISOString() })
-          .eq('id', existing.id);
-        
+        if (existing.deleted_at) {
+          clearStoredKdsDeviceAuth();
+          clearDeviceRegistration({ suppressAutoRegister: true });
+          return null;
+        }
+
+        await updateKdsDevice(tenantId, existing.id, { last_seen_at: new Date().toISOString() });
         return existing as KdsDevice;
       }
 
-      // Criar novo dispositivo
-      const { data: newDevice, error: createError } = await supabase
-        .from('kds_devices')
-        .insert({
-          device_id: settings.deviceId,
-          name: settings.deviceName,
-          operation_mode: settings.operationMode,
-          station_id: settings.assignedStationId,
-          tenant_id: tenantId
-        })
-        .select()
-        .single();
-
-      if (createError) throw createError;
-      return newDevice as KdsDevice;
+      clearStoredKdsDeviceAuth();
+      clearDeviceRegistration({ suppressAutoRegister: true });
+      return null;
     },
-    enabled: !!settings.deviceId,
-    staleTime: 1000 * 60 * 5, // 5 minutos
+    enabled: !!settings.deviceId && !!tenantId,
+    staleTime: 1000 * 30,
   });
 
-  // Atualizar dispositivo no banco quando configurações mudarem
+  const clearCurrentDeviceRegistration = useCallback(() => {
+    clearStoredKdsDeviceAuth();
+    clearDeviceRegistration({ suppressAutoRegister: true });
+    queryClient.removeQueries({ queryKey: ['kds-device'] });
+    queryClient.invalidateQueries({ queryKey: ['kds-devices-all', tenantId] });
+  }, [clearDeviceRegistration, queryClient, tenantId]);
+
   const updateDevice = useMutation({
     mutationFn: async (updates: Partial<Omit<KdsDevice, 'id' | 'device_id' | 'created_at'>>) => {
-      if (!device?.id) return null;
-
-      const { data, error } = await supabase
-        .from('kds_devices')
-        .update({
-          ...updates,
-          last_seen_at: new Date().toISOString(),
-        })
-        .eq('id', device.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as KdsDevice;
+      if (!device?.id || !tenantId) return null;
+      return (await updateKdsDevice(tenantId, device.id, {
+        ...updates,
+        last_seen_at: new Date().toISOString(),
+      })) as KdsDevice;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kds-device', settings.deviceId] });
+      queryClient.invalidateQueries({ queryKey: ['kds-device', settings.deviceId, tenantId] });
+      queryClient.invalidateQueries({ queryKey: ['kds-devices-all', tenantId] });
     },
     onError: (error) => {
       console.error('Error updating KDS device:', error);
     },
   });
 
-  // Sincronizar configurações locais com o banco
   const syncToDatabase = useCallback(() => {
     if (!device) return;
 
@@ -104,60 +96,44 @@ export function useKdsDevice() {
     });
   }, [device, settings.deviceName, settings.operationMode, settings.assignedStationId, updateDevice]);
 
-  // Atribuir dispositivo a uma praça
   const assignToStation = useCallback((stationId: string | null) => {
     updateDeviceSettings({ assignedStationId: stationId });
-    
+
     if (device) {
       updateDevice.mutate({ station_id: stationId });
     }
 
     toast({
-      title: stationId ? 'Dispositivo atribuído à praça' : 'Dispositivo desvinculado da praça',
+      title: stationId ? 'Dispositivo atribuido a praca' : 'Dispositivo desvinculado da praca',
     });
   }, [device, updateDevice, updateDeviceSettings, toast]);
 
-  // Renomear dispositivo
   const renameDevice = useCallback((name: string) => {
     updateDeviceSettings({ deviceName: name });
-    
+
     if (device) {
       updateDevice.mutate({ name });
     }
   }, [device, updateDevice, updateDeviceSettings]);
 
-  // Atualizar heartbeat periodicamente
   useEffect(() => {
-    if (!device?.id) return;
+    if (!device?.id || !tenantId) return;
 
     const interval = setInterval(() => {
-      supabase
-        .from('kds_devices')
-        .update({ last_seen_at: new Date().toISOString() })
-        .eq('id', device.id)
-        .then();
-    }, 60000); // A cada 1 minuto
+      void updateKdsDevice(tenantId, device.id, { last_seen_at: new Date().toISOString() });
+    }, 10000);
 
     return () => clearInterval(interval);
-  }, [device?.id]);
+  }, [device?.id, tenantId]);
 
-  // Buscar todos os dispositivos (para admin)
   const { data: allDevices = [] } = useQuery({
     queryKey: ['kds-devices-all', tenantId],
     queryFn: async () => {
       if (!tenantId) return [];
-
-      const { data, error } = await supabase
-        .from('kds_devices')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order('last_seen_at', { ascending: false });
-
-      if (error) throw error;
-      return data as KdsDevice[];
+      return (await listKdsDevices(tenantId)) as KdsDevice[];
     },
     enabled: !!tenantId,
-    staleTime: 1000 * 30, // 30 segundos
+    staleTime: 1000 * 30,
   });
 
   return {
@@ -168,5 +144,6 @@ export function useKdsDevice() {
     renameDevice,
     syncToDatabase,
     updateDevice,
+    clearCurrentDeviceRegistration,
   };
 }

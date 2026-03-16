@@ -42,9 +42,10 @@ import {
   Server,
   type LucideIcon
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { uploadToBucket } from '@/lib/firebaseStorageCompat';
 
 // Available icons for sectors
 const SECTOR_ICONS: { value: string; label: string; icon: LucideIcon }[] = [
@@ -170,22 +171,19 @@ export function PrinterSettings() {
       const fileExt = file.name.split('.').pop();
       const fileName = `logo-${Date.now()}.${fileExt}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('restaurant-logos')
-        .upload(fileName, file, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrl } = supabase.storage
-        .from('restaurant-logos')
-        .getPublicUrl(fileName);
+      const publicUrl = await uploadToBucket({
+        bucket: 'restaurant-logos',
+        filePath: fileName,
+        file,
+        contentType: file.type || undefined,
+      });
 
       // Invalidar cache da logo antiga
       if (restaurantLogoUrl) {
         invalidateLogoCache(restaurantLogoUrl);
       }
       
-      updateRestaurantLogoUrl(publicUrl.publicUrl);
+      updateRestaurantLogoUrl(publicUrl);
       toast({
         title: 'Logo atualizado!',
         description: 'A logomarca foi salva com sucesso.',
@@ -510,17 +508,26 @@ export function PrinterSettings() {
         {!printerCtx.isConnected && (
           <Alert>
             <Download className="w-4 h-4" />
-            <AlertDescription className="flex items-center justify-between">
+            <AlertDescription className="flex items-center justify-between gap-4">
               <span>
-                QZ Tray precisa estar instalado e em execução no computador.
+                QZ Tray precisa estar instalado e em execução no computador. O certificado digital do Slim também já está publicado para este ambiente.
               </span>
-              <Button 
-                variant="link" 
-                className="p-0 h-auto"
-                onClick={() => window.open('https://qz.io/download/', '_blank')}
-              >
-                Baixar QZ Tray
-              </Button>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="link"
+                  className="p-0 h-auto"
+                  onClick={() => window.open(`${window.location.origin}/qz/digital-certificate.txt`, '_blank')}
+                >
+                  Baixar certificado
+                </Button>
+                <Button 
+                  variant="link" 
+                  className="p-0 h-auto"
+                  onClick={() => window.open('https://qz.io/download/', '_blank')}
+                >
+                  Baixar QZ Tray
+                </Button>
+              </div>
             </AlertDescription>
           </Alert>
         )}
@@ -1294,3 +1301,4 @@ export function PrinterSettings() {
     </Card>
   );
 }
+

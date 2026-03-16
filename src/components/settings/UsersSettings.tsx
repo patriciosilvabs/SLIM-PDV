@@ -17,13 +17,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { useAllUsers, AppRole, UserWithRoles } from '@/hooks/useUserRole';
+import { useAllUsers, AppRole, UserWithRoles, useUserRoleMutations } from '@/hooks/useUserRole';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
 import { useTenant } from '@/hooks/useTenant';
 import { useQueryClient } from '@tanstack/react-query';
 import { Users, UserPlus, Edit, X, Eye, EyeOff, Key, Trash2 } from 'lucide-react';
 import { UserPermissionsDialog } from '@/components/settings/UserPermissionsDialog';
+import { upsertProfile } from '@/lib/firebaseTenantCrud';
 
 const roleLabels: Record<AppRole, string> = {
   admin: 'Administrador',
@@ -43,6 +44,7 @@ const roleColors: Record<AppRole, string> = {
 
 export function UsersSettings() {
   const { data: users, isLoading, refetch } = useAllUsers();
+  const { removeRole } = useUserRoleMutations();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { tenantId } = useTenant();
@@ -78,23 +80,17 @@ export function UsersSettings() {
 
   const handleRemoveRole = async (userId: string, role: AppRole) => {
     try {
-      const { error } = await supabase
-        .from('user_roles')
-        .delete()
-        .eq('user_id', userId)
-        .eq('role', role);
-      
-      if (error) throw error;
-      
-      toast({ title: 'Fun√ß√£o removida!' });
+      await removeRole(userId, role);
+
+      toast({ title: 'FunÁ„o removida!' });
       refetch();
       queryClient.invalidateQueries({ queryKey: ['user-roles'] });
       queryClient.invalidateQueries({ queryKey: ['has-admins'] });
     } catch (error: any) {
-      toast({ 
-        title: 'Erro ao remover fun√ß√£o', 
-        description: error.message, 
-        variant: 'destructive' 
+      toast({
+        title: 'Erro ao remover funÁ„o',
+        description: error.message,
+        variant: 'destructive'
       });
     }
   };
@@ -115,7 +111,7 @@ export function UsersSettings() {
     try {
       // Se tem email ou senha, usar Edge Function
       if (editUserEmail || editUserPassword) {
-        const { data, error } = await supabase.functions.invoke('admin-update-user', {
+        const { data, error } = await backendClient.functions.invoke('admin-update-user', {
           body: { 
             userId: userToEdit.id,
             name: editUserName.trim(),
@@ -128,12 +124,7 @@ export function UsersSettings() {
         if (data.error) throw new Error(data.error);
       } else {
         // S√≥ atualizar nome no perfil
-        const { error } = await supabase
-          .from('profiles')
-          .update({ name: editUserName.trim().toUpperCase() })
-          .eq('id', userToEdit.id);
-        
-        if (error) throw error;
+        await upsertProfile(userToEdit.id, { name: editUserName.trim().toUpperCase() });
       }
       
       toast({ title: 'Usu√°rio atualizado com sucesso!' });
@@ -161,7 +152,7 @@ export function UsersSettings() {
     
     setIsDeletingUser(true);
     try {
-      const { data, error } = await supabase.functions.invoke('admin-delete-user', {
+      const { data, error } = await backendClient.functions.invoke('admin-delete-user', {
         body: { userId: userToDelete.id }
       });
 
@@ -205,7 +196,7 @@ export function UsersSettings() {
 
     setIsCreatingUser(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-user', {
+      const { data, error } = await backendClient.functions.invoke('create-user', {
         body: {
           email: newUserForm.email,
           name: newUserForm.name.toUpperCase(),
@@ -524,3 +515,7 @@ export function UsersSettings() {
     </>
   );
 }
+
+
+
+

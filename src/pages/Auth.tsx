@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTenant } from '@/hooks/useTenant';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -167,7 +167,7 @@ export default function Auth() {
     } else {
       toast({
         title: 'Conta criada!',
-        description: 'Você já pode fazer login.',
+        description: 'Conta pronta. Redirecionando...',
       });
     }
   };
@@ -175,7 +175,7 @@ export default function Auth() {
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true);
     
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { error } = await backendClient.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/dashboard`,
@@ -205,7 +205,7 @@ export default function Auth() {
     setForgotEmailError('');
     setIsSendingReset(true);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+    const { error } = await backendClient.auth.resetPasswordForEmail(forgotEmail, {
       redirectTo: `${window.location.origin}/reset-password`,
     });
 
@@ -566,3 +566,5 @@ export default function Auth() {
     </div>
   );
 }
+
+

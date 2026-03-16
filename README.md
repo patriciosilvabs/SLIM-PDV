@@ -60,6 +60,37 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
+## Firebase setup
+
+This repository now includes a Firebase foundation for full migration (frontend + backend):
+
+1. Copy `.env.example` to `.env` and fill Firebase values.
+1. Set your Firebase project ID in `.firebaserc`.
+1. Install dependencies:
+```sh
+npm i
+cd functions && npm i
+```
+1. Run local emulators:
+```sh
+npm run firebase:emulators
+```
+
+Migration checklist: `docs/FIREBASE_MIGRATION.md`.
+
+Notes:
+- Authentication is running through Firebase compatibility in `src/integrations/supabase/client.ts`.
+- `supabase.functions.invoke(...)` now calls Firebase Functions first.
+- Required envs for full runtime:
+  - `VITE_FIREBASE_*` (frontend Firebase SDK)
+  - `VITE_FIREBASE_FUNCTIONS_BASE_URL` (optional explicit URL)
+- Functions runtime envs:
+  - `SUPABASE_URL` (still required only for backend proxy endpoints that have not been reescritas nativamente em Firebase Functions)
+  - `QZ_PRIVATE_KEY`, `QZ_PRIVATE_KEY_BASE64` or `QZ_PRIVATE_KEY_PATH` (enables `qz-sign` in Firebase)
+- QZ Tray:
+  - public certificate is served at `/qz/digital-certificate.txt`
+  - private key must stay only in `functions/.env`
+
 ## How can I deploy this project?
 
 Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.

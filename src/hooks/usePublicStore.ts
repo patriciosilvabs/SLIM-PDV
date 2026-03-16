@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { getFirebaseFunctionUrl } from '@/integrations/firebase/client';
 
 export interface StoreData {
   tenant: {
@@ -81,12 +82,8 @@ export function usePublicStore(slug: string | undefined, tableId?: string | null
       const params = new URLSearchParams({ slug: slug!, action: 'menu' });
       if (tableId) params.append('table_id', tableId);
 
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-store?${params.toString()}`;
-      const res = await fetch(url, {
-        headers: {
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        },
-      });
+      const url = `${getFirebaseFunctionUrl('public-store')}?${params.toString()}`;
+      const res = await fetch(url);
 
       if (!res.ok) {
         const err = await res.json();
@@ -128,12 +125,11 @@ export interface CreateOrderPayload {
 export function useCreatePublicOrder() {
   return useMutation({
     mutationFn: async (payload: CreateOrderPayload) => {
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-store?slug=${payload.slug}&action=create-order`;
+      const url = `${getFirebaseFunctionUrl('public-store')}?slug=${payload.slug}&action=create-order`;
       const res = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         },
         body: JSON.stringify(payload),
       });

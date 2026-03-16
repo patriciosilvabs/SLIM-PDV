@@ -1,8 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useEffect } from 'react';
 import { useTenant } from './useTenant';
+import { firebaseAuth } from '@/integrations/firebase/client';
+import {
+  createReservation as createReservationFs,
+  isTableAvailable,
+  listReservations,
+  updateReservation as updateReservationFs,
+} from '@/lib/firebaseTenantCrud';
 
 export type ReservationStatus = 'confirmed' | 'cancelled' | 'completed' | 'no_show';
 
@@ -25,38 +30,17 @@ export interface Reservation {
 }
 
 export function useReservations(date?: string) {
-  const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
 
   const query = useQuery({
     queryKey: ['reservations', date],
     queryFn: async () => {
-      let q = supabase
-        .from('reservations')
-        .select('*, table:tables(number, capacity)')
-        .order('reservation_time');
-
-      if (date) {
-        q = q.eq('reservation_date', date);
-      }
-
-      const { data, error } = await q;
-      if (error) throw error;
-      return data as Reservation[];
+      if (!tenantId) return [];
+      return (await listReservations(tenantId, date)) as Reservation[];
     },
+    refetchInterval: 5000,
+    enabled: !!tenantId,
   });
-
-  useEffect(() => {
-    const channel = supabase
-      .channel('reservations-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['reservations'] });
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
 
   return query;
 }
@@ -68,16 +52,14 @@ export function useReservationMutations() {
 
   const createReservation = useMutation({
     mutationFn: async (reservation: Omit<Reservation, 'id' | 'created_at' | 'table'>) => {
-      if (!tenantId) throw new Error('Tenant não encontrado');
-      
-      const { data, error } = await supabase
-        .from('reservations')
-        .insert({ ...reservation, tenant_id: tenantId })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+
+      const payload = {
+        ...reservation,
+        created_by: reservation.created_by ?? firebaseAuth.currentUser?.uid ?? null,
+      };
+
+      return createReservationFs(tenantId, payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
@@ -90,15 +72,8 @@ export function useReservationMutations() {
 
   const updateReservation = useMutation({
     mutationFn: async ({ id, ...data }: Partial<Reservation> & { id: string }) => {
-      const { data: result, error } = await supabase
-        .from('reservations')
-        .update(data)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return result;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      return updateReservationFs(tenantId, id, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
@@ -111,12 +86,8 @@ export function useReservationMutations() {
 
   const cancelReservation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('reservations')
-        .update({ status: 'cancelled' })
-        .eq('id', id);
-      
-      if (error) throw error;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await updateReservationFs(tenantId, id, { status: 'cancelled' });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
@@ -131,21 +102,14 @@ export function useReservationMutations() {
 }
 
 export function useTableAvailability(tableId: string, date: string, time: string) {
+  const { tenantId } = useTenant();
+
   return useQuery({
     queryKey: ['table-availability', tableId, date, time],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('reservations')
-        .select('id')
-        .eq('table_id', tableId)
-        .eq('reservation_date', date)
-        .eq('status', 'confirmed')
-        .gte('reservation_time', `${time.split(':')[0]}:00`)
-        .lte('reservation_time', `${String(parseInt(time.split(':')[0]) + 2).padStart(2, '0')}:00`);
-
-      if (error) throw error;
-      return data.length === 0;
+      if (!tenantId) return false;
+      return isTableAvailable(tenantId, tableId, date, time);
     },
-    enabled: !!tableId && !!date && !!time,
+    enabled: !!tenantId && !!tableId && !!date && !!time,
   });
 }

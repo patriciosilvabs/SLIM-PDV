@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { usePrinter, SectorPrintItem } from '@/contexts/PrinterContext';
 import { usePrintQueue, PrintJob } from '@/hooks/usePrintQueue';
 import { usePrintSectors, PrintSector } from '@/hooks/usePrintSectors';
 import { KitchenTicketData, CustomerReceiptData, CancellationTicketData } from '@/utils/escpos';
 import { toast } from 'sonner';
+import { hasActiveKdsDeviceSession } from '@/lib/kdsDeviceSession';
 
 // Generate unique device ID (persisted in localStorage)
 function getDeviceId(): string {
@@ -19,48 +19,64 @@ function getDeviceId(): string {
 
 export function PrintQueueListener() {
   const printer = usePrinter();
-  const { data: printSectors } = usePrintSectors();
-  const { pendingJobs, markAsPrinted, markAsFailed } = usePrintQueue();
+  const { isConnected, isConnecting, connect } = printer;
+  const isKdsDeviceMode = hasActiveKdsDeviceSession();
+  const { data: printSectors } = usePrintSectors({ enabled: !isKdsDeviceMode });
+  const { pendingJobs, markAsPrinted, markAsFailed } = usePrintQueue({ enabled: !isKdsDeviceMode });
   const [isPrintServer, setIsPrintServer] = useState(() => {
     return localStorage.getItem('is_print_server') === 'true';
   });
   const processingRef = useRef<Set<string>>(new Set());
+  const reconnectingRef = useRef(false);
   const deviceId = useRef(getDeviceId());
+
+  if (isKdsDeviceMode) {
+    return null;
+  }
 
   // Persist print server setting
   useEffect(() => {
     localStorage.setItem('is_print_server', isPrintServer.toString());
   }, [isPrintServer]);
 
-  // Subscribe to realtime updates for print_queue
   useEffect(() => {
-    if (!isPrintServer) return;
+    const hasPendingJobs = pendingJobs?.some((job) => job.status === 'pending');
+    if (
+      !isPrintServer ||
+      !hasPendingJobs ||
+      isConnected ||
+      isConnecting ||
+      reconnectingRef.current
+    ) {
+      return;
+    }
 
-    const channel = supabase
-      .channel('print-queue-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'print_queue',
-        },
-        (payload) => {
-          console.log('[PrintQueue] New print job received:', payload.new);
-          // Process immediately when new job arrives
-          processJob(payload.new as PrintJob);
+    let active = true;
+    reconnectingRef.current = true;
+
+    const reconnect = async () => {
+      try {
+        await connect();
+      } catch (error) {
+        console.error('[PrintQueue] Error reconnecting to QZ Tray:', error);
+      } finally {
+        if (active) {
+          reconnectingRef.current = false;
         }
-      )
-      .subscribe();
+      }
+    };
+
+    void reconnect();
 
     return () => {
-      supabase.removeChannel(channel);
+      active = false;
+      reconnectingRef.current = false;
     };
-  }, [isPrintServer, printer.isConnected]);
+  }, [connect, isConnected, isConnecting, isPrintServer, pendingJobs]);
 
   // Process pending jobs sequentially on mount and when printer connects
   useEffect(() => {
-    if (!isPrintServer || !printer.isConnected || !pendingJobs) return;
+    if (!isPrintServer || !isConnected || !pendingJobs) return;
 
     // Sequential processing to avoid "Printer is busy" errors
     const processQueueSequentially = async () => {
@@ -72,7 +88,7 @@ export function PrintQueueListener() {
     };
 
     processQueueSequentially();
-  }, [isPrintServer, printer.isConnected, pendingJobs]);
+  }, [isConnected, isPrintServer, pendingJobs]);
 
   const processJob = async (job: PrintJob) => {
     // Skip if not print server or printer not connected

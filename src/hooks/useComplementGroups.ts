@@ -1,8 +1,12 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
 import { useTenant } from './useTenant';
-import type { Json } from '@/integrations/supabase/types';
+import {
+  createComplementGroup,
+  deleteComplementGroup,
+  listComplementGroups,
+  updateComplementGroup,
+} from '@/lib/firebaseTenantCrud';
 
 export interface FlavorOption {
   count: number;
@@ -35,26 +39,19 @@ export interface ComplementGroup {
 }
 
 export function useComplementGroups(includeInactive = false) {
+  const { tenantId } = useTenant();
+
   return useQuery({
-    queryKey: ['complement-groups', { includeInactive }],
+    queryKey: ['complement-groups', tenantId, { includeInactive }],
     queryFn: async () => {
-      let query = supabase
-        .from('complement_groups')
-        .select('*')
-        .order('sort_order')
-        .order('name');
-      
-      if (!includeInactive) {
-        query = query.eq('is_active', true);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data ?? []).map(d => ({
+      if (!tenantId) return [];
+      const data = await listComplementGroups(tenantId, includeInactive);
+      return (data ?? []).map((d) => ({
         ...d,
-        flavor_options: (d.flavor_options ?? []) as unknown as FlavorOption[],
+        flavor_options: (d.flavor_options ?? []) as FlavorOption[],
       })) as ComplementGroup[];
-    }
+    },
+    enabled: !!tenantId,
   });
 }
 
@@ -64,17 +61,8 @@ export function useComplementGroupsMutations() {
 
   const createGroup = useMutation({
     mutationFn: async (group: Omit<ComplementGroup, 'id' | 'created_at' | 'updated_at'>) => {
-      if (!tenantId) throw new Error('Tenant não encontrado');
-      
-      const { flavor_options, ...rest } = group;
-      const { data, error } = await supabase
-        .from('complement_groups')
-        .insert({ ...rest, flavor_options: flavor_options as unknown as Json, tenant_id: tenantId })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      return await createComplementGroup(tenantId, group);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['complement-groups'] });
@@ -83,25 +71,13 @@ export function useComplementGroupsMutations() {
     },
     onError: (error) => {
       toast({ title: 'Erro ao criar grupo', description: error.message, variant: 'destructive' });
-    }
+    },
   });
 
   const updateGroup = useMutation({
     mutationFn: async ({ id, ...group }: Partial<ComplementGroup> & { id: string }) => {
-      const { flavor_options, ...rest } = group;
-      const payload: Record<string, unknown> = { ...rest };
-      if (flavor_options !== undefined) {
-        payload.flavor_options = flavor_options as unknown as Json;
-      }
-      const { data, error } = await supabase
-        .from('complement_groups')
-        .update(payload)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      return await updateComplementGroup(tenantId, id, group);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['complement-groups'] });
@@ -110,26 +86,22 @@ export function useComplementGroupsMutations() {
     },
     onError: (error) => {
       toast({ title: 'Erro ao atualizar', description: error.message, variant: 'destructive' });
-    }
+    },
   });
 
   const deleteGroup = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('complement_groups')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await deleteComplementGroup(tenantId, id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['complement-groups'] });
       queryClient.invalidateQueries({ queryKey: ['product-complements'] });
-      toast({ title: 'Grupo excluído com sucesso!' });
+      toast({ title: 'Grupo excluido com sucesso!' });
     },
     onError: (error) => {
       toast({ title: 'Erro ao excluir grupo', description: error.message, variant: 'destructive' });
-    }
+    },
   });
 
   return { createGroup, updateGroup, deleteGroup };

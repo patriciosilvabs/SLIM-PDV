@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+﻿import { useQuery } from '@tanstack/react-query';
 import { useTenant } from '@/hooks/useTenant';
+import { listProfilesByIds, listTenantMembers } from '@/lib/firebaseTenantCrud';
 
 export interface Employee {
   id: string;
@@ -15,26 +15,13 @@ export function useEmployees() {
     queryFn: async (): Promise<Employee[]> => {
       if (!tenantId) return [];
 
-      // Fetch only members of the current tenant
-      const { data: members, error: membersError } = await supabase
-        .from('tenant_members')
-        .select('user_id')
-        .eq('tenant_id', tenantId);
+      const members = await listTenantMembers(tenantId);
+      if (!members.length) return [];
 
-      if (membersError) throw membersError;
-      if (!members?.length) return [];
-
-      const userIds = members.map(m => m.user_id);
-
-      // Fetch profiles only for tenant members
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, name')
-        .in('id', userIds)
-        .order('name');
-      
-      if (error) throw error;
-      return data || [];
+      const profiles = await listProfilesByIds(members.map((m) => m.user_id));
+      return (profiles || [])
+        .map((p) => ({ id: p.id, name: p.name || 'Usuario' }))
+        .sort((a, b) => a.name.localeCompare(b.name));
     },
     enabled: !!tenantId,
   });

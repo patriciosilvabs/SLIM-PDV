@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+﻿import { useState, useMemo } from 'react';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,8 @@ import { CalendarIcon, RotateCcw, AlertTriangle, DollarSign, User, Receipt, Hist
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
+import { getOrderTableIdByOrderId } from '@/lib/firebaseTenantCrud';
+import { useTenant } from '@/hooks/useTenant';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -38,18 +40,19 @@ const statusLabels: Record<string, string> = {
 
 const orderTypeLabels: Record<string, string> = {
   dine_in: 'Mesa',
-  takeaway: 'Balcão',
+  takeaway: 'BalcÃ£o',
   delivery: 'Delivery',
 };
 
 const paymentMethodLabels: Record<string, string> = {
   cash: 'Dinheiro',
-  credit_card: 'Crédito',
-  debit_card: 'Débito',
+  credit_card: 'CrÃ©dito',
+  debit_card: 'DÃ©bito',
   pix: 'PIX',
 };
 
 export default function ReopenHistory() {
+  const { tenantId } = useTenant();
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -168,17 +171,10 @@ export default function ReopenHistory() {
 
       // 2. If it's a table order, update table to occupied
       if (selectedSale.order_type === 'dine_in' && selectedSale.table_number) {
-        // We need to find the table_id - fetch from orders
-        const { supabase } = await import('@/integrations/supabase/client');
-        const { data: orderData } = await supabase
-          .from('orders')
-          .select('table_id')
-          .eq('id', selectedSale.id)
-          .single();
-        
-        if (orderData?.table_id) {
+        const tableId = tenantId ? await getOrderTableIdByOrderId(tenantId, selectedSale.id) : null;
+        if (tableId) {
           await updateTable.mutateAsync({
-            id: orderData.table_id,
+            id: tableId,
             status: 'occupied',
           });
         }
@@ -227,7 +223,7 @@ export default function ReopenHistory() {
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <RotateCcw className="h-6 w-6" />
-              Histórico de Reaberturas
+              HistÃ³rico de Reaberturas
             </h1>
             <p className="text-muted-foreground">
               Vendas fechadas e auditoria de reaberturas
@@ -267,7 +263,7 @@ export default function ReopenHistory() {
             </TabsTrigger>
             <TabsTrigger value="reopen-history" className="flex items-center gap-2">
               <History className="h-4 w-4" />
-              Histórico ({reopenStats.total})
+              HistÃ³rico ({reopenStats.total})
             </TabsTrigger>
           </TabsList>
 
@@ -310,7 +306,7 @@ export default function ReopenHistory() {
             ) : !closedSales || closedSales.length === 0 ? (
               <Card>
                 <CardContent className="py-8 text-center text-muted-foreground">
-                  Nenhuma venda encontrada no período selecionado
+                  Nenhuma venda encontrada no perÃ­odo selecionado
                 </CardContent>
               </Card>
             ) : (
@@ -341,7 +337,7 @@ export default function ReopenHistory() {
                                 <span className="text-sm font-medium">Mesa {sale.table_number}</span>
                               )}
                               <span className="text-sm">
-                                {sale.customer_name || 'Cliente não informado'}
+                                {sale.customer_name || 'Cliente nÃ£o informado'}
                               </span>
                             </div>
                             
@@ -418,7 +414,7 @@ export default function ReopenHistory() {
                       <User className="h-5 w-5 text-info" />
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Top Usuário</p>
+                      <p className="text-sm text-muted-foreground">Top UsuÃ¡rio</p>
                       <p className="text-xl font-bold">
                         {reopenStats.topUsers[0]?.name || '-'}
                         {reopenStats.topUsers[0] && (
@@ -436,14 +432,14 @@ export default function ReopenHistory() {
             {/* Table */}
             <Card>
               <CardHeader>
-                <CardTitle>Reaberturas no Período</CardTitle>
+                <CardTitle>Reaberturas no PerÃ­odo</CardTitle>
               </CardHeader>
               <CardContent>
                 {reopensLoading ? (
                   <div className="text-center py-8 text-muted-foreground">Carregando...</div>
                 ) : !reopens || reopens.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    Nenhuma reabertura encontrada no período selecionado
+                    Nenhuma reabertura encontrada no perÃ­odo selecionado
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -456,7 +452,7 @@ export default function ReopenHistory() {
                           <TableHead>Cliente</TableHead>
                           <TableHead>Status Anterior</TableHead>
                           <TableHead>Valor</TableHead>
-                          <TableHead>Usuário</TableHead>
+                          <TableHead>UsuÃ¡rio</TableHead>
                           <TableHead>Motivo</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -504,7 +500,7 @@ export default function ReopenHistory() {
             {reopenStats.topUsers.length > 1 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Usuários que mais Reabriram</CardTitle>
+                  <CardTitle>UsuÃ¡rios que mais Reabriram</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
@@ -541,7 +537,7 @@ export default function ReopenHistory() {
                 Confirmar Reabertura de Venda
               </DialogTitle>
               <DialogDescription>
-                Esta ação será registrada para auditoria.
+                Esta aÃ§Ã£o serÃ¡ registrada para auditoria.
               </DialogDescription>
             </DialogHeader>
 
@@ -569,7 +565,7 @@ export default function ReopenHistory() {
                   <div className="col-span-2">
                     <p className="text-sm text-muted-foreground">Fechado em</p>
                     <p className="font-medium">
-                      {format(new Date(selectedSale.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                      {format(new Date(selectedSale.created_at), "dd/MM/yyyy 'Ã s' HH:mm", { locale: ptBR })}
                     </p>
                   </div>
                 </div>
@@ -578,7 +574,7 @@ export default function ReopenHistory() {
                   <Label htmlFor="reopen-reason">Motivo da reabertura *</Label>
                   <Textarea
                     id="reopen-reason"
-                    placeholder="Ex: Cliente pediu item adicional após fechamento da conta"
+                    placeholder="Ex: Cliente pediu item adicional apÃ³s fechamento da conta"
                     value={reopenReason}
                     onChange={(e) => setReopenReason(e.target.value)}
                     rows={3}
@@ -610,3 +606,7 @@ export default function ReopenHistory() {
     </PDVLayout>
   );
 }
+
+
+
+

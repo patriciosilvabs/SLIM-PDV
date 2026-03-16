@@ -1,8 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/hooks/useTenant';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import {
+  createProductionApiKey,
+  deleteProductionApiKey,
+  listProductionApiKeys,
+  listProductionApiLogs,
+  updateProductionApiKey,
+} from '@/lib/firebaseTenantCrud';
 
 export interface ProductionApiKey {
   id: string;
@@ -39,9 +45,7 @@ function generateApiKey(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   const prefix = 'pdv_';
   let key = prefix;
-  for (let i = 0; i < 32; i++) {
-    key += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
+  for (let i = 0; i < 32; i++) key += chars.charAt(Math.floor(Math.random() * chars.length));
   return key;
 }
 
@@ -55,17 +59,8 @@ export function useProductionApiKeys() {
     queryKey: ['production-api-keys', tenantId],
     queryFn: async () => {
       if (!tenantId) return [];
-      
-      const { data, error } = await supabase
-        .from('production_api_keys')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      
-      // Transform data to match interface
-      return (data || []).map(item => ({
+      const data = await listProductionApiKeys(tenantId);
+      return data.map((item) => ({
         ...item,
         permissions: (item.permissions || { demand: true, ingredients: true, targets: true, webhook: true }) as ProductionApiKey['permissions'],
       })) as ProductionApiKey[];
@@ -77,16 +72,7 @@ export function useProductionApiKeys() {
     queryKey: ['production-api-logs', tenantId],
     queryFn: async () => {
       if (!tenantId) return [];
-      
-      const { data, error } = await supabase
-        .from('production_api_logs')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order('created_at', { ascending: false })
-        .limit(100);
-      
-      if (error) throw error;
-      return data as ProductionApiLog[];
+      return (await listProductionApiLogs(tenantId, 100)) as ProductionApiLog[];
     },
     enabled: !!tenantId,
   });
@@ -94,28 +80,13 @@ export function useProductionApiKeys() {
   const createKey = useMutation({
     mutationFn: async (name: string) => {
       if (!tenantId || !user?.id) throw new Error('Missing tenant or user');
-      
       const apiKey = generateApiKey();
-      
-      const { data, error } = await supabase
-        .from('production_api_keys')
-        .insert({
-          tenant_id: tenantId,
-          api_key: apiKey,
-          name,
-          created_by: user.id,
-          permissions: {
-            demand: true,
-            ingredients: true,
-            targets: true,
-            webhook: true,
-          },
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      return await createProductionApiKey(tenantId, {
+        api_key: apiKey,
+        name,
+        created_by: user.id,
+        permissions: { demand: true, ingredients: true, targets: true, webhook: true },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['production-api-keys'] });
@@ -128,12 +99,8 @@ export function useProductionApiKeys() {
 
   const updateKey = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<ProductionApiKey> }) => {
-      const { error } = await supabase
-        .from('production_api_keys')
-        .update(updates)
-        .eq('id', id);
-      
-      if (error) throw error;
+      if (!tenantId) throw new Error('Missing tenant');
+      await updateProductionApiKey(tenantId, id, updates as any);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['production-api-keys'] });
@@ -146,12 +113,8 @@ export function useProductionApiKeys() {
 
   const deleteKey = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('production_api_keys')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      if (!tenantId) throw new Error('Missing tenant');
+      await deleteProductionApiKey(tenantId, id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['production-api-keys'] });
@@ -162,13 +125,6 @@ export function useProductionApiKeys() {
     },
   });
 
-  return {
-    apiKeys,
-    logs,
-    isLoading,
-    logsLoading,
-    createKey,
-    updateKey,
-    deleteKey,
-  };
+  return { apiKeys, logs, isLoading, logsLoading, createKey, updateKey, deleteKey };
 }
+

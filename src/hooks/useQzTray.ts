@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
+import { getFirebaseFunctionUrl } from '@/integrations/firebase/client';
 import { usePersistentSettings } from './usePersistentSettings';
 
 // QZ Tray connection status
@@ -35,33 +36,35 @@ declare global {
   }
 }
 
-// QZ Tray Certificate - Patricio Org (cardapio-offline-pos.lovable.app) - Gerado em 18/12/2025
-const QZ_CERTIFICATE = `-----BEGIN CERTIFICATE-----
-MIIDxzCCAq+gAwIBAgIUbKuEgrhWb0sBkksN3QESQaC4UX4wDQYJKoZIhvcNAQEL
-BQAwczERMA8GA1UECAwIQW1hem9uYXMxDzANBgNVBAcMBk1hbmF1czEVMBMGA1UE
-CgwMUGF0cmljaW8gT3JnMQswCQYDVQQLDAJUSTEpMCcGA1UEAwwgY2FyZGFwaW8t
-b2ZmbGluZS1wb3MubG92YWJsZS5hcHAwHhcNMjUxMjE4MDE1ODI4WhcNMzUxMjE2
-MDE1ODI4WjBzMREwDwYDVQQIDAhBbWF6b25hczEPMA0GA1UEBwwGTWFuYXVzMRUw
-EwYDVQQKDAxQYXRyaWNpbyBPcmcxCzAJBgNVBAsMAlRJMSkwJwYDVQQDDCBjYXJk
-YXBpby1vZmZsaW5lLXBvcy5sb3ZhYmxlLmFwcDCCASIwDQYJKoZIhvcNAQEBBQAD
-ggEPADCCAQoCggEBALIJsoBV6il3juLsY2pMkVeMLpGtlvZxDQupe4Zg4NUEQBXt
-LG5dI1eKDGwLKo9NdtLe4+qD4AF05u8Q/x9m/RYwna8SxSF6Y8tFIoIXzGwXZVZE
-jDDv62MC21fL9EtLbRn57ir/D1h9PzMv0adO+5CHFNjENPxv6dy8vmWltac5ITQV
-fec7SjX5noGVBLG+kKID5b7HeHMmtXMUeMxLP4MYuqTjRiHlWwkMXDp6ki436zAC
-6tX90J/CrWq0ACsqpvO1b3bC+2yR01S2ynsvVaBr7FWP1ySMVB1qfVZJnpvFgy3q
-9WxhNEabO7sP6CxrEEQ3g5rsKOY+iz/yQ0cjnDkCAwEAAaNTMFEwHQYDVR0OBBYE
-FI3UwzonvrdVBkUVgyMvPVSYGMFgMB8GA1UdIwQYMBaAFI3UwzonvrdVBkUVgyMv
-PVSYGMFgMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEBAKZCYhbF
-lT7PNh+VGHP/zdN0lrteYEiv7n9QHVCTSb9B2s2zPEMwCY5u8CYAAXNit8uwmsbb
-gwzN0lEJ7FiOsZMhxjYqeTDfkoVgDesKvmhf+kQZcyg9qW8sK1VEF+qzRvWQ4oOf
-Zhr0NHLQkVKaoIGXhnEFI1ywb3I4NHg7+Ys/hdSENyw3jBbDUicnV6vufi75/V5y
-cGKON+qkSWoQx1Y1TEPg+w0/5TwnqZQ0mVmGUqHDFBEkFJ8t+1YCa/4Z5FH5v2rD
-amAHbk4a/bG3HIsoesgj9HYA0oO2spljDgGHp701l3TkD6P/qIV9aLj0MDe0pLZk
-lc8eHux3Sl2Dvoo=
------END CERTIFICATE-----`;
+// Cloud function URL for signing
+const QZ_SIGN_URL = getFirebaseFunctionUrl('qz-sign');
+const QZ_CERTIFICATE_URL = `${import.meta.env.BASE_URL}qz/digital-certificate.txt`;
+const QZ_AUTO_CONNECT_PREFERENCE_KEY = 'pdv_qz_auto_connect_preference';
+let qzCertificatePromise: Promise<string> | null = null;
 
-// Edge function URL for signing
-const QZ_SIGN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/qz-sign`;
+async function loadQzCertificate(): Promise<string> {
+  if (!qzCertificatePromise) {
+    qzCertificatePromise = fetch(QZ_CERTIFICATE_URL, { cache: 'no-store' })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Falha ao carregar o certificado QZ (${response.status})`);
+        }
+
+        const certificate = (await response.text()).trim();
+        if (!certificate.includes('BEGIN CERTIFICATE')) {
+          throw new Error('O certificado QZ publicado esta invalido');
+        }
+
+        return certificate;
+      })
+      .catch((error) => {
+        qzCertificatePromise = null;
+        throw error;
+      });
+  }
+
+  return qzCertificatePromise;
+}
 
 export interface PrinterConfig {
   kitchenPrinter: string | null;
@@ -108,7 +111,8 @@ export function useQzTray() {
   const [error, setError] = useState<string | null>(null);
   
   const qzLoadedRef = useRef(false);
-  const connectAttemptedRef = useRef(false);
+  const connectPromiseRef = useRef<Promise<boolean> | null>(null);
+  const [isQzReady, setIsQzReady] = useState(() => typeof window !== 'undefined' && !!window.qz);
 
   // Get connection status for UI
   const connectionStatus: QzConnectionStatus = isConnected 
@@ -122,31 +126,19 @@ export function useQzTray() {
   // Load QZ Tray script
   useEffect(() => {
     if (qzLoadedRef.current) return;
+
+    if (window.qz) {
+      qzLoadedRef.current = true;
+      setIsQzReady(true);
+      return;
+    }
     
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.min.js';
     script.async = true;
     script.onload = () => {
       qzLoadedRef.current = true;
-      // Auto-connect on load if QZ is available AND user is authenticated
-      if (window.qz && !connectAttemptedRef.current) {
-        connectAttemptedRef.current = true;
-        setTimeout(async () => {
-          try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.access_token) {
-              setWaitingForAuth(false);
-              connect().catch(console.error);
-            } else {
-              console.log('QZ Tray: Aguardando autenticação do usuário');
-              setWaitingForAuth(true);
-            }
-          } catch (err) {
-            console.error('Error checking auth for QZ:', err);
-            setWaitingForAuth(true);
-          }
-        }, 500);
-      }
+      setIsQzReady(true);
     };
     script.onerror = () => {
       setError('Falha ao carregar QZ Tray. Verifique sua conexão.');
@@ -158,7 +150,27 @@ export function useQzTray() {
     };
   }, []);
 
-  // Config já é sincronizado automaticamente pelo usePersistentSettings
+  useEffect(() => {
+    if (isLoadingConfig || config.autoConnectOnLogin) {
+      return;
+    }
+
+    const hasConfiguredPrinter = Boolean(config.kitchenPrinter || config.cashierPrinter);
+    const hasManualPreference = localStorage.getItem(QZ_AUTO_CONNECT_PREFERENCE_KEY) === 'manual';
+
+    if (!hasConfiguredPrinter || hasManualPreference) {
+      return;
+    }
+
+    updateConfigDb({ autoConnectOnLogin: true });
+  }, [
+    config.autoConnectOnLogin,
+    config.cashierPrinter,
+    config.kitchenPrinter,
+    isLoadingConfig,
+    updateConfigDb,
+  ]);
+
 
   const connect = useCallback(async () => {
     if (!window.qz) {
@@ -168,22 +180,32 @@ export function useQzTray() {
 
     if (window.qz.websocket.isActive()) {
       setIsConnected(true);
+      setWaitingForAuth(false);
+
+      try {
+        const availablePrinters = await window.qz.printers.find();
+        setPrinters(Array.isArray(availablePrinters) ? availablePrinters : [availablePrinters]);
+      } catch (err) {
+        console.warn('Unable to refresh printers from existing QZ connection:', err);
+      }
+
       return true;
     }
 
-    setIsConnecting(true);
-    setError(null);
+    if (connectPromiseRef.current) {
+      return connectPromiseRef.current;
+    }
 
-    try {
+    const connectPromise = (async () => {
+      setIsConnecting(true);
+      setError(null);
+
+      try {
+      const certificate = await loadQzCertificate();
+
       // Configure QZ security with certificate
-      window.qz.security.setCertificatePromise((resolve, reject) => {
-        if (QZ_CERTIFICATE.includes('PASTE_YOUR_CERTIFICATE_HERE')) {
-          // Fallback to unsigned if certificate not configured
-          console.warn('QZ Certificate not configured, using unsigned mode');
-          resolve('');
-        } else {
-          resolve(QZ_CERTIFICATE);
-        }
+      window.qz.security.setCertificatePromise((resolve) => {
+        resolve(certificate);
       });
       
       // Set signature algorithm
@@ -192,15 +214,9 @@ export function useQzTray() {
       // Configure signature promise to call Edge Function
       window.qz.security.setSignaturePromise((toSign: string) => {
         return async (resolve: (sig: string) => void, reject: (err: Error) => void) => {
-          if (QZ_CERTIFICATE.includes('PASTE_YOUR_CERTIFICATE_HERE')) {
-            // Unsigned mode
-            resolve('');
-            return;
-          }
-          
           try {
             // Get current session for authorization
-            const { data: { session } } = await supabase.auth.getSession();
+            const { data: { session } } = await backendClient.auth.getSession();
             if (!session?.access_token) {
               throw new Error('User not authenticated');
             }
@@ -230,6 +246,7 @@ export function useQzTray() {
 
       await window.qz.websocket.connect();
       setIsConnected(true);
+      setWaitingForAuth(false);
       
       // Fetch available printers
       const availablePrinters = await window.qz.printers.find();
@@ -242,15 +259,87 @@ export function useQzTray() {
         setError('QZ Tray não está em execução. Baixe e instale em qz.io');
       } else if (errorMessage.includes('Already connected')) {
         setIsConnected(true);
+        setWaitingForAuth(false);
         return true;
       } else {
         setError(`Erro ao conectar: ${errorMessage}`);
       }
-      return false;
-    } finally {
-      setIsConnecting(false);
-    }
+        return false;
+      } finally {
+        setIsConnecting(false);
+        connectPromiseRef.current = null;
+      }
+    })();
+
+    connectPromiseRef.current = connectPromise;
+    return connectPromise;
   }, []);
+
+  useEffect(() => {
+    if (isLoadingConfig || !config.autoConnectOnLogin || !isQzReady || isConnected || isConnecting) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const tryAutoConnect = async () => {
+      const { data: { session } } = await backendClient.auth.getSession();
+      if (cancelled) {
+        return;
+      }
+
+      if (!session?.access_token) {
+        setWaitingForAuth(true);
+        return;
+      }
+
+      await connect();
+    };
+
+    void tryAutoConnect();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    config.autoConnectOnLogin,
+    connect,
+    isConnected,
+    isConnecting,
+    isLoadingConfig,
+    isQzReady,
+  ]);
+
+  useEffect(() => {
+    if (!config.autoConnectOnLogin || !isQzReady) {
+      return;
+    }
+
+    const reconnectWhenVisible = async () => {
+      if (document.visibilityState !== 'visible' || isConnected || isConnecting) {
+        return;
+      }
+
+      const { data: { session } } = await backendClient.auth.getSession();
+      if (!session?.access_token) {
+        return;
+      }
+
+      await connect();
+    };
+
+    const handleVisibilityChange = () => {
+      void reconnectWhenVisible();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
+  }, [config.autoConnectOnLogin, connect, isConnected, isConnecting, isQzReady]);
 
   const disconnect = useCallback(async () => {
     if (!window.qz || !window.qz.websocket.isActive()) {
@@ -267,17 +356,19 @@ export function useQzTray() {
     }
   }, []);
 
-  // Listen for auth state changes to auto-connect when user logs in
+  // Listen for auth state changes to keep local status in sync
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    const { data: { subscription } } = backendClient.auth.onAuthStateChange(
       (event, session) => {
         if (event === 'SIGNED_IN' && session?.access_token) {
           setWaitingForAuth(false);
-          // Only auto-connect if setting is enabled
-          if (config.autoConnectOnLogin && window.qz && !window.qz.websocket.isActive()) {
-            setTimeout(() => {
-              connect().catch(console.error);
-            }, 500);
+          if (config.autoConnectOnLogin && isQzReady) {
+            void connect();
+          }
+        } else if (event === 'TOKEN_REFRESHED' && session?.access_token) {
+          setWaitingForAuth(false);
+          if (config.autoConnectOnLogin && isQzReady && !isConnected && !isConnecting) {
+            void connect();
           }
         } else if (event === 'SIGNED_OUT') {
           setWaitingForAuth(false);
@@ -287,7 +378,14 @@ export function useQzTray() {
     );
 
     return () => subscription.unsubscribe();
-  }, [connect, disconnect, config.autoConnectOnLogin]);
+  }, [
+    config.autoConnectOnLogin,
+    connect,
+    disconnect,
+    isConnected,
+    isConnecting,
+    isQzReady,
+  ]);
 
   const refreshPrinters = useCallback(async () => {
     if (!window.qz || !isConnected) {
@@ -373,6 +471,10 @@ export function useQzTray() {
   }, [print, config.cashierPrinter]);
 
   const updateConfig = useCallback((updates: Partial<PrinterConfig>) => {
+    if (typeof updates.autoConnectOnLogin === 'boolean') {
+      localStorage.setItem(QZ_AUTO_CONNECT_PREFERENCE_KEY, 'manual');
+    }
+
     updateConfigDb(updates);
   }, [updateConfigDb]);
 
@@ -412,6 +514,9 @@ export function useQzTray() {
     openCashDrawer,
     updateConfig,
     testPrint,
-    isQzAvailable: qzLoadedRef.current && !!window.qz,
+    isQzAvailable: isQzReady && !!window.qz,
   };
 }
+
+
+

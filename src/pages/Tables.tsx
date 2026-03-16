@@ -34,7 +34,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
 import { format, addDays, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
 import { mobileAwareToast as toast, setMobileDevice } from '@/lib/mobileToast';
 import { useOrderSettings } from '@/hooks/useOrderSettings';
 import { usePrinterOptional, SectorPrintItem } from '@/contexts/PrinterContext';
@@ -42,6 +42,16 @@ import { useCentralizedPrinting } from '@/hooks/useCentralizedPrinting';
 import { KitchenTicketData, CancellationTicketData } from '@/utils/escpos';
 import { usePrintSectors } from '@/hooks/usePrintSectors';
 import { useProfile } from '@/hooks/useProfile';
+import { useTenant } from '@/hooks/useTenant';
+import {
+  createOrderReopen,
+  createTableSwitch,
+  deleteOrderItemCascade,
+  listOrderItemTotalsByOrder,
+  listPaymentsByOrder,
+  listPaymentsByOrderIds,
+  updateOrderItemById,
+} from '@/lib/firebaseTenantCrud';
 import {
   OpenTableDialog,
   ReservationDialog,
@@ -139,6 +149,7 @@ interface RegisteredPayment {
 }
 
 export default function Tables() {
+  const { tenantId } = useTenant();
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -333,13 +344,12 @@ export default function Tables() {
   // Handle serving individual order item
   const handleServeOrderItem = async (itemId: string) => {
     try {
+      if (!tenantId) throw new Error('Tenant nao encontrado');
       setIsServingItem(itemId);
-      const { error } = await supabase
-        .from('order_items')
-        .update({ served_at: new Date().toISOString() })
-        .eq('id', itemId);
-      
-      if (error) throw error;
+      await updateOrderItemById(tenantId, itemId, {
+        served_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
       
       await queryClient.invalidateQueries({ queryKey: ['orders'] });
       
@@ -351,24 +361,6 @@ export default function Tables() {
       setIsServingItem(null);
     }
   };
-
-  // Realtime subscription for orders
-  useEffect(() => {
-    const channel = supabase
-      .channel('tables-orders-ready')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders' },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['orders'] });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
 
   // Detect when table orders change to "ready" and play sound
   // Uses robust detection: checks for recently ready orders even if page wasn't open
@@ -408,7 +400,7 @@ export default function Tables() {
         const table = tables?.find(t => t.id === order.table_id);
         const tableNumber = table?.number || '?';
         toast.success(
-          `🔔 Mesa ${tableNumber} - Pedido Pronto!`,
+          `Mesa ${tableNumber} - Pedido Pronto!`,
           { 
             description: 'A cozinha finalizou o preparo',
             duration: 8000,
@@ -464,7 +456,7 @@ export default function Tables() {
             // Show toast
             const table = tables?.find(t => t.id === order.table_id);
             toast.warning(
-              `⏰ Mesa ${table?.number || '?'} - ${waitMinutes} minutos!`,
+              `Mesa ${table?.number || '?'} - ${waitMinutes} minutos!`,
               { 
                 description: `Tempo de espera ultrapassou ${tableWaitSettings.thresholdMinutes} minutos`,
                 duration: 8000 
@@ -553,7 +545,7 @@ export default function Tables() {
                 }
                 
                 toast.info(
-                  `🔄 Mesa ${table.number} fechada automaticamente`,
+                  `Mesa ${table.number} fechada automaticamente`,
                   { description: `Ociosa por ${idleMinutes} minutos (${idleReason})` }
                 );
               } catch (error) {
@@ -566,7 +558,7 @@ export default function Tables() {
               }
               
               toast.warning(
-                `⚠️ Mesa ${table.number} ociosa - ${idleMinutes} min`,
+                `Mesa ${table.number} ociosa - ${idleMinutes} min`,
                 { 
                   description: `Mesa aberta (${idleReason})`,
                   duration: 10000,
@@ -906,7 +898,7 @@ export default function Tables() {
             duplicateKitchenTicket
           );
           
-          toast.success(centralPrinting.shouldQueue ? '🖨️ Comanda enviada para fila' : '🖨️ Comanda impressa');
+          toast.success(centralPrinting.shouldQueue ? 'Comanda enviada para fila' : 'Comanda impressa');
         } catch (err) {
           console.error('[Print Debug] Auto print failed:', err);
           toast.error('Erro ao imprimir comanda.');
@@ -930,7 +922,8 @@ export default function Tables() {
       if (!newTable) throw new Error('Mesa não encontrada');
       
       // 1. Log the table switch for audit
-      await supabase.from('table_switches').insert({
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await createTableSwitch(tenantId, {
         order_id: selectedOrder.id,
         from_table_id: selectedTable.id,
         to_table_id: newTableId,
@@ -955,7 +948,7 @@ export default function Tables() {
         status: 'occupied'
       });
       
-      toast.success(`Mesa trocada: ${selectedTable.number} → ${newTable.number}`);
+      toast.success(`Mesa trocada: ${selectedTable.number} -> ${newTable.number}`);
       setIsSwitchTableDialogOpen(false);
       setSelectedTable({ ...newTable, status: 'occupied' });
     } catch (error: any) {
@@ -1016,19 +1009,14 @@ export default function Tables() {
     
     setIsCancellingOrder(true);
     try {
-      // Update order with cancellation info using direct supabase call
-      const { error: orderError } = await supabase
-        .from('orders')
-        .update({
-          status: 'cancelled',
-          cancellation_reason: reason,
-          cancelled_by: user?.id,
-          cancelled_at: new Date().toISOString(),
-          status_before_cancellation: selectedOrder.status,
-        })
-        .eq('id', selectedOrder.id);
-      
-      if (orderError) throw orderError;
+      await updateOrder.mutateAsync({
+        id: selectedOrder.id,
+        status: 'cancelled',
+        cancellation_reason: reason,
+        cancelled_by: user?.id,
+        cancelled_at: new Date().toISOString(),
+        status_before_cancellation: selectedOrder.status,
+      });
       
       // Print cancellation ticket to kitchen (if enabled in settings)
       const autoPrint = kdsSettings.autoPrintCancellations ?? true;
@@ -1086,14 +1074,11 @@ export default function Tables() {
       return;
     }
     try {
-      const { error } = await supabase.from('order_items').delete().eq('id', itemId);
-      if (error) throw error;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await deleteOrderItemCascade(tenantId, itemId);
       
       // Recalculate order total
-      const { data: remainingItems } = await supabase
-        .from('order_items')
-        .select('total_price')
-        .eq('order_id', orderId);
+      const remainingItems = await listOrderItemTotalsByOrder(tenantId, orderId);
       
       const newTotal = remainingItems?.reduce((sum, item) => sum + (item.total_price || 0), 0) || 0;
       await updateOrder.mutateAsync({ id: orderId, total: newTotal, subtotal: newTotal });
@@ -1145,44 +1130,33 @@ export default function Tables() {
 
   // Fetch existing partial payments for the selected order WITH receiver profile
   const { data: existingPayments } = useQuery({
-    queryKey: ['payments', selectedOrder?.id],
+    queryKey: ['payments', tenantId, selectedOrder?.id],
     queryFn: async () => {
-      if (!selectedOrder?.id) return [];
-      const { data, error } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('order_id', selectedOrder.id);
-      if (error) throw error;
-      return data || [];
+      if (!tenantId || !selectedOrder?.id) return [];
+      return await listPaymentsByOrder(tenantId, selectedOrder.id);
     },
-    enabled: !!selectedOrder?.id,
+    enabled: !!tenantId && !!selectedOrder?.id,
   });
 
   // Fetch payments for ALL occupied tables to show partial payment indicators on grid
   const { data: allTablePayments } = useQuery({
-    queryKey: ['all-table-payments', tables?.filter(t => t.status === 'occupied').map(t => t.id)],
+    queryKey: ['all-table-payments', tenantId, tables?.filter(t => t.status === 'occupied').map(t => t.id)],
     queryFn: async () => {
+      if (!tenantId) return [];
       const occupiedTableIds = tables?.filter(t => t.status === 'occupied').map(t => t.id) || [];
       if (occupiedTableIds.length === 0) return [];
-      
-      // Get orders for occupied tables (exclude closed/cancelled orders)
-      const { data: activeOrders, error: ordersError } = await supabase
-        .from('orders')
-        .select('id, table_id, total')
-        .in('table_id', occupiedTableIds)
-        .neq('status', 'cancelled')
-        .neq('status', 'delivered');
-      
-      if (ordersError) throw ordersError;
-      if (!activeOrders?.length) return [];
+
+      const activeOrders = (allOrders || []).filter(
+        (order) =>
+          order.table_id &&
+          occupiedTableIds.includes(order.table_id) &&
+          order.status !== 'cancelled' &&
+          order.status !== 'delivered'
+      );
+      if (!activeOrders.length) return [];
       
       // Get payments for those orders
-      const { data: payments, error: paymentsError } = await supabase
-        .from('payments')
-        .select('order_id, amount')
-        .in('order_id', activeOrders.map(o => o.id));
-      
-      if (paymentsError) throw paymentsError;
+      const payments = await listPaymentsByOrderIds(tenantId, activeOrders.map(o => o.id));
       
       // Aggregate by table_id
       return activeOrders.map(order => ({
@@ -1194,7 +1168,7 @@ export default function Tables() {
           .reduce((sum, p) => sum + Number(p.amount), 0) || 0
       }));
     },
-    enabled: !!tables?.length,
+    enabled: !!tenantId && !!tables?.length && !!allOrders,
   });
 
   // Create map for quick access to table payment info
@@ -1471,21 +1445,15 @@ export default function Tables() {
 
       // If no session payments but we have existing partial payments, we need to close the table manually
       if (registeredPayments.length === 0 && existingPaymentsTotal > 0) {
-        // Update order status to delivered and clear table_id
-        await supabase
-          .from('orders')
-          .update({ 
-            status: 'delivered',
-            table_id: null, // Desassociar da mesa para evitar conflitos futuros
-            delivered_at: new Date().toISOString()
-          })
-          .eq('id', selectedOrder.id);
+        await updateOrder.mutateAsync({
+          id: selectedOrder.id,
+          status: 'delivered',
+          table_id: null,
+          delivered_at: new Date().toISOString(),
+        });
 
         // Update table status to available
-        await supabase
-          .from('tables')
-          .update({ status: 'available' })
-          .eq('id', selectedTable.id);
+        await updateTable.mutateAsync({ id: selectedTable.id, status: 'available' });
         
         queryClient.invalidateQueries({ queryKey: ['orders'] });
         queryClient.invalidateQueries({ queryKey: ['tables'] });
@@ -1845,7 +1813,7 @@ export default function Tables() {
                                                     .sort((a: any, b: any) => a.sub_item_index - b.sub_item_index)
                                                     .map((subItem: any) => (
                                                     <div key={subItem.id} className="pl-2 border-l-2 border-primary/30">
-                                                      <p className="font-medium text-foreground">🍕 Pizza {subItem.sub_item_index + 1}:</p>
+                                                      <p className="font-medium text-foreground">Pizza {subItem.sub_item_index + 1}:</p>
                                                       {subItem.sub_extras && subItem.sub_extras.length > 0 && (
                                                         <div className="pl-2 space-y-0.5">
                                                           {subItem.sub_extras.map((extra: any, idx: number) => (
@@ -1854,7 +1822,7 @@ export default function Tables() {
                                                         </div>
                                                       )}
                                                       {subItem.notes && (
-                                                        <p className="pl-2 italic text-amber-600">📝 {subItem.notes}</p>
+                                                        <p className="pl-2 italic text-amber-600">Obs: {subItem.notes}</p>
                                                       )}
                                                     </div>
                                                   ))}
@@ -1877,7 +1845,7 @@ export default function Tables() {
                                               {/* Observações */}
                                               {item.notes && (
                                                 <p className="text-xs text-amber-600 mt-1 pl-2 italic">
-                                                  📝 {item.notes}
+                                                  Obs: {item.notes}
                                                 </p>
                                               )}
                                               {/* Jornada KDS do item */}
@@ -2060,7 +2028,7 @@ export default function Tables() {
                                           .sort((a: any, b: any) => a.sub_item_index - b.sub_item_index)
                                           .map((subItem: any) => (
                                           <div key={subItem.id} className="pl-2 border-l-2 border-primary/30">
-                                            <p className="font-medium text-foreground">🍕 Pizza {subItem.sub_item_index + 1}:</p>
+                                            <p className="font-medium text-foreground">Pizza {subItem.sub_item_index + 1}:</p>
                                             {subItem.sub_extras && subItem.sub_extras.length > 0 && (
                                               <div className="pl-2 space-y-0.5">
                                                 {subItem.sub_extras.map((extra: any, idx: number) => (
@@ -2076,7 +2044,7 @@ export default function Tables() {
                                               </div>
                                             )}
                                             {subItem.notes && (
-                                              <p className="pl-2 italic text-amber-600">📝 {subItem.notes}</p>
+                                              <p className="pl-2 italic text-amber-600">Obs: {subItem.notes}</p>
                                             )}
                                           </div>
                                         ))}
@@ -2104,15 +2072,15 @@ export default function Tables() {
                                     )}
                                     {/* Observações */}
                                     {item.notes && (
-                                      <p className="text-xs text-amber-600 mt-1 pl-2 italic">📝 {item.notes}</p>
+                                      <p className="text-xs text-amber-600 mt-1 pl-2 italic">Obs: {item.notes}</p>
                                     )}
                                     {/* Data/hora e garçom */}
                                     <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1 pl-2">
                                       {item.created_at && (
-                                        <span>📅 {format(new Date(item.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</span>
+                                        <span>Data: {format(new Date(item.created_at), "dd/MM/yyyy 'as' HH:mm", { locale: ptBR })}</span>
                                       )}
                                       {item.added_by_profile?.name && (
-                                        <span className="text-blue-600">• 👤 {item.added_by_profile.name}</span>
+                                        <span className="text-blue-600">- {item.added_by_profile.name}</span>
                                       )}
                                     </div>
                                   </div>
@@ -2356,7 +2324,7 @@ export default function Tables() {
                                   {waiterEntries.map(([name, data]) => (
                                     <div key={name} className="flex items-center justify-between text-sm">
                                       <span className="text-muted-foreground">
-                                        👤 {name} ({data.count} {data.count === 1 ? 'item' : 'itens'})
+                                        {name} ({data.count} {data.count === 1 ? 'item' : 'itens'})
                                       </span>
                                       <span className="font-medium">{formatCurrency(data.total)}</span>
                                     </div>
@@ -2720,7 +2688,7 @@ export default function Tables() {
                     </div>
                     {reservation.notes && (
                       <p className="text-sm text-muted-foreground mt-2 pl-16">
-                        📝 {reservation.notes}
+                        Obs: {reservation.notes}
                       </p>
                     )}
                   </CardContent>
@@ -2958,7 +2926,7 @@ export default function Tables() {
                                             .sort((a: any, b: any) => a.sub_item_index - b.sub_item_index)
                                             .map((subItem: any) => (
                                             <div key={subItem.id} className="pl-2 border-l-2 border-primary/30">
-                                              <p className="font-medium text-foreground">🍕 Pizza {subItem.sub_item_index + 1}:</p>
+                                              <p className="font-medium text-foreground">Pizza {subItem.sub_item_index + 1}:</p>
                                               {subItem.sub_extras && subItem.sub_extras.length > 0 && (
                                                 <div className="pl-2 space-y-0.5">
                                                   {subItem.sub_extras.map((extra: any, idx: number) => (
@@ -2967,7 +2935,7 @@ export default function Tables() {
                                                 </div>
                                               )}
                                               {subItem.notes && (
-                                                <p className="pl-2 italic text-amber-600">📝 {subItem.notes}</p>
+                                                <p className="pl-2 italic text-amber-600">Obs: {subItem.notes}</p>
                                               )}
                                             </div>
                                           ))}
@@ -2988,7 +2956,7 @@ export default function Tables() {
                                         )
                                       )}
                                       {item.notes && (
-                                        <p className="text-xs text-amber-600 mt-1 italic">📝 {item.notes}</p>
+                                        <p className="text-xs text-amber-600 mt-1 italic">Obs: {item.notes}</p>
                                       )}
                                     </div>
                                     <div className="flex flex-col items-end gap-1 ml-2">
@@ -3147,7 +3115,7 @@ export default function Tables() {
                                   .sort((a: any, b: any) => a.sub_item_index - b.sub_item_index)
                                   .map((subItem: any) => (
                                   <div key={subItem.id} className="pl-2 border-l-2 border-primary/30">
-                                    <p className="font-medium text-foreground">🍕 Pizza {subItem.sub_item_index + 1}:</p>
+                                    <p className="font-medium text-foreground">Pizza {subItem.sub_item_index + 1}:</p>
                                       {subItem.sub_extras && subItem.sub_extras.length > 0 && (
                                       <div className="pl-2 space-y-0.5">
                                         {subItem.sub_extras.map((extra: any, idx: number) => (
@@ -3163,7 +3131,7 @@ export default function Tables() {
                                       </div>
                                     )}
                                     {subItem.notes && (
-                                      <p className="pl-2 italic text-amber-600">📝 {subItem.notes}</p>
+                                      <p className="pl-2 italic text-amber-600">Obs: {subItem.notes}</p>
                                     )}
                                   </div>
                                 ))}
@@ -3191,15 +3159,15 @@ export default function Tables() {
                             )}
                             {/* Observações */}
                             {item.notes && (
-                              <p className="text-xs text-amber-600 mt-1 pl-2 italic">📝 {item.notes}</p>
+                              <p className="text-xs text-amber-600 mt-1 pl-2 italic">Obs: {item.notes}</p>
                             )}
                             {/* Data/hora e garçom */}
                             <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1 pl-2">
                               {item.created_at && (
-                                <span>📅 {format(new Date(item.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</span>
+                                <span>Data: {format(new Date(item.created_at), "dd/MM/yyyy 'as' HH:mm", { locale: ptBR })}</span>
                               )}
                               {item.added_by_profile?.name && (
-                                <span className="text-blue-600">• 👤 {item.added_by_profile.name}</span>
+                                <span className="text-blue-600">- {item.added_by_profile.name}</span>
                               )}
                             </div>
                           </div>
@@ -3724,7 +3692,8 @@ export default function Tables() {
             const newStatus = getInitialOrderStatus();
             
             // Record the reopen for audit trail
-            await supabase.from('order_reopens').insert({
+            if (!tenantId) throw new Error('Tenant nao encontrado');
+            await createOrderReopen(tenantId, {
               order_id: closedOrderToReopen.id,
               table_id: selectedTable.id,
               previous_status: closedOrderToReopen.status,
@@ -3739,7 +3708,7 @@ export default function Tables() {
             // Send push notification to managers
             try {
               if ('Notification' in window && Notification.permission === 'granted') {
-                new Notification(`⚠️ Mesa ${selectedTable.number} reaberta`, {
+                new Notification(`Mesa ${selectedTable.number} reaberta`, {
                   body: `Por: ${user?.user_metadata?.name || user?.email}. Motivo: ${reason}`,
                   tag: 'table-reopen',
                 });
@@ -3750,7 +3719,7 @@ export default function Tables() {
 
             // Try to send email notification
             try {
-              await supabase.functions.invoke('send-reopen-notification', {
+              await backendClient.functions.invoke('send-reopen-notification', {
                 body: {
                   orderId: closedOrderToReopen.id,
                   tableNumber: selectedTable.number,
@@ -3777,13 +3746,15 @@ export default function Tables() {
             });
 
             // Update all order items status
-            if (closedOrderToReopen.order_items) {
-              for (const item of closedOrderToReopen.order_items) {
-                await supabase
-                  .from('order_items')
-                  .update({ status: newStatus })
-                  .eq('id', item.id);
-              }
+            if (tenantId && closedOrderToReopen.order_items) {
+              await Promise.all(
+                closedOrderToReopen.order_items.map((item) =>
+                  updateOrderItemById(tenantId, item.id, {
+                    status: newStatus,
+                    updated_at: new Date().toISOString(),
+                  })
+                )
+              );
             }
             
             toast.success(`Mesa ${selectedTable.number} reaberta com sucesso!`);
@@ -3931,3 +3902,7 @@ export default function Tables() {
     </PDVLayout>
   );
 }
+
+
+
+

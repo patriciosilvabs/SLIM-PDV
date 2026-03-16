@@ -1,10 +1,9 @@
 import * as React from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient, type AuthSessionCompat, type AuthUserCompat } from '@/integrations/backend/client';
 
 interface AuthContextType {
-  user: User | null;
-  session: Session | null;
+  user: AuthUserCompat | null;
+  session: AuthSessionCompat | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, name: string) => Promise<{ error: Error | null }>;
@@ -14,12 +13,12 @@ interface AuthContextType {
 const AuthContext = React.createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = React.useState<User | null>(null);
-  const [session, setSession] = React.useState<Session | null>(null);
+  const [user, setUser] = React.useState<AuthUserCompat | null>(null);
+  const [session, setSession] = React.useState<AuthSessionCompat | null>(null);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    const { data: { subscription } } = backendClient.auth.onAuthStateChange(
       (event, currentSession) => {
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
@@ -27,7 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+    backendClient.auth.getSession().then(({ data: { session: currentSession } }) => {
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
       setLoading(false);
@@ -37,13 +36,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await backendClient.auth.signInWithPassword({ email, password });
     return { error: error as Error | null };
   };
 
   const signUp = async (email: string, password: string, name: string) => {
     const redirectUrl = `${window.location.origin}/`;
-    const { error } = await supabase.auth.signUp({
+    const { error } = await backendClient.auth.signUp({
       email,
       password,
       options: {
@@ -51,11 +50,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         data: { name }
       }
     });
+
+    const normalizedMessage = error?.message.toLowerCase() ?? '';
+    if (error && (normalizedMessage.includes('email-already-in-use') || normalizedMessage.includes('email already in use'))) {
+      const loginResult = await backendClient.auth.signInWithPassword({ email, password });
+      if (!loginResult.error) {
+        return { error: null };
+      }
+    }
+
     return { error: error as Error | null };
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    await backendClient.auth.signOut();
   };
 
   return (
@@ -72,3 +80,4 @@ export function useAuth() {
   }
   return context;
 }
+

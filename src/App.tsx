@@ -44,7 +44,24 @@ import PlatformTenants from "./pages/platform/PlatformTenants";
 import PlatformSubscriptions from "./pages/platform/PlatformSubscriptions";
 import PlatformAdmins from "./pages/platform/PlatformAdmins";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      retry: (failureCount, error) => {
+        const message = error instanceof Error ? error.message.toLowerCase() : '';
+
+        if (message.includes('missing or insufficient permissions') || message.includes('permission-denied')) {
+          return false;
+        }
+
+        return failureCount < 1;
+      },
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

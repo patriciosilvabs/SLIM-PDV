@@ -37,8 +37,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { format, differenceInHours } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { getFirebaseFunctionUrl } from '@/integrations/firebase/client';
 
-const WEBHOOK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/cardapioweb-webhook`;
+const WEBHOOK_URL = getFirebaseFunctionUrl('cardapioweb-webhook');
 
 function IntegrationHealthStatus({ logs, integration }: { logs: any[]; integration: any }) {
   const lastLog = logs[0];

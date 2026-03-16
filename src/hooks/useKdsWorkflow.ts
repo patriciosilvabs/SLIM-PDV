@@ -1,10 +1,56 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useKdsStations } from './useKdsStations';
 import { useKdsStationLogs } from './useKdsStationLogs';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTenant } from '@/hooks/useTenant';
 import { toast } from 'sonner';
 import { markItemAsRecentlyMoved } from './useOrders';
+import {
+  countOrderItemsAtDevice,
+  countOrderItemsAtStation,
+  getKdsGlobalSettings,
+  getOrderItemById,
+  listKdsDevices,
+  listOrderItemExtrasByItemIds,
+  listOrderItemsByOrderId,
+  listOrderItemSubExtrasBySubItemIds,
+  listOrderItemSubItemsByItemIds,
+  updateOrderById,
+  updateOrderItemById,
+} from '@/lib/firebaseTenantCrud';
+
+const KDS_DEVICE_ONLINE_WINDOW_MS = 30 * 1000;
+
+function sortStationsByOrder<T extends { sort_order?: number | null; is_active?: boolean }>(stations: T[]): T[] {
+  return [...stations]
+    .filter((station) => station.is_active !== false)
+    .sort((left, right) => (left.sort_order ?? 0) - (right.sort_order ?? 0));
+}
+
+function getStationsAtFirstOrder<T extends { sort_order?: number | null }>(stations: T[]): T[] {
+  if (stations.length === 0) return [];
+  const firstOrder = stations[0].sort_order ?? 0;
+  return stations.filter((station) => (station.sort_order ?? 0) === firstOrder);
+}
+
+function getEntryStationsForItem<T extends { station_type: string; sort_order?: number | null; is_active?: boolean }>(
+  stations: T[],
+  hasBorder: boolean
+): T[] {
+  const sortedStations = sortStationsByOrder(stations);
+  const nonTerminalStations = sortedStations.filter((station) => station.station_type !== 'order_status');
+  if (nonTerminalStations.length === 0) return [];
+
+  if (hasBorder) {
+    const borderStations = nonTerminalStations.filter((station) => station.station_type === 'item_assembly');
+    return getStationsAtFirstOrder(borderStations.length > 0 ? borderStations : nonTerminalStations);
+  }
+
+  const nonBorderStations = nonTerminalStations.filter((station) => station.station_type !== 'item_assembly');
+  const prepStartStations = nonBorderStations.filter((station) => station.station_type === 'prep_start');
+  const preferredStations = prepStartStations.length > 0 ? prepStartStations : nonBorderStations;
+  return getStationsAtFirstOrder(preferredStations.length > 0 ? preferredStations : nonTerminalStations);
+}
 
 interface OrderItem {
   id: string;
@@ -25,220 +71,176 @@ interface OrderData {
 
 export function useKdsWorkflow() {
   const queryClient = useQueryClient();
-  const { activeStations, getNextStation, orderStatusStation, orderStatusStations, isLastProductionStation } = useKdsStations();
+  const { activeStations, orderStatusStation, orderStatusStations } = useKdsStations();
   const { logAction } = useKdsStationLogs();
   const { user } = useAuth();
-  
-  // IDs de todas as estações order_status para verificações
-  const orderStatusStationIds = orderStatusStations?.map(s => s.id) || [];
+  const { tenantId } = useTenant();
 
-  // Helper: find least-busy item_assembly station
-  const findLeastBusyPrepStation = async (): Promise<string | null> => {
-    const assemblyStations = activeStations.filter(s => s.station_type === 'item_assembly');
-    if (assemblyStations.length === 0) return null;
-    if (assemblyStations.length === 1) return assemblyStations[0].id;
+  const orderStatusStationIds = orderStatusStations?.map((s) => s.id) || [];
 
-    let minCount = Infinity;
-    let leastBusyId = assemblyStations[0].id;
+  const findLeastBusyDeviceForStation = async (stationId: string): Promise<string | null> => {
+    if (!tenantId) return null;
 
-    for (const station of assemblyStations) {
-      const { count } = await supabase
-        .from('order_items')
-        .select('id', { count: 'exact', head: true })
-        .eq('current_station_id', station.id)
-        .in('station_status', ['waiting', 'in_progress']);
+    const devices = await listKdsDevices(tenantId);
+    const stationDevices = devices.filter((device) => {
+      if (device.is_active === false) return false;
+      if (device.station_id !== stationId) return false;
+      const lastSeenAt = device.last_seen_at ? new Date(device.last_seen_at).getTime() : 0;
+      return Number.isFinite(lastSeenAt) && Date.now() - lastSeenAt < KDS_DEVICE_ONLINE_WINDOW_MS;
+    });
 
-      const itemCount = count || 0;
-      if (itemCount < minCount) {
-        minCount = itemCount;
-        leastBusyId = station.id;
+    if (!stationDevices.length) return null;
+    if (stationDevices.length === 1) return stationDevices[0].device_id;
+
+    let selectedDeviceId = stationDevices[0].device_id;
+    let lowestLoad = Number.POSITIVE_INFINITY;
+
+    for (const device of stationDevices) {
+      const load = await countOrderItemsAtDevice(tenantId, device.device_id, ['waiting', 'in_progress']);
+      if (load < lowestLoad) {
+        lowestLoad = load;
+        selectedDeviceId = device.device_id;
       }
     }
 
-    return leastBusyId;
+    return selectedDeviceId;
   };
 
-  // Smart next station: borda → least-busy prep, prep → dispatch, order_status → next order_status or done
   const getSmartNextStation = async (currentStationId: string, orderType?: string): Promise<{ id: string; type: string } | null> => {
-    const currentStation = activeStations.find(s => s.id === currentStationId);
-    if (!currentStation) return getNextStation(currentStationId) ? { id: getNextStation(currentStationId)!.id, type: getNextStation(currentStationId)!.station_type } : null;
-
-    if (currentStation.station_type === 'prep_start') {
-      const prepId = await findLeastBusyPrepStation();
-      if (prepId) return { id: prepId, type: 'item_assembly' };
-      if (orderStatusStation) return { id: orderStatusStation.id, type: 'order_status' };
-      return null;
+    const sortedStations = sortStationsByOrder(activeStations);
+    const currentStation = sortedStations.find((s) => s.id === currentStationId);
+    if (!currentStation) {
+      const next = sortedStations.find((station) => station.id !== currentStationId) ?? null;
+      return next ? { id: next.id, type: next.station_type } : null;
     }
 
-    if (currentStation.station_type === 'item_assembly') {
-      if (orderStatusStation) return { id: orderStatusStation.id, type: 'order_status' };
-      return null;
-    }
-
-    // ORDER_STATUS routing: depends on order_type
     if (currentStation.station_type === 'order_status') {
       if (orderType === 'dine_in') {
-        // Mesa: find next order_status station with higher sort_order
-        const nextOrderStatus = orderStatusStations
-          ?.filter(s => s.is_active && (s.sort_order ?? 0) > (currentStation.sort_order ?? 0))
+        const nextOrderStatus = sortedStations
+          ?.filter((s) => s.is_active && (s.sort_order ?? 0) > (currentStation.sort_order ?? 0))
+          .filter((s) => s.station_type === 'order_status')
           .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))[0];
         if (nextOrderStatus) return { id: nextOrderStatus.id, type: 'order_status' };
-        // No more order_status stations → done
-        return null;
-      } else {
-        // Delivery/Takeaway: done immediately from order_status
         return null;
       }
+      return null;
     }
 
-    // Default: sequential
-    const next = getNextStation(currentStationId);
+    const next = sortedStations
+      .filter((station) => station.is_active && (station.sort_order ?? 0) > (currentStation.sort_order ?? 0))
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))[0];
     if (next) return { id: next.id, type: next.station_type };
-    if (orderStatusStation) return { id: orderStatusStation.id, type: 'order_status' };
     return null;
   };
 
-  // Mover item diretamente para a próxima estação (clique único) - COM ROTEAMENTO INTELIGENTE
   const moveItemToNextStation = useMutation({
     mutationFn: async ({ itemId, currentStationId, orderType }: { itemId: string; currentStationId: string; orderType?: string }) => {
+      if (!tenantId) throw new Error('Tenant nao encontrado');
       const now = new Date().toISOString();
-      
-      // Smart routing with order_type awareness
       const target = await getSmartNextStation(currentStationId, orderType);
       const targetStationId = target?.id || null;
+      const targetDeviceId = targetStationId ? await findLeastBusyDeviceForStation(targetStationId) : null;
 
       if (targetStationId) {
-        const { error } = await supabase
-          .from('order_items')
-          .update({
-            current_station_id: targetStationId,
-            station_status: 'waiting',
-            station_started_at: null,
-            station_completed_at: now,
-          })
-          .eq('id', itemId);
-
-        if (error) throw error;
+        await updateOrderItemById(tenantId, itemId, {
+          current_station_id: targetStationId,
+          current_device_id: targetDeviceId,
+          station_status: 'waiting',
+          station_started_at: null,
+          station_completed_at: now,
+        });
       } else {
-        // No next station - mark as done
-        const { error } = await supabase
-          .from('order_items')
-          .update({
-            current_station_id: null,
-            station_status: 'done',
-            station_completed_at: now,
-            status: 'delivered',
-          })
-          .eq('id', itemId);
-
-        if (error) throw error;
+        await updateOrderItemById(tenantId, itemId, {
+          current_station_id: null,
+          current_device_id: null,
+          station_status: 'done',
+          station_completed_at: now,
+          status: 'ready',
+          ready_at: now as never,
+        });
       }
 
-      // Logs em paralelo (fire-and-forget)
       Promise.all([
-        logAction.mutateAsync({
-          orderItemId: itemId,
-          stationId: currentStationId,
-          action: 'completed',
-        }).catch(() => {}),
-        targetStationId ? logAction.mutateAsync({
-          orderItemId: itemId,
-          stationId: targetStationId,
-          action: 'entered',
-        }).catch(() => {}) : Promise.resolve(),
+        logAction.mutateAsync({ orderItemId: itemId, stationId: currentStationId, action: 'completed' }).catch(() => {}),
+        targetStationId
+          ? logAction.mutateAsync({ orderItemId: itemId, stationId: targetStationId, action: 'entered' }).catch(() => {})
+          : Promise.resolve(),
       ]);
 
-      // Check if order is ready
       if (!targetStationId || target?.type === 'order_status') {
-        const { data: itemData } = await supabase
-          .from('order_items')
-          .select('order_id')
-          .eq('id', itemId)
-          .single();
-
+        const itemData = await getOrderItemById(tenantId, itemId);
         if (itemData?.order_id) {
-          const { data: allItems } = await supabase
-            .from('order_items')
-            .select('id, current_station_id, station_status')
-            .eq('order_id', itemData.order_id);
-
-          const allItemsReady = allItems?.every(item => 
-            (item.current_station_id && orderStatusStationIds.includes(item.current_station_id)) ||
-            item.station_status === 'done'
+          const allItems = await listOrderItemsByOrderId(tenantId, itemData.order_id);
+          const allItemsReady = allItems.every(
+            (item) =>
+              (item.current_station_id && orderStatusStationIds.includes(item.current_station_id)) ||
+              item.station_status === 'done'
           );
-          
+
           if (allItemsReady) {
-            const { error } = await supabase
-              .from('orders')
-              .update({ status: 'ready', ready_at: new Date().toISOString() })
-              .eq('id', itemData.order_id);
-              
-            if (error) {
-              console.error('Erro ao atualizar status do pedido para ready:', error);
-            }
+            await updateOrderById(tenantId, itemData.order_id, {
+              status: 'ready',
+              ready_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            } as never);
           }
         }
       }
 
       return { itemId, nextStationId: targetStationId, isComplete: !targetStationId };
     },
-    
-    // OPTIMISTIC UPDATE
     onMutate: async ({ itemId, currentStationId, orderType }) => {
-      // Mark item as recently moved to prevent Realtime from reverting the optimistic update
       markItemAsRecentlyMoved(itemId);
-      
       await queryClient.cancelQueries({ queryKey: ['orders'] });
       const previousOrders = queryClient.getQueryData(['orders']);
-      
-      // Calculate optimistic target based on station type and order_type
-      const currentStation = activeStations.find(s => s.id === currentStationId);
+
+      const currentStation = activeStations.find((s) => s.id === currentStationId);
       let targetStationId: string | null = null;
-      
+
       if (currentStation?.station_type === 'order_status') {
-        // For order_status stations, only dine_in goes to next order_status
         if (orderType === 'dine_in') {
-          const nextOrderStatus = orderStatusStations
-            ?.filter(s => s.is_active && (s.sort_order ?? 0) > (currentStation.sort_order ?? 0))
+          const nextOrderStatus = sortStationsByOrder(orderStatusStations || [])
+            ?.filter((s) => s.is_active && (s.sort_order ?? 0) > (currentStation.sort_order ?? 0))
             .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))[0];
           targetStationId = nextOrderStatus?.id || null;
         }
-        // delivery/takeaway → null (done)
       } else {
-        const nextStation = getNextStation(currentStationId);
-        targetStationId = nextStation?.id || orderStatusStation?.id || null;
+        const nextStation = sortStationsByOrder(activeStations)
+          .filter((station) => station.is_active && (station.sort_order ?? 0) > ((currentStation?.sort_order ?? 0)))
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))[0];
+        targetStationId = nextStation?.id || null;
       }
-      
+
       queryClient.setQueryData(['orders'], (old: OrderData[] | undefined) => {
         if (!old) return old;
-        return old.map(order => ({
+        return old.map((order) => ({
           ...order,
-          order_items: order.order_items?.map((item: OrderItem) => 
-            item.id === itemId 
-              ? { 
-                  ...item, 
-                  current_station_id: targetStationId, 
-                  station_status: targetStationId ? 'waiting' : 'done',
-                  station_started_at: null,
-                }
-              : item
-          ) || []
+          order_items:
+            order.order_items?.map((item: OrderItem) =>
+              item.id === itemId
+                ? {
+                    ...item,
+                    current_station_id: targetStationId,
+                    station_status: targetStationId ? 'waiting' : 'done',
+                    station_started_at: null,
+                    status: targetStationId ? item.status : 'ready',
+                    ready_at: targetStationId ? null : now,
+                  }
+                : item
+            ) || [],
         }));
       });
-      
+
       return { previousOrders };
     },
-    
-    onError: (error, variables, context) => {
+    onError: (error, _variables, context) => {
       if (context?.previousOrders) {
         queryClient.setQueryData(['orders'], context.previousOrders);
       }
       toast.error('Erro ao mover item');
       console.error(error);
     },
-    
     onSuccess: (result) => {
-      // Delay refetch to avoid conflicting with the Realtime cooldown
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['orders'] });
       }, 2000);
@@ -246,28 +248,22 @@ export function useKdsWorkflow() {
       queryClient.invalidateQueries({ queryKey: ['kds-station-logs'] });
       queryClient.invalidateQueries({ queryKey: ['kds-all-stations-metrics'] });
       if (result.isComplete) {
-        toast.success('Item concluído!');
+        toast.success('Item concluido!');
       }
     },
   });
 
-  // Iniciar item em uma praça (mantido para compatibilidade)
   const startItemAtStation = useMutation({
     mutationFn: async ({ itemId, stationId }: { itemId: string; stationId: string }) => {
+      if (!tenantId) throw new Error('Tenant nao encontrado');
       const now = new Date().toISOString();
-      
-      const { error } = await supabase
-        .from('order_items')
-        .update({
-          current_station_id: stationId,
-          station_status: 'in_progress',
-          station_started_at: now,
-        })
-        .eq('id', itemId);
 
-      if (error) throw error;
+      await updateOrderItemById(tenantId, itemId, {
+        current_station_id: stationId,
+        station_status: 'in_progress',
+        station_started_at: now,
+      });
 
-      // Log da ação
       await logAction.mutateAsync({
         orderItemId: itemId,
         stationId,
@@ -280,28 +276,20 @@ export function useKdsWorkflow() {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
     },
     onError: (error) => {
-      toast.error('Erro ao iniciar item na praça');
+      toast.error('Erro ao iniciar item na praca');
       console.error(error);
     },
   });
 
-  // Completar item na praça atual e mover para próxima (mantido para compatibilidade)
   const completeItemAtStation = useMutation({
     mutationFn: async ({ itemId, currentStationId }: { itemId: string; currentStationId: string }) => {
+      if (!tenantId) throw new Error('Tenant nao encontrado');
       const now = new Date().toISOString();
-      
-      // Buscar dados do item para calcular duração
-      const { data: item } = await supabase
-        .from('order_items')
-        .select('station_started_at')
-        .eq('id', itemId)
-        .single();
-
-      const durationSeconds = item?.station_started_at 
-        ? Math.floor((new Date().getTime() - new Date(item.station_started_at).getTime()) / 1000)
+      const item = await getOrderItemById(tenantId, itemId);
+      const durationSeconds = item?.station_started_at
+        ? Math.floor((Date.now() - new Date(item.station_started_at).getTime()) / 1000)
         : null;
 
-      // Log de conclusão
       await logAction.mutateAsync({
         orderItemId: itemId,
         stationId: currentStationId,
@@ -309,24 +297,18 @@ export function useKdsWorkflow() {
         durationSeconds: durationSeconds || undefined,
       });
 
-      // Buscar próxima praça
-      const nextStation = getNextStation(currentStationId);
+      const nextStation = await getSmartNextStation(currentStationId);
+      const nextDeviceId = nextStation ? await findLeastBusyDeviceForStation(nextStation.id) : null;
 
       if (nextStation) {
-        // Mover para próxima praça
-        const { error } = await supabase
-          .from('order_items')
-          .update({
-            current_station_id: nextStation.id,
-            station_status: 'waiting',
-            station_started_at: null,
-            station_completed_at: now,
-          })
-          .eq('id', itemId);
+        await updateOrderItemById(tenantId, itemId, {
+          current_station_id: nextStation.id,
+          current_device_id: nextDeviceId,
+          station_status: 'waiting',
+          station_started_at: null,
+          station_completed_at: now,
+        });
 
-        if (error) throw error;
-
-        // Log de entrada na nova praça
         await logAction.mutateAsync({
           orderItemId: itemId,
           stationId: nextStation.id,
@@ -334,81 +316,57 @@ export function useKdsWorkflow() {
         });
 
         return { itemId, nextStationId: nextStation.id, isComplete: false };
-      } else {
-        // Última praça de produção - marcar pedido como ready
-        const { data: itemData } = await supabase
-          .from('order_items')
-          .select('order_id')
-          .eq('id', itemId)
-          .single();
-
-        // Se tiver estação de status do pedido, mover o item para lá
-        if (orderStatusStation) {
-          const { error } = await supabase
-            .from('order_items')
-            .update({
-              current_station_id: orderStatusStation.id,
-              station_status: 'waiting',
-              station_started_at: null,
-              station_completed_at: now,
-            })
-            .eq('id', itemId);
-
-          if (error) throw error;
-
-          // Log de entrada na estação de status
-          await logAction.mutateAsync({
-            orderItemId: itemId,
-            stationId: orderStatusStation.id,
-            action: 'entered',
-          });
-        } else {
-          // Sem estação de status - marcar item como done diretamente
-          const { error } = await supabase
-            .from('order_items')
-            .update({
-              current_station_id: null,
-              station_status: 'done',
-              station_completed_at: now,
-              status: 'delivered',
-            })
-            .eq('id', itemId);
-
-          if (error) throw error;
-        }
-
-        // Verificar se todos os itens do pedido terminaram a produção
-        if (itemData?.order_id) {
-          const { data: allItems } = await supabase
-            .from('order_items')
-            .select('id, current_station_id, station_status')
-            .eq('order_id', itemData.order_id);
-
-          // Todos estão na estação order_status ou já finalizados
-          const allItemsReady = allItems?.every(item => 
-            (item.current_station_id && orderStatusStationIds.includes(item.current_station_id)) ||
-            item.station_status === 'done'
-          );
-
-          if (allItemsReady) {
-            // Atualizar pedido para 'ready'
-            await supabase
-              .from('orders')
-              .update({ 
-                status: 'ready',
-                ready_at: new Date().toISOString()
-              })
-              .eq('id', itemData.order_id);
-          }
-        }
-
-        return { itemId, nextStationId: orderStatusStation?.id || null, isComplete: !orderStatusStation };
       }
+
+      const itemData = await getOrderItemById(tenantId, itemId);
+      if (orderStatusStation) {
+        const orderStatusDeviceId = await findLeastBusyDeviceForStation(orderStatusStation.id);
+        await updateOrderItemById(tenantId, itemId, {
+          current_station_id: orderStatusStation.id,
+          current_device_id: orderStatusDeviceId,
+          station_status: 'waiting',
+          station_started_at: null,
+          station_completed_at: now,
+        });
+
+        await logAction.mutateAsync({
+          orderItemId: itemId,
+          stationId: orderStatusStation.id,
+          action: 'entered',
+        });
+      } else {
+        await updateOrderItemById(tenantId, itemId, {
+          current_station_id: null,
+          station_status: 'done',
+          station_completed_at: now,
+          status: 'ready',
+          ready_at: now as never,
+        });
+      }
+
+      if (itemData?.order_id) {
+        const allItems = await listOrderItemsByOrderId(tenantId, itemData.order_id);
+        const allItemsReady = allItems.every(
+          (orderItem) =>
+            (orderItem.current_station_id && orderStatusStationIds.includes(orderItem.current_station_id)) ||
+            orderItem.station_status === 'done'
+        );
+
+        if (allItemsReady) {
+          await updateOrderById(tenantId, itemData.order_id, {
+            status: 'ready',
+            ready_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          } as never);
+        }
+      }
+
+      return { itemId, nextStationId: orderStatusStation?.id || null, isComplete: !orderStatusStation };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       if (result.isComplete) {
-        toast.success('Item concluído!');
+        toast.success('Item concluido!');
       }
     },
     onError: (error) => {
@@ -417,10 +375,9 @@ export function useKdsWorkflow() {
     },
   });
 
-  // Pular item para próxima praça sem processar
   const skipItemToNextStation = useMutation({
     mutationFn: async ({ itemId, currentStationId, reason }: { itemId: string; currentStationId: string; reason?: string }) => {
-      // Log de skip
+      if (!tenantId) throw new Error('Tenant nao encontrado');
       await logAction.mutateAsync({
         orderItemId: itemId,
         stationId: currentStationId,
@@ -428,19 +385,15 @@ export function useKdsWorkflow() {
         notes: reason,
       });
 
-      const nextStation = getNextStation(currentStationId);
-
+      const nextStation = await getSmartNextStation(currentStationId);
+      const nextDeviceId = nextStation ? await findLeastBusyDeviceForStation(nextStation.id) : null;
       if (nextStation) {
-        const { error } = await supabase
-          .from('order_items')
-          .update({
-            current_station_id: nextStation.id,
-            station_status: 'waiting',
-            station_started_at: null,
-          })
-          .eq('id', itemId);
-
-        if (error) throw error;
+        await updateOrderItemById(tenantId, itemId, {
+          current_station_id: nextStation.id,
+          current_device_id: nextDeviceId,
+          station_status: 'waiting',
+          station_started_at: null,
+        });
 
         await logAction.mutateAsync({
           orderItemId: itemId,
@@ -453,39 +406,29 @@ export function useKdsWorkflow() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
-      toast.info('Item pulado para próxima praça');
+      toast.info('Item pulado para proxima praca');
     },
   });
 
-  // Servir um item individualmente (marcar como servido)
   const serveItem = useMutation({
     mutationFn: async (itemId: string) => {
+      if (!tenantId) throw new Error('Tenant nao encontrado');
       const now = new Date().toISOString();
+      const itemData = await getOrderItemById(tenantId, itemId);
 
-      // Buscar dados do item para obter station_id
-      const { data: itemData } = await supabase
-        .from('order_items')
-        .select('current_station_id')
-        .eq('id', itemId)
-        .single();
+      await updateOrderItemById(tenantId, itemId, {
+        served_at: now,
+      });
 
-      const { error } = await supabase
-        .from('order_items')
-        .update({
-          served_at: now,
-        })
-        .eq('id', itemId);
-
-      if (error) throw error;
-
-      // Registrar log de servido no histórico
       if (itemData?.current_station_id) {
-        logAction.mutateAsync({
-          orderItemId: itemId,
-          stationId: itemData.current_station_id,
-          action: 'completed',
-          notes: 'Item servido',
-        }).catch(() => {});
+        logAction
+          .mutateAsync({
+            orderItemId: itemId,
+            stationId: itemData.current_station_id,
+            action: 'completed',
+            notes: 'Item servido',
+          })
+          .catch(() => {});
       }
 
       return { itemId, servedAt: now };
@@ -493,23 +436,19 @@ export function useKdsWorkflow() {
     onMutate: async (itemId) => {
       await queryClient.cancelQueries({ queryKey: ['orders'] });
       const previousOrders = queryClient.getQueryData(['orders']);
-      
-      // Optimistic update
+
       queryClient.setQueryData(['orders'], (old: OrderData[] | undefined) => {
         if (!old) return old;
-        return old.map(order => ({
+        return old.map((order) => ({
           ...order,
-          order_items: order.order_items?.map((item: OrderItem) => 
-            item.id === itemId 
-              ? { ...item, served_at: new Date().toISOString() }
-              : item
-          ) || []
+          order_items:
+            order.order_items?.map((item: OrderItem) => (item.id === itemId ? { ...item, served_at: new Date().toISOString() } : item)) || [],
         }));
       });
-      
+
       return { previousOrders };
     },
-    onError: (error, variables, context) => {
+    onError: (error, _variables, context) => {
       if (context?.previousOrders) {
         queryClient.setQueryData(['orders'], context.previousOrders);
       }
@@ -524,29 +463,21 @@ export function useKdsWorkflow() {
     },
   });
 
-  // Finalizar pedido na estação de status (marcar como entregue ou mover para próximo despacho)
   const finalizeOrderFromStatus = useMutation({
     mutationFn: async ({ orderId, orderType, currentStationId }: { orderId: string; orderType?: string; currentStationId?: string }) => {
+      if (!tenantId) throw new Error('Tenant nao encontrado');
       const now = new Date().toISOString();
 
-      // Se for dine_in, verificar se existe próxima estação order_status
       if (orderType === 'dine_in' && currentStationId) {
-        const currentStation = activeStations.find(s => s.id === currentStationId);
+        const currentStation = activeStations.find((s) => s.id === currentStationId);
         if (currentStation) {
           const nextOrderStatus = orderStatusStations
-            ?.filter(s => s.is_active && s.station_type === 'order_status' && (s.sort_order ?? 0) > (currentStation.sort_order ?? 0))
+            ?.filter((s) => s.is_active && s.station_type === 'order_status' && (s.sort_order ?? 0) > (currentStation.sort_order ?? 0))
             .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))[0];
 
           if (nextOrderStatus) {
-            // Mover todos os itens para a próxima estação order_status
-            const { data: items, error: fetchError } = await supabase
-              .from('order_items')
-              .select('id, current_station_id')
-              .eq('order_id', orderId);
-
-            if (fetchError) throw fetchError;
-
-            for (const item of items || []) {
+            const items = await listOrderItemsByOrderId(tenantId, orderId);
+            for (const item of items) {
               if (item.current_station_id) {
                 await logAction.mutateAsync({
                   orderItemId: item.id,
@@ -555,15 +486,13 @@ export function useKdsWorkflow() {
                 }).catch(() => {});
               }
 
-              await supabase
-                .from('order_items')
-                .update({
-                  current_station_id: nextOrderStatus.id,
-                  station_status: 'waiting',
-                  station_started_at: null,
-                  station_completed_at: now,
-                })
-                .eq('id', item.id);
+              await updateOrderItemById(tenantId, item.id, {
+                current_station_id: nextOrderStatus.id,
+                current_device_id: await findLeastBusyDeviceForStation(nextOrderStatus.id),
+                station_status: 'waiting',
+                station_started_at: null,
+                station_completed_at: now,
+              });
 
               await logAction.mutateAsync({
                 orderItemId: item.id,
@@ -577,15 +506,8 @@ export function useKdsWorkflow() {
         }
       }
 
-      // Comportamento padrão: finalizar como delivered (delivery/takeaway ou última estação)
-      const { data: items, error: fetchError } = await supabase
-        .from('order_items')
-        .select('id, current_station_id, served_at')
-        .eq('order_id', orderId);
-
-      if (fetchError) throw fetchError;
-
-      for (const item of items || []) {
+      const items = await listOrderItemsByOrderId(tenantId, orderId);
+      for (const item of items) {
         if (item.current_station_id && orderStatusStationIds.includes(item.current_station_id)) {
           await logAction.mutateAsync({
             orderItemId: item.id,
@@ -594,27 +516,21 @@ export function useKdsWorkflow() {
           });
         }
 
-        await supabase
-          .from('order_items')
-          .update({
-            current_station_id: null,
-            station_status: 'done',
-            station_completed_at: now,
-            status: 'delivered',
-            served_at: item.served_at || now,
-          })
-          .eq('id', item.id);
+        await updateOrderItemById(tenantId, item.id, {
+          current_station_id: null,
+          current_device_id: null,
+          station_status: 'done',
+          station_completed_at: now,
+          status: 'delivered',
+          served_at: item.served_at || now,
+        });
       }
 
-      const { error } = await supabase
-        .from('orders')
-        .update({ 
-          status: 'delivered',
-          delivered_at: now
-        })
-        .eq('id', orderId);
-
-      if (error) throw error;
+      await updateOrderById(tenantId, orderId, {
+        status: 'delivered',
+        delivered_at: now,
+        updated_at: now,
+      });
 
       return { orderId };
     },
@@ -635,79 +551,76 @@ export function useKdsWorkflow() {
     },
   });
 
-  // Iniciar novo pedido no modo linha de produção (com distribuição inteligente)
   const initializeOrderForProductionLine = useMutation({
     mutationFn: async (orderId: string) => {
-      if (activeStations.length === 0) throw new Error('Nenhuma praça ativa configurada');
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      if (activeStations.length === 0) throw new Error('Nenhuma praca ativa configurada');
 
-      // Buscar itens do pedido sem estação atribuída, incluindo extras para verificar borda
-      const { data: items, error: fetchError } = await supabase
-        .from('order_items')
-        .select('id, notes, extras:order_item_extras(extra_name, kds_category), sub_items:order_item_sub_items(sub_extras:order_item_sub_item_extras(option_name, kds_category))')
-        .eq('order_id', orderId)
-        .is('current_station_id', null);
+      const allItems = await listOrderItemsByOrderId(tenantId, orderId);
+      const items = allItems.filter((item) => !item.current_station_id);
+      const itemIds = items.map((item) => item.id);
+      const [extras, subItems, settings] = await Promise.all([
+        listOrderItemExtrasByItemIds(tenantId, itemIds),
+        listOrderItemSubItemsByItemIds(tenantId, itemIds),
+        getKdsGlobalSettings(tenantId),
+      ]);
+      const subExtras = await listOrderItemSubExtrasBySubItemIds(tenantId, subItems.map((subItem) => subItem.id));
 
-      if (fetchError) throw fetchError;
-
-      // Load border keywords from settings
-      const { data: kdsSettings } = await supabase
-        .from('kds_global_settings')
-        .select('border_keywords')
-        .limit(1)
-        .maybeSingle();
-
-      const borderKws = kdsSettings?.border_keywords || ['borda', 'recheada', 'chocolate', 'catupiry', 'cheddar'];
-
-      const firstStation = activeStations[0]; // prep_start / borda station
-      const assemblyStations = activeStations.filter(s => s.station_type === 'item_assembly');
-
-      // Track load counts for balancing
+      const borderKws = settings?.border_keywords || ['borda', 'recheada', 'chocolate', 'catupiry', 'cheddar'];
+      const sortedStations = sortStationsByOrder(activeStations);
+      const firstStation = sortedStations[0];
       const loadCounts: Record<string, number> = {};
-      for (const s of assemblyStations) {
-        const { count } = await supabase
-          .from('order_items')
-          .select('id', { count: 'exact', head: true })
-          .eq('current_station_id', s.id)
-          .in('station_status', ['waiting', 'in_progress']);
-        loadCounts[s.id] = count || 0;
+      for (const station of sortedStations.filter((station) => station.station_type !== 'order_status')) {
+        loadCounts[station.id] = await countOrderItemsAtStation(tenantId, station.id, ['waiting', 'in_progress']);
       }
 
-      for (const item of items || []) {
-        // Check if item has border
-        const extrasText = ((item as any).extras || []).map((e: any) => e.extra_name?.toLowerCase() || '').join(' ');
-        const borderExtrasText = ((item as any).sub_items || [])
-          .flatMap((si: any) => (si.sub_extras || []).filter((se: any) => se.kds_category === 'border'))
-          .map((se: any) => se.option_name?.toLowerCase() || '').join(' ');
-        const combinedText = `${(item as any).notes || ''} ${extrasText} ${borderExtrasText}`.toLowerCase();
+      const extrasByItemId = new Map<string, string[]>();
+      extras.forEach((extra) => {
+        const current = extrasByItemId.get(extra.order_item_id) || [];
+        current.push((extra.extra_name || '').toLowerCase());
+        extrasByItemId.set(extra.order_item_id, current);
+      });
 
+      const subItemIdsByItemId = new Map<string, string[]>();
+      subItems.forEach((subItem) => {
+        const current = subItemIdsByItemId.get(subItem.order_item_id) || [];
+        current.push(subItem.id);
+        subItemIdsByItemId.set(subItem.order_item_id, current);
+      });
+
+      const borderTextByItemId = new Map<string, string>();
+      items.forEach((item) => {
+        const subItemIds = subItemIdsByItemId.get(item.id) || [];
+        const borderExtras = subExtras
+          .filter((extra) => subItemIds.includes(extra.sub_item_id) && extra.kds_category === 'border')
+          .map((extra) => (extra.option_name || '').toLowerCase());
+        const allText = [item.notes || '', ...(extrasByItemId.get(item.id) || []), ...borderExtras].join(' ').toLowerCase();
+        borderTextByItemId.set(item.id, allText);
+      });
+
+      for (const item of items) {
+        const combinedText = borderTextByItemId.get(item.id) || '';
         const hasBorder = borderKws.some((kw: string) => combinedText.includes(kw.toLowerCase()));
 
-        let targetStationId: string;
+        const entryStations = getEntryStationsForItem(sortedStations, hasBorder);
+        const candidateStations = entryStations.length > 0 ? entryStations : (firstStation ? [firstStation] : []);
+        if (candidateStations.length === 0) continue;
 
-        if (hasBorder || assemblyStations.length === 0) {
-          // Item com borda → primeira estação (prep_start)
-          targetStationId = firstStation.id;
-        } else {
-          // Item sem borda → bancada item_assembly menos ocupada
-          let leastBusyId = assemblyStations[0].id;
-          let minCount = loadCounts[leastBusyId] ?? Infinity;
-          for (const s of assemblyStations) {
-            if ((loadCounts[s.id] ?? 0) < minCount) {
-              minCount = loadCounts[s.id] ?? 0;
-              leastBusyId = s.id;
-            }
+        let targetStationId = candidateStations[0].id;
+        let minCount = loadCounts[targetStationId] ?? Infinity;
+        for (const station of candidateStations) {
+          if ((loadCounts[station.id] ?? 0) < minCount) {
+            minCount = loadCounts[station.id] ?? 0;
+            targetStationId = station.id;
           }
-          targetStationId = leastBusyId;
-          loadCounts[leastBusyId] = (loadCounts[leastBusyId] || 0) + 1;
         }
+        loadCounts[targetStationId] = (loadCounts[targetStationId] || 0) + 1;
 
-        await supabase
-          .from('order_items')
-          .update({
-            current_station_id: targetStationId,
-            station_status: 'waiting',
-          })
-          .eq('id', item.id);
+        await updateOrderItemById(tenantId, item.id, {
+          current_station_id: targetStationId,
+          current_device_id: await findLeastBusyDeviceForStation(targetStationId),
+          station_status: 'waiting',
+        });
 
         await logAction.mutateAsync({
           orderItemId: item.id,
@@ -716,13 +629,12 @@ export function useKdsWorkflow() {
         }).catch(() => {});
       }
 
-      // Atualizar status do pedido para preparing
-      await supabase
-        .from('orders')
-        .update({ status: 'preparing' })
-        .eq('id', orderId);
+      await updateOrderById(tenantId, orderId, {
+        status: 'preparing',
+        updated_at: new Date().toISOString(),
+      });
 
-      return { orderId, itemCount: items?.length || 0 };
+      return { orderId, itemCount: items.length };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
@@ -734,14 +646,12 @@ export function useKdsWorkflow() {
     },
   });
 
-  // Helper para obter itens por praça
   const getItemsByStation = (items: OrderItem[], stationId: string) => {
-    return items.filter(item => item.current_station_id === stationId);
+    return items.filter((item) => item.current_station_id === stationId);
   };
 
-  // Helper para obter itens aguardando (sem praça atribuída)
   const getWaitingItems = (items: OrderItem[]) => {
-    return items.filter(item => !item.current_station_id && item.station_status !== 'done');
+    return items.filter((item) => !item.current_station_id && item.station_status !== 'done');
   };
 
   return {

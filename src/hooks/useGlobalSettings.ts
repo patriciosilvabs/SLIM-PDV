@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import type { Json } from '@/integrations/supabase/types';
+import type { Json } from '@/integrations/backend/types';
+import { resolveCurrentTenantId } from '@/lib/tenantResolver';
+import { listGlobalSettings, upsertGlobalSetting } from '@/lib/firebaseTenantCrud';
 
 interface GlobalSetting {
   id: string;
@@ -19,25 +20,16 @@ interface SettingsData {
 export function useGlobalSettings() {
   const queryClient = useQueryClient();
 
-  // Buscar tenant_id e settings em uma única query para evitar problemas de HMR
   const { data, isLoading } = useQuery({
     queryKey: ['global-settings-with-tenant'],
     queryFn: async (): Promise<SettingsData> => {
-      // Primeiro obter tenant_id
-      const { data: tenantId, error: tenantError } = await supabase.rpc('get_user_tenant_id');
-      if (tenantError) throw tenantError;
-      
+      const tenantId = await resolveCurrentTenantId();
+
       if (!tenantId) {
         return { tenantId: null, settings: [] };
       }
 
-      // Então buscar settings filtradas por tenant_id
-      const { data: settings, error: settingsError } = await supabase
-        .from('global_settings')
-        .select('*')
-        .eq('tenant_id', tenantId);
-
-      if (settingsError) throw settingsError;
+      const settings = await listGlobalSettings(tenantId);
       return { tenantId, settings: (settings || []) as GlobalSetting[] };
     },
     staleTime: 1000 * 60 * 5,
@@ -47,31 +39,14 @@ export function useGlobalSettings() {
   const settings = data?.settings ?? [];
 
   const getSetting = (key: string): Json => {
-    const setting = settings.find(s => s.key === key);
+    const setting = settings.find((s) => s.key === key);
     return setting?.value ?? null;
   };
 
-  // UPSERT: inserir se não existir, atualizar se existir
   const updateSetting = useMutation({
     mutationFn: async ({ key, value }: { key: string; value: Json }) => {
       if (!tenantId) throw new Error('No tenant ID available');
-      
-      const existingSetting = settings.find(s => s.key === key);
-      
-      if (existingSetting) {
-        // UPDATE existente
-        const { error } = await supabase
-          .from('global_settings')
-          .update({ value, updated_at: new Date().toISOString() })
-          .eq('id', existingSetting.id);
-        if (error) throw error;
-      } else {
-        // INSERT novo registro
-        const { error } = await supabase
-          .from('global_settings')
-          .insert({ tenant_id: tenantId, key, value });
-        if (error) throw error;
-      }
+      await upsertGlobalSetting(tenantId, key, value);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['global-settings-with-tenant'] });

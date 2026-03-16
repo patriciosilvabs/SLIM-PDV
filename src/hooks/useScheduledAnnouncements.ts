@@ -1,10 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
 import { toast } from 'sonner';
 import { sanitizeFileName } from '@/lib/sanitizeFileName';
 import { detectAudioFormat } from '@/utils/audioConverter';
 import { useTenant } from '@/hooks/useTenant';
+import { extractBucketPathFromUrl, removeFromBucket, uploadToBucket } from '@/lib/firebaseStorageCompat';
+import {
+  createScheduledAnnouncement,
+  deleteScheduledAnnouncement,
+  listActiveScheduledAnnouncements,
+  setScheduledAnnouncementLastPlayed,
+  updateScheduledAnnouncement,
+} from '@/lib/firebaseTenantCrud';
 
 export interface ScheduledAnnouncement {
   id: string;
@@ -42,7 +50,7 @@ export interface OrderCounts {
 const STORAGE_KEY = 'pdv-announcements-played-today';
 const COOLDOWN_STORAGE_KEY = 'pdv-announcements-cooldowns';
 
-export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: OrderCounts) {
+export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: OrderCounts, enabled: boolean = true) {
   const queryClient = useQueryClient();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const { tenantId } = useTenant();
@@ -97,54 +105,24 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
     queryKey: ['scheduled-announcements', tenantId],
     queryFn: async () => {
       if (!tenantId) return [];
-
-      const { data, error } = await supabase
-        .from('scheduled_announcements')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .eq('is_active', true)
-        .order('scheduled_time');
-      
-      if (error) {
-        // Handle RLS permission errors gracefully
-        if (error.code === 'PGRST301' || error.message?.includes('permission') || error.code === '42501') {
-          console.warn('Sem permissão para acessar anúncios programados');
-          return [];
-        }
-        throw error;
-      }
-      return data as ScheduledAnnouncement[];
+      return (await listActiveScheduledAnnouncements(tenantId)) as ScheduledAnnouncement[];
     },
-    enabled: !!tenantId,
-    retry: (failureCount, error: any) => {
-      // Don't retry permission errors
-      if (error?.code === 'PGRST301' || error?.message?.includes('permission') || error?.code === '42501') {
-        return false;
-      }
-      return failureCount < 3;
-    }
+    enabled: enabled && !!tenantId,
+    retry: (failureCount) => failureCount < 3,
   });
 
   const createAnnouncement = useMutation({
     mutationFn: async (data: Omit<ScheduledAnnouncement, 'id' | 'created_at' | 'last_played_at' | 'created_by'>) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await backendClient.auth.getUser();
+      if (!tenantId) throw new Error('Tenant nao encontrado');
       
-      // Convert empty strings to null for date fields (PostgreSQL date type rejects empty strings)
       const cleanData = {
         ...data,
         scheduled_date: data.scheduled_date && data.scheduled_date.trim() !== '' ? data.scheduled_date : null,
         created_by: user?.id,
-        tenant_id: tenantId
+        is_active: data.is_active ?? true,
       };
-      
-      const { data: result, error } = await supabase
-        .from('scheduled_announcements')
-        .insert(cleanData)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return result;
+      return await createScheduledAnnouncement(tenantId, cleanData as any);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scheduled-announcements'] });
@@ -157,18 +135,13 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
 
   const updateAnnouncement = useMutation({
     mutationFn: async ({ id, ...data }: Partial<ScheduledAnnouncement> & { id: string }) => {
+      if (!tenantId) throw new Error('Tenant nao encontrado');
       // Convert empty strings to null for date fields (PostgreSQL date type rejects empty strings)
       const cleanData = {
         ...data,
         scheduled_date: data.scheduled_date && data.scheduled_date.trim() !== '' ? data.scheduled_date : null
       };
-      
-      const { error } = await supabase
-        .from('scheduled_announcements')
-        .update(cleanData)
-        .eq('id', id);
-      
-      if (error) throw error;
+      await updateScheduledAnnouncement(tenantId, id, cleanData as any);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scheduled-announcements'] });
@@ -181,21 +154,16 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
 
   const deleteAnnouncement = useMutation({
     mutationFn: async (id: string) => {
+      if (!tenantId) throw new Error('Tenant nao encontrado');
       const announcement = announcements.find(a => a.id === id);
       if (announcement) {
         // Delete from storage
-        const filePath = announcement.file_path.split('/announcements/')[1];
+        const filePath = extractBucketPathFromUrl(announcement.file_path, 'announcements');
         if (filePath) {
-          await supabase.storage.from('announcements').remove([filePath]);
+          await removeFromBucket({ bucket: 'announcements', paths: [filePath] });
         }
       }
-
-      const { error } = await supabase
-        .from('scheduled_announcements')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await deleteScheduledAnnouncement(tenantId, id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scheduled-announcements'] });
@@ -207,7 +175,7 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
   });
 
   const uploadRecording = async (blob: Blob, name: string): Promise<string> => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await backendClient.auth.getUser();
     if (!user) throw new Error('Usuário não autenticado');
 
     // Verificar se blob tem conteúdo válido
@@ -245,17 +213,12 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
       blobType: blob.type
     });
 
-    const { error: uploadError } = await supabase.storage
-      .from('announcements')
-      .upload(fileName, blob, { contentType: mimeType });
-
-    if (uploadError) throw uploadError;
-
-    const { data } = supabase.storage
-      .from('announcements')
-      .getPublicUrl(fileName);
-
-    return data.publicUrl;
+    return uploadToBucket({
+      bucket: 'announcements',
+      filePath: fileName,
+      file: blob,
+      contentType: mimeType,
+    });
   };
 
   const playAnnouncement = useCallback((announcement: ScheduledAnnouncement) => {
@@ -294,13 +257,10 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
       }));
     }
 
-    // Update last_played_at in database
-    supabase
-      .from('scheduled_announcements')
-      .update({ last_played_at: new Date().toISOString() })
-      .eq('id', announcement.id)
-      .then();
-  }, []);
+    if (tenantId) {
+      setScheduledAnnouncementLastPlayed(tenantId, announcement.id).catch(() => {});
+    }
+  }, [tenantId]);
 
   // Check if a condition is met
   const checkCondition = useCallback((
@@ -546,3 +506,7 @@ export function useScheduledAnnouncements(currentScreen?: string, orderCounts?: 
     clearAudioError
   };
 }
+
+
+
+

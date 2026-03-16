@@ -1,8 +1,25 @@
-import { useCallback, useEffect, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+﻿import { useCallback, useEffect, useRef } from 'react';
 import { useOfflineSupport, OfflineOperation } from './useOfflineSupport';
 import { useToast } from './use-toast';
 import { usePushNotifications } from './usePushNotifications';
+import {
+  createCashMovement,
+  createCustomer,
+  createKdsStation,
+  createOrder,
+  createOrderItem,
+  createPayment,
+  createReservation,
+  createTable,
+  deleteOrderItemCascade,
+  deleteTable,
+  updateCustomer,
+  updateKdsStation,
+  updateOrderById,
+  updateOrderItemById,
+  updateReservation,
+  updateTable,
+} from '@/lib/firebaseTenantCrud';
 
 export function useOfflineSync() {
   const { 
@@ -28,28 +45,87 @@ export function useOfflineSync() {
   const processSingleOperation = useCallback(async (operation: OfflineOperation): Promise<boolean> => {
     try {
       const { action, table, data } = operation;
+      const tenantId = data?.tenant_id;
+
+      if (!tenantId) {
+        console.warn('Offline sync skipped operation without tenant_id', operation);
+        return false;
+      }
 
       switch (action) {
         case 'create': {
-          const { error } = await supabase
-            .from(table as any)
-            .insert(data);
-          return !error;
+          switch (table) {
+            case 'orders':
+              await createOrder(tenantId, data);
+              return true;
+            case 'order_items':
+              await createOrderItem(tenantId, data);
+              return true;
+            case 'tables':
+              await createTable(tenantId, data);
+              return true;
+            case 'payments':
+              await createPayment(tenantId, data);
+              return true;
+            case 'customers':
+              await createCustomer(tenantId, data);
+              return true;
+            case 'reservations':
+              await createReservation(tenantId, data);
+              return true;
+            case 'cash_movements':
+              await createCashMovement(tenantId, data);
+              return true;
+            case 'kds_stations':
+              await createKdsStation(tenantId, data);
+              return true;
+            default:
+              console.warn(`Offline sync create not implemented for table: ${table}`);
+              return false;
+          }
         }
         case 'update': {
           const { id, ...updateData } = data;
-          const { error } = await supabase
-            .from(table as any)
-            .update(updateData)
-            .eq('id', id);
-          return !error;
+          if (!id) return false;
+
+          switch (table) {
+            case 'orders':
+              await updateOrderById(tenantId, id, updateData);
+              return true;
+            case 'order_items':
+              await updateOrderItemById(tenantId, id, updateData);
+              return true;
+            case 'tables':
+              await updateTable(tenantId, id, updateData);
+              return true;
+            case 'customers':
+              await updateCustomer(tenantId, id, updateData);
+              return true;
+            case 'reservations':
+              await updateReservation(tenantId, id, updateData);
+              return true;
+            case 'kds_stations':
+              await updateKdsStation(tenantId, id, updateData);
+              return true;
+            default:
+              console.warn(`Offline sync update not implemented for table: ${table}`);
+              return false;
+          }
         }
         case 'delete': {
-          const { error } = await supabase
-            .from(table as any)
-            .delete()
-            .eq('id', data.id);
-          return !error;
+          if (!data?.id) return false;
+
+          switch (table) {
+            case 'order_items':
+              await deleteOrderItemCascade(tenantId, data.id);
+              return true;
+            case 'tables':
+              await deleteTable(tenantId, data.id);
+              return true;
+            default:
+              console.warn(`Offline sync delete not implemented for table: ${table}`);
+              return false;
+          }
         }
         default:
           return false;
@@ -138,3 +214,7 @@ export function useOfflineSync() {
     pendingCount: pendingOperations.length
   };
 }
+
+
+
+

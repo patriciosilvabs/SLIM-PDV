@@ -9,7 +9,9 @@ import { AccessDenied } from '@/components/auth/AccessDenied';
 import { CancelOrderDialog } from '@/components/order/CancelOrderDialog';
 import { KdsProductionLineReadOnly } from '@/components/kds/KdsProductionLineReadOnly';
 import { KdsKanbanReadOnly } from '@/components/kds/KdsKanbanReadOnly';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
+import { useTenant } from '@/hooks/useTenant';
+import { updateOrderById } from '@/lib/firebaseTenantCrud';
 import { RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -19,6 +21,7 @@ export default function OrderManagement() {
   const { settings: kdsSettings } = useKdsSettings();
   const { data: orders = [], isLoading, refetch } = useOrders();
   const { updateOrder } = useOrderMutations();
+  const { tenantId } = useTenant();
   const queryClient = useQueryClient();
   const previousOrdersRef = useRef<Order[]>([]);
 
@@ -52,24 +55,6 @@ export default function OrderManagement() {
     previousOrdersRef.current = [...orders];
   }, [orders]);
 
-  // Setup realtime subscription
-  useEffect(() => {
-    const channel = supabase
-      .channel('order-management-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders' },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['orders'] });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
-
   // Permission check AFTER all hooks
   if (!permissionsLoading && !hasPermission('orders_view')) {
     return <AccessDenied permission="orders_view" />;
@@ -93,18 +78,17 @@ export default function OrderManagement() {
     
     setIsCancelling(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      await supabase
-        .from('orders')
-        .update({
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      const { data: { user } } = await backendClient.auth.getUser();
+
+      await updateOrderById(tenantId, selectedOrderToCancel.id, {
           status: 'cancelled',
           cancellation_reason: reason,
           cancelled_by: user?.id,
           cancelled_at: new Date().toISOString(),
           status_before_cancellation: selectedOrderToCancel.status,
-        })
-        .eq('id', selectedOrderToCancel.id);
+          updated_at: new Date().toISOString(),
+        } as never);
       
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       toast.success('Pedido cancelado', { description: `Motivo: ${reason}` });
@@ -171,3 +155,7 @@ export default function OrderManagement() {
     </PDVLayout>
   );
 }
+
+
+
+

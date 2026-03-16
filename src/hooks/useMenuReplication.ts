@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
 import { useToast } from '@/hooks/use-toast';
 
 export interface ReplicateMenuParams {
@@ -37,7 +37,7 @@ export function useMenuReplication() {
   
   const replicateMenu = useMutation({
     mutationFn: async (params: ReplicateMenuParams): Promise<ReplicationResult[]> => {
-      const { data, error } = await supabase.functions.invoke('replicate-menu', {
+      const { data, error } = await backendClient.functions.invoke('replicate-menu', {
         body: params
       });
       
@@ -91,3 +91,4 @@ export function useMenuReplication() {
     isReplicating: replicateMenu.isPending,
   };
 }
+

@@ -1,7 +1,12 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
 import { useTenant } from '@/hooks/useTenant';
+import {
+  createProductExtra,
+  deleteProductExtra,
+  listProductExtras,
+  updateProductExtra,
+} from '@/lib/firebaseTenantCrud';
 
 export interface ProductExtra {
   id: string;
@@ -13,17 +18,15 @@ export interface ProductExtra {
 }
 
 export function useProductExtras() {
+  const { tenantId } = useTenant();
+
   return useQuery({
-    queryKey: ['product-extras'],
+    queryKey: ['product-extras', tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('product_extras')
-        .select('*')
-        .order('name');
-      
-      if (error) throw error;
-      return data as ProductExtra[];
-    }
+      if (!tenantId) return [];
+      return (await listProductExtras(tenantId)) as ProductExtra[];
+    },
+    enabled: !!tenantId,
   });
 }
 
@@ -33,14 +36,12 @@ export function useProductExtrasMutations() {
 
   const createExtra = useMutation({
     mutationFn: async (extra: { name: string; price: number; description?: string; is_active?: boolean }) => {
-      const { data, error } = await supabase
-        .from('product_extras')
-        .insert({ ...extra, tenant_id: tenantId })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      return await createProductExtra(tenantId, {
+        ...extra,
+        description: extra.description ?? null,
+        is_active: extra.is_active ?? true,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-extras'] });
@@ -48,20 +49,13 @@ export function useProductExtrasMutations() {
     },
     onError: (error) => {
       toast({ title: 'Erro ao criar complemento', description: error.message, variant: 'destructive' });
-    }
+    },
   });
 
   const updateExtra = useMutation({
     mutationFn: async ({ id, ...extra }: { id: string; name?: string; price?: number; description?: string; is_active?: boolean }) => {
-      const { data, error } = await supabase
-        .from('product_extras')
-        .update(extra)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      return await updateProductExtra(tenantId, id, extra);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-extras'] });
@@ -69,25 +63,21 @@ export function useProductExtrasMutations() {
     },
     onError: (error) => {
       toast({ title: 'Erro ao atualizar', description: error.message, variant: 'destructive' });
-    }
+    },
   });
 
   const deleteExtra = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('product_extras')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await deleteProductExtra(tenantId, id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-extras'] });
-      toast({ title: 'Complemento excluído com sucesso!' });
+      toast({ title: 'Complemento excluido com sucesso!' });
     },
     onError: (error) => {
       toast({ title: 'Erro ao excluir complemento', description: error.message, variant: 'destructive' });
-    }
+    },
   });
 
   return { createExtra, updateExtra, deleteExtra };

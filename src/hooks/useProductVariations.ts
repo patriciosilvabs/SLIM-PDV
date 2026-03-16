@@ -1,7 +1,12 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
 import { useTenant } from '@/hooks/useTenant';
+import {
+  createProductVariation,
+  deleteProductVariation,
+  listProductVariations,
+  updateProductVariation,
+} from '@/lib/firebaseTenantCrud';
 
 export interface ProductVariation {
   id: string;
@@ -13,22 +18,15 @@ export interface ProductVariation {
 }
 
 export function useProductVariations(productId?: string) {
+  const { tenantId } = useTenant();
+
   return useQuery({
-    queryKey: ['product-variations', productId],
+    queryKey: ['product-variations', tenantId, productId],
     queryFn: async () => {
-      let query = supabase
-        .from('product_variations')
-        .select('*')
-        .order('name');
-      
-      if (productId) {
-        query = query.eq('product_id', productId);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as ProductVariation[];
-    }
+      if (!tenantId) return [];
+      return (await listProductVariations(tenantId, productId)) as ProductVariation[];
+    },
+    enabled: !!tenantId,
   });
 }
 
@@ -38,61 +36,49 @@ export function useProductVariationsMutations() {
 
   const createVariation = useMutation({
     mutationFn: async (variation: { product_id: string; name: string; description?: string; price_modifier?: number; is_active?: boolean }) => {
-      const { data, error } = await supabase
-        .from('product_variations')
-        .insert({ ...variation, tenant_id: tenantId })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      return await createProductVariation(tenantId, {
+        ...variation,
+        description: variation.description ?? null,
+        price_modifier: variation.price_modifier ?? 0,
+        is_active: variation.is_active ?? true,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-variations'] });
-      toast({ title: 'Variação criada com sucesso' });
+      toast({ title: 'Variacao criada com sucesso' });
     },
     onError: (error) => {
-      toast({ title: 'Erro ao criar variação', description: error.message, variant: 'destructive' });
-    }
+      toast({ title: 'Erro ao criar variacao', description: error.message, variant: 'destructive' });
+    },
   });
 
   const updateVariation = useMutation({
     mutationFn: async ({ id, ...variation }: { id: string; name?: string; description?: string; price_modifier?: number; is_active?: boolean }) => {
-      const { data, error } = await supabase
-        .from('product_variations')
-        .update(variation)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      return await updateProductVariation(tenantId, id, variation);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-variations'] });
-      toast({ title: 'Variação atualizada' });
+      toast({ title: 'Variacao atualizada' });
     },
     onError: (error) => {
       toast({ title: 'Erro ao atualizar', description: error.message, variant: 'destructive' });
-    }
+    },
   });
 
   const deleteVariation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('product_variations')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await deleteProductVariation(tenantId, id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-variations'] });
-      toast({ title: 'Variação excluída com sucesso!' });
+      toast({ title: 'Variacao excluida com sucesso!' });
     },
     onError: (error) => {
-      toast({ title: 'Erro ao excluir variação', description: error.message, variant: 'destructive' });
-    }
+      toast({ title: 'Erro ao excluir variacao', description: error.message, variant: 'destructive' });
+    },
   });
 
   return { createVariation, updateVariation, deleteVariation };

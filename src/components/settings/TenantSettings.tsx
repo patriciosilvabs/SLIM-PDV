@@ -5,9 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useTenant } from '@/hooks/useTenant';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
 import { Building2, Save, Loader2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { updateTenant } from '@/lib/firebaseTenantCrud';
 
 export function TenantSettings() {
   const { tenant, isOwner, tenantId } = useTenant();
@@ -22,12 +22,7 @@ export function TenantSettings() {
     
     setIsSaving(true);
     try {
-      const { error } = await supabase
-        .from('tenants')
-        .update({ name: name.trim() })
-        .eq('id', tenantId);
-
-      if (error) throw error;
+      await updateTenant(tenantId, { name: name.trim() });
 
       toast({ title: 'Configurações salvas!' });
       queryClient.invalidateQueries({ queryKey: ['tenant-membership'] });
@@ -103,3 +98,6 @@ export function TenantSettings() {
     </Card>
   );
 }
+
+
+

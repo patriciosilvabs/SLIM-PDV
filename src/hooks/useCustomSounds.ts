@@ -1,9 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
 import { toast } from 'sonner';
 import { useTenant } from '@/hooks/useTenant';
+import { extractBucketPathFromUrl, removeFromBucket, uploadToBucket } from '@/lib/firebaseStorageCompat';
+import { createCustomSound, deleteCustomSound, listCustomSounds } from '@/lib/firebaseTenantCrud';
 
-export type SoundType = 'newOrder' | 'newReservation' | 'orderReady' | 'kdsNewOrder' | 'maxWaitAlert' | 'tableWaitAlert' | 'idleTableAlert' | 'orderCancelled' | 'bottleneckAlert' | 'stationChange' | 'itemDelayAlert';
+export type SoundType =
+  | 'newOrder'
+  | 'newReservation'
+  | 'orderReady'
+  | 'kdsNewOrder'
+  | 'maxWaitAlert'
+  | 'tableWaitAlert'
+  | 'idleTableAlert'
+  | 'orderCancelled'
+  | 'bottleneckAlert'
+  | 'stationChange'
+  | 'itemDelayAlert';
 
 export interface CustomSound {
   id: string;
@@ -14,16 +27,15 @@ export interface CustomSound {
   created_at: string;
 }
 
-// Predefined sounds with base64 data
 export const PREDEFINED_SOUNDS = {
   beepClassic: {
     id: 'beep-classic',
-    name: 'Beep Clássico',
-    data: 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1NOU1JYXWcuZZyUDdDWIWz5OPTtpBjPkFeiLHf+/bpybV1UVR4q9Xp7+3btYdhW3ek0unp3sq7lW9xe6vT4+Pkz7mXgYGCqc7c3trNsJWLgoKfrdbj3NnLrJKGgoWip8zW2NLMqJGEhIqkosDJysW/oYmGh5GjsL29ubGdiIaFkZ+usLKtnJOFhYaQnamusq2kkIKFhpCdqK6tqJyOgYaGk52mqKijnI2CiIqYoKekoZaKhIiLmJ6joZ2VjImMkZebnpyWjouOkpibm5mUj4+QlZmbmpaPkJGVl5qZl5OQk5aYmpqXk5KUl5mampeTlJaYmZqZlpWWmJmampeTlZaYmZqZl5WXmJmampeVl5iZmpmXlpeYmZmZl5aXmJmZmZeXl5iZmZmXl5eYmZmZl5eXmJmZmZeXl5iZmZmXl5eYmZmZl5eXmJmZmZeXl5iZmZmXl5eYmZmZl5eXmJmZmZeXl5iZmZmXl5eYmZmZl5eXmJmZmZeXl5iZmQ=='
+    name: 'Beep ClÃ¡ssico',
+    data: 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1NOU1JYXWcuZZyUDdDWIWz5OPTtpBjPkFeiLHf+/bpybV1UVR4q9Xp7+3btYdhW3ek0unp3sq7lW9xe6vT4+Pkz7mXgYGCqc7c3trNsJWLgoKfrdbj3NnLrJKGgoWip8zW2NLMqJGEhIqkosDJysW/oYmGh5GjsL29ubGdiIaFkZ+usLKtnJOFhYaQnamusq2kkIKFhpCdqK6tqJyOgYaGk52mqKijnI2CiIqYoKekoZaKhIiLmJ6joZ2VjImMkZebnpyWjouOkpibm5mUj4+QlZmbmpaPkJGVl5qZl5OQk5aYmpqXk5KUl5mampeTlJaYmZqZlpWWmJmampeTlZaYmZqZl5WXmJmampeVl5iZmpmXlpeYmZmZl5aXmJmZmZeXl5iZmZmXl5eYmZmZl5eXmJmZmZeXl5iZmZmXl5eYmZmZl5eXmJmZmZeXl5iZmZmXl5eYmZmZl5eXmJmZmZeXl5iZmQ=='
   },
   bell: {
     id: 'bell',
-    name: 'Sino de Notificação',
+    name: 'Sino de NotificaÃ§Ã£o',
     data: 'data:audio/wav;base64,UklGRjIHAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQ4HAACAfX+Dh4yMioeDfnp2dXd7gYiOkpORjIZ/eHNxcnd+houQk5OQi4R9dnBucHZ9hYySlpaSjYZ+dnBsbXJ6goyUmJeTjoV9dW5ram91fYeQmJuZlI2Dd21nZWlweYOOl5ybl5CIfXRrZWNncXuGkJmdm5iRh3xya2VjZ3F7h5GanJuYkYd8cmtlY2dxe4eRmpybmJGHfHJrZWNncXuHkZqcm5iRh3xya2VjZ3F7h5GanJuYkYd8cmtlY2dxe4eRmpybmJGHfHJrZWNncXuHkZqcm5iRh3xya2VjZ3F7h5GanJuYkYd8cmtlY2dxe4eRmpybmJGHfHJrZWNncXuHkZqcm5iRh3xya2VjZ3F7h5GanJuYkYd8cmtlY2dxe4eRmpybmJGHfA=='
   },
   dingDong: {
@@ -51,62 +63,43 @@ export function useCustomSounds() {
     queryKey: ['custom-sounds', tenantId],
     queryFn: async () => {
       if (!tenantId) return [];
-
-      const { data, error } = await supabase
-        .from('custom_sounds')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      return data as CustomSound[];
+      return (await listCustomSounds(tenantId)) as CustomSound[];
     },
-    enabled: !!tenantId
+    enabled: !!tenantId,
   });
 
   const uploadSound = useMutation({
-    mutationFn: async ({ 
-      file, 
-      name, 
-      soundType 
-    }: { 
-      file: File; 
-      name: string; 
-      soundType: SoundType 
+    mutationFn: async ({
+      file,
+      name,
+      soundType,
+    }: {
+      file: File;
+      name: string;
+      soundType: SoundType;
     }) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Usuário não autenticado');
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      const {
+        data: { user },
+      } = await backendClient.auth.getUser();
+      if (!user) throw new Error('Usuario nao autenticado');
 
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}/${soundType}_${Date.now()}.${fileExt}`;
 
-      // Upload to storage
-      const { error: uploadError } = await supabase.storage
-        .from('notification-sounds')
-        .upload(fileName, file);
+      const publicUrl = await uploadToBucket({
+        bucket: 'notification-sounds',
+        filePath: fileName,
+        file,
+        contentType: file.type || undefined,
+      });
 
-      if (uploadError) throw uploadError;
-
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('notification-sounds')
-        .getPublicUrl(fileName);
-
-      // Save to database
-      const { data, error } = await supabase
-        .from('custom_sounds')
-        .insert({
-          user_id: user.id,
-          name,
-          sound_type: soundType,
-          file_path: urlData.publicUrl,
-          tenant_id: tenantId
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      return await createCustomSound(tenantId, {
+        user_id: user.id,
+        name,
+        sound_type: soundType,
+        file_path: publicUrl,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['custom-sounds'] });
@@ -114,47 +107,39 @@ export function useCustomSounds() {
     },
     onError: (error) => {
       toast.error('Erro ao salvar som: ' + error.message);
-    }
+    },
   });
 
-  const deleteSound = useMutation({
+  const deleteSoundMutation = useMutation({
     mutationFn: async (soundId: string) => {
-      const sound = customSounds.find(s => s.id === soundId);
-      if (!sound) throw new Error('Som não encontrado');
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      const sound = customSounds.find((s) => s.id === soundId);
+      if (!sound) throw new Error('Som nao encontrado');
 
-      // Delete from storage
-      const filePath = sound.file_path.split('/notification-sounds/')[1];
+      const filePath = extractBucketPathFromUrl(sound.file_path, 'notification-sounds');
       if (filePath) {
-        await supabase.storage.from('notification-sounds').remove([filePath]);
+        await removeFromBucket({ bucket: 'notification-sounds', paths: [filePath] });
       }
 
-      // Delete from database
-      const { error } = await supabase
-        .from('custom_sounds')
-        .delete()
-        .eq('id', soundId);
-
-      if (error) throw error;
+      await deleteCustomSound(tenantId, soundId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['custom-sounds'] });
-      toast.success('Som excluído!');
+      toast.success('Som excluido!');
     },
     onError: (error) => {
       toast.error('Erro ao excluir som: ' + error.message);
-    }
+    },
   });
 
-  const getSoundsForType = (type: SoundType) => {
-    return customSounds.filter(s => s.sound_type === type);
-  };
+  const getSoundsForType = (type: SoundType) => customSounds.filter((s) => s.sound_type === type);
 
   return {
     customSounds,
     isLoading,
     uploadSound,
-    deleteSound,
+    deleteSound: deleteSoundMutation,
     getSoundsForType,
-    predefinedSounds: PREDEFINED_SOUNDS
+    predefinedSounds: PREDEFINED_SOUNDS,
   };
 }

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { startOfDay, endOfDay, subDays, format, parseISO, differenceInDays } from 'date-fns';
+import { endOfDay, format, startOfDay, subDays, differenceInDays } from 'date-fns';
+import { listOrdersByStatusAndDateRange, listPaymentsByOrderIds, listProfilesByIds } from '@/lib/firebaseTenantCrud';
+import { useTenant } from '@/hooks/useTenant';
 
 export interface DateRange {
   start: Date;
@@ -44,7 +45,6 @@ export interface EmployeePerformance {
   orders: number;
 }
 
-// Calculate previous period based on current date range
 const getPreviousPeriod = (dateRange: DateRange): DateRange => {
   const daysDiff = differenceInDays(dateRange.end, dateRange.start) + 1;
   return {
@@ -53,70 +53,79 @@ const getPreviousPeriod = (dateRange: DateRange): DateRange => {
   };
 };
 
-// Calculate variation percentage
 const calcVariation = (current: number, previous: number): number => {
   if (previous === 0) return current > 0 ? 100 : 0;
   return ((current - previous) / previous) * 100;
 };
 
+const listDeliveredOrders = async (
+  tenantId: string,
+  dateRange: DateRange,
+  orderType?: string
+) => {
+  const orders = await listOrdersByStatusAndDateRange(tenantId, {
+    statuses: ['delivered'],
+    startIso: startOfDay(dateRange.start).toISOString(),
+    endIso: endOfDay(dateRange.end).toISOString(),
+  });
+
+  if (orderType && orderType !== 'all') {
+    return orders.filter((o) => o.order_type === orderType);
+  }
+
+  return orders;
+};
+
 export const usePerformanceKPIs = (dateRange: DateRange, filters?: { orderType?: string; paymentMethod?: string }) => {
+  const { tenant } = useTenant();
+
   return useQuery({
-    queryKey: ['performance-kpis', dateRange, filters],
+    queryKey: ['performance-kpis', tenant?.id, dateRange, filters],
     queryFn: async (): Promise<KPIData> => {
+      if (!tenant?.id) {
+        return {
+          revenue: 0,
+          orders: 0,
+          averageTicket: 0,
+          revenueVariation: 0,
+          ordersVariation: 0,
+          ticketVariation: 0,
+        };
+      }
+
       const previousPeriod = getPreviousPeriod(dateRange);
 
-      // Current period query
-      let currentQuery = supabase
-        .from('orders')
-        .select('id, total, subtotal, discount, order_type')
-        .eq('status', 'delivered')
-        .gte('created_at', startOfDay(dateRange.start).toISOString())
-        .lte('created_at', endOfDay(dateRange.end).toISOString());
-
-      if (filters?.orderType && filters.orderType !== 'all') {
-        currentQuery = currentQuery.eq('order_type', filters.orderType as 'dine_in' | 'takeaway' | 'delivery');
-      }
-
-      // Previous period query
-      let previousQuery = supabase
-        .from('orders')
-        .select('id, total')
-        .eq('status', 'delivered')
-        .gte('created_at', startOfDay(previousPeriod.start).toISOString())
-        .lte('created_at', endOfDay(previousPeriod.end).toISOString());
-
-      if (filters?.orderType && filters.orderType !== 'all') {
-        previousQuery = previousQuery.eq('order_type', filters.orderType as 'dine_in' | 'takeaway' | 'delivery');
-      }
-
-      const [currentResult, previousResult] = await Promise.all([
-        currentQuery,
-        previousQuery,
+      let [currentOrders, previousOrders] = await Promise.all([
+        listDeliveredOrders(tenant.id, dateRange, filters?.orderType),
+        listDeliveredOrders(tenant.id, previousPeriod, filters?.orderType),
       ]);
 
-      if (currentResult.error) throw currentResult.error;
-      if (previousResult.error) throw previousResult.error;
-
-      const currentOrders = currentResult.data || [];
-      const previousOrders = previousResult.data || [];
-
-      // If payment method filter, we need to join with payments
-      let filteredCurrentOrders = currentOrders;
       if (filters?.paymentMethod && filters.paymentMethod !== 'all') {
-        const { data: payments } = await supabase
-          .from('payments')
-          .select('order_id')
-          .eq('payment_method', filters.paymentMethod as 'cash' | 'credit_card' | 'debit_card' | 'pix');
-        
-        const paymentOrderIds = new Set(payments?.map(p => p.order_id) || []);
-        filteredCurrentOrders = currentOrders.filter(o => paymentOrderIds.has(o.id));
+        const [currentPayments, previousPayments] = await Promise.all([
+          listPaymentsByOrderIds(tenant.id, currentOrders.map((o) => o.id)),
+          listPaymentsByOrderIds(tenant.id, previousOrders.map((o) => o.id)),
+        ]);
+
+        const currentAllowed = new Set(
+          currentPayments
+            .filter((p) => p.payment_method === (filters.paymentMethod as 'cash' | 'credit_card' | 'debit_card' | 'pix'))
+            .map((p) => p.order_id)
+        );
+        const previousAllowed = new Set(
+          previousPayments
+            .filter((p) => p.payment_method === (filters.paymentMethod as 'cash' | 'credit_card' | 'debit_card' | 'pix'))
+            .map((p) => p.order_id)
+        );
+
+        currentOrders = currentOrders.filter((o) => currentAllowed.has(o.id));
+        previousOrders = previousOrders.filter((o) => previousAllowed.has(o.id));
       }
 
-      const currentRevenue = filteredCurrentOrders.reduce((sum, o) => sum + (o.total || 0), 0);
-      const currentCount = filteredCurrentOrders.length;
+      const currentRevenue = currentOrders.reduce((sum, o) => sum + Number(o.total || 0), 0);
+      const currentCount = currentOrders.length;
       const currentTicket = currentCount > 0 ? currentRevenue / currentCount : 0;
 
-      const previousRevenue = previousOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+      const previousRevenue = previousOrders.reduce((sum, o) => sum + Number(o.total || 0), 0);
       const previousCount = previousOrders.length;
       const previousTicket = previousCount > 0 ? previousRevenue / previousCount : 0;
 
@@ -129,55 +138,36 @@ export const usePerformanceKPIs = (dateRange: DateRange, filters?: { orderType?:
         ticketVariation: calcVariation(currentTicket, previousTicket),
       };
     },
+    enabled: !!tenant?.id,
   });
 };
 
 export const useHourlyRevenue = (dateRange: DateRange, groupBy: 'hour' | 'day' = 'hour') => {
+  const { tenant } = useTenant();
+
   return useQuery({
-    queryKey: ['hourly-revenue', dateRange, groupBy],
+    queryKey: ['hourly-revenue', tenant?.id, dateRange, groupBy],
     queryFn: async (): Promise<HourlyData[]> => {
+      if (!tenant?.id) return [];
       const previousPeriod = getPreviousPeriod(dateRange);
 
-      const [currentResult, previousResult] = await Promise.all([
-        supabase
-          .from('orders')
-          .select('total, created_at')
-          .eq('status', 'delivered')
-          .gte('created_at', startOfDay(dateRange.start).toISOString())
-          .lte('created_at', endOfDay(dateRange.end).toISOString()),
-        supabase
-          .from('orders')
-          .select('total, created_at')
-          .eq('status', 'delivered')
-          .gte('created_at', startOfDay(previousPeriod.start).toISOString())
-          .lte('created_at', endOfDay(previousPeriod.end).toISOString()),
+      const [currentOrders, previousOrders] = await Promise.all([
+        listDeliveredOrders(tenant.id, dateRange),
+        listDeliveredOrders(tenant.id, previousPeriod),
       ]);
 
-      if (currentResult.error) throw currentResult.error;
-      if (previousResult.error) throw previousResult.error;
-
-      const currentOrders = currentResult.data || [];
-      const previousOrders = previousResult.data || [];
-
       if (groupBy === 'hour') {
-        // Group by hour (0-23)
         const hourlyData: HourlyData[] = [];
         for (let i = 0; i < 24; i++) {
           const hourLabel = `${i.toString().padStart(2, '0')}h`;
-          
+
           const currentHourTotal = currentOrders
-            .filter(o => {
-              const hour = new Date(o.created_at!).getHours();
-              return hour === i;
-            })
-            .reduce((sum, o) => sum + (o.total || 0), 0);
+            .filter((o) => new Date(o.created_at).getHours() === i)
+            .reduce((sum, o) => sum + Number(o.total || 0), 0);
 
           const previousHourTotal = previousOrders
-            .filter(o => {
-              const hour = new Date(o.created_at!).getHours();
-              return hour === i;
-            })
-            .reduce((sum, o) => sum + (o.total || 0), 0);
+            .filter((o) => new Date(o.created_at).getHours() === i)
+            .reduce((sum, o) => sum + Number(o.total || 0), 0);
 
           hourlyData.push({
             hour: hourLabel,
@@ -186,62 +176,55 @@ export const useHourlyRevenue = (dateRange: DateRange, groupBy: 'hour' | 'day' =
           });
         }
         return hourlyData;
-      } else {
-        // Group by day
-        const daysDiff = differenceInDays(dateRange.end, dateRange.start) + 1;
-        const dailyData: HourlyData[] = [];
-        
-        for (let i = 0; i < daysDiff; i++) {
-          const currentDay = subDays(dateRange.end, daysDiff - 1 - i);
-          const previousDay = subDays(previousPeriod.end, daysDiff - 1 - i);
-          const dayLabel = format(currentDay, 'dd/MM');
-
-          const currentDayTotal = currentOrders
-            .filter(o => {
-              const orderDate = format(new Date(o.created_at!), 'yyyy-MM-dd');
-              return orderDate === format(currentDay, 'yyyy-MM-dd');
-            })
-            .reduce((sum, o) => sum + (o.total || 0), 0);
-
-          const previousDayTotal = previousOrders
-            .filter(o => {
-              const orderDate = format(new Date(o.created_at!), 'yyyy-MM-dd');
-              return orderDate === format(previousDay, 'yyyy-MM-dd');
-            })
-            .reduce((sum, o) => sum + (o.total || 0), 0);
-
-          dailyData.push({
-            hour: dayLabel,
-            currentPeriod: currentDayTotal,
-            previousPeriod: previousDayTotal,
-          });
-        }
-        return dailyData;
       }
+
+      const daysDiff = differenceInDays(dateRange.end, dateRange.start) + 1;
+      const dailyData: HourlyData[] = [];
+
+      for (let i = 0; i < daysDiff; i++) {
+        const currentDay = subDays(dateRange.end, daysDiff - 1 - i);
+        const previousDay = subDays(previousPeriod.end, daysDiff - 1 - i);
+        const dayLabel = format(currentDay, 'dd/MM');
+
+        const currentDayKey = format(currentDay, 'yyyy-MM-dd');
+        const previousDayKey = format(previousDay, 'yyyy-MM-dd');
+
+        const currentDayTotal = currentOrders
+          .filter((o) => format(new Date(o.created_at), 'yyyy-MM-dd') === currentDayKey)
+          .reduce((sum, o) => sum + Number(o.total || 0), 0);
+
+        const previousDayTotal = previousOrders
+          .filter((o) => format(new Date(o.created_at), 'yyyy-MM-dd') === previousDayKey)
+          .reduce((sum, o) => sum + Number(o.total || 0), 0);
+
+        dailyData.push({
+          hour: dayLabel,
+          currentPeriod: currentDayTotal,
+          previousPeriod: previousDayTotal,
+        });
+      }
+
+      return dailyData;
     },
+    enabled: !!tenant?.id,
   });
 };
 
 export const useRevenueDetails = (dateRange: DateRange) => {
+  const { tenant } = useTenant();
+
   return useQuery({
-    queryKey: ['revenue-details', dateRange],
+    queryKey: ['revenue-details', tenant?.id, dateRange],
     queryFn: async (): Promise<RevenueDetails> => {
-      const { data: orders, error } = await supabase
-        .from('orders')
-        .select('total, subtotal, discount')
-        .eq('status', 'delivered')
-        .gte('created_at', startOfDay(dateRange.start).toISOString())
-        .lte('created_at', endOfDay(dateRange.end).toISOString());
+      if (!tenant?.id) {
+        return { productsTotal: 0, serviceCharge: 0, discountsTotal: 0, netRevenue: 0 };
+      }
 
-      if (error) throw error;
+      const ordersData = await listDeliveredOrders(tenant.id, dateRange);
 
-      const ordersData = orders || [];
-      
-      const productsTotal = ordersData.reduce((sum, o) => sum + (o.subtotal || 0), 0);
-      const discountsTotal = ordersData.reduce((sum, o) => sum + (o.discount || 0), 0);
-      const netRevenue = ordersData.reduce((sum, o) => sum + (o.total || 0), 0);
-      
-      // Service charge is calculated as difference between total and (subtotal - discount)
+      const productsTotal = ordersData.reduce((sum, o) => sum + Number(o.subtotal || 0), 0);
+      const discountsTotal = ordersData.reduce((sum, o) => sum + Number(o.discount || 0), 0);
+      const netRevenue = ordersData.reduce((sum, o) => sum + Number(o.total || 0), 0);
       const serviceCharge = netRevenue - (productsTotal - discountsTotal);
 
       return {
@@ -251,135 +234,116 @@ export const useRevenueDetails = (dateRange: DateRange) => {
         netRevenue,
       };
     },
+    enabled: !!tenant?.id,
   });
 };
 
 export const useSegmentAnalysis = (
-  dateRange: DateRange, 
+  dateRange: DateRange,
   segmentBy: 'payment' | 'orderType' | 'channel' = 'payment'
 ) => {
+  const { tenant } = useTenant();
+
   return useQuery({
-    queryKey: ['segment-analysis', dateRange, segmentBy],
+    queryKey: ['segment-analysis', tenant?.id, dateRange, segmentBy],
     queryFn: async (): Promise<SegmentData[]> => {
-      const { data: orders, error } = await supabase
-        .from('orders')
-        .select('id, total, order_type')
-        .eq('status', 'delivered')
-        .gte('created_at', startOfDay(dateRange.start).toISOString())
-        .lte('created_at', endOfDay(dateRange.end).toISOString());
-
-      if (error) throw error;
-
-      const ordersData = orders || [];
-      const totalRevenue = ordersData.reduce((sum, o) => sum + (o.total || 0), 0);
+      if (!tenant?.id) return [];
+      const ordersData = await listDeliveredOrders(tenant.id, dateRange);
+      const totalRevenue = ordersData.reduce((sum, o) => sum + Number(o.total || 0), 0);
 
       if (segmentBy === 'payment') {
-        // Fetch payments for these orders
-        const orderIds = ordersData.map(o => o.id);
-        const { data: payments } = await supabase
-          .from('payments')
-          .select('order_id, payment_method, amount')
-          .in('order_id', orderIds);
+        const payments = await listPaymentsByOrderIds(
+          tenant.id,
+          ordersData.map((o) => o.id)
+        );
 
         const paymentMap = new Map<string, { revenue: number; orders: Set<string> }>();
-        
-        (payments || []).forEach(p => {
+
+        payments.forEach((p) => {
           const method = p.payment_method;
           if (!paymentMap.has(method)) {
             paymentMap.set(method, { revenue: 0, orders: new Set() });
           }
           const entry = paymentMap.get(method)!;
-          entry.revenue += p.amount;
+          entry.revenue += Number(p.amount || 0);
           entry.orders.add(p.order_id);
         });
 
         const methodLabels: Record<string, string> = {
           cash: 'Dinheiro',
-          credit_card: 'Cartão de Crédito',
-          debit_card: 'Cartão de Débito',
+          credit_card: 'Cartao de Credito',
+          debit_card: 'Cartao de Debito',
           pix: 'PIX',
         };
 
-        return Array.from(paymentMap.entries()).map(([method, data]) => ({
-          segment: methodLabels[method] || method,
-          revenue: data.revenue,
-          orders: data.orders.size,
-          averageTicket: data.orders.size > 0 ? data.revenue / data.orders.size : 0,
-          percentage: totalRevenue > 0 ? (data.revenue / totalRevenue) * 100 : 0,
-        })).sort((a, b) => b.revenue - a.revenue);
-      } else {
-        // Group by order type
-        const typeMap = new Map<string, { revenue: number; count: number }>();
-        
-        ordersData.forEach(o => {
-          const type = o.order_type || 'dine_in';
-          if (!typeMap.has(type)) {
-            typeMap.set(type, { revenue: 0, count: 0 });
-          }
-          const entry = typeMap.get(type)!;
-          entry.revenue += o.total || 0;
-          entry.count += 1;
-        });
+        return Array.from(paymentMap.entries())
+          .map(([method, data]) => ({
+            segment: methodLabels[method] || method,
+            revenue: data.revenue,
+            orders: data.orders.size,
+            averageTicket: data.orders.size > 0 ? data.revenue / data.orders.size : 0,
+            percentage: totalRevenue > 0 ? (data.revenue / totalRevenue) * 100 : 0,
+          }))
+          .sort((a, b) => b.revenue - a.revenue);
+      }
 
-        const typeLabels: Record<string, string> = {
-          dine_in: 'Mesa',
-          takeaway: 'Balcão',
-          delivery: 'Delivery',
-        };
+      const typeMap = new Map<string, { revenue: number; count: number }>();
+      ordersData.forEach((o) => {
+        const type = o.order_type || 'dine_in';
+        if (!typeMap.has(type)) {
+          typeMap.set(type, { revenue: 0, count: 0 });
+        }
+        const entry = typeMap.get(type)!;
+        entry.revenue += Number(o.total || 0);
+        entry.count += 1;
+      });
 
-        return Array.from(typeMap.entries()).map(([type, data]) => ({
+      const typeLabels: Record<string, string> = {
+        dine_in: 'Mesa',
+        takeaway: 'Balcao',
+        delivery: 'Delivery',
+      };
+
+      return Array.from(typeMap.entries())
+        .map(([type, data]) => ({
           segment: typeLabels[type] || type,
           revenue: data.revenue,
           orders: data.count,
           averageTicket: data.count > 0 ? data.revenue / data.count : 0,
           percentage: totalRevenue > 0 ? (data.revenue / totalRevenue) * 100 : 0,
-        })).sort((a, b) => b.revenue - a.revenue);
-      }
+        }))
+        .sort((a, b) => b.revenue - a.revenue);
     },
+    enabled: !!tenant?.id,
   });
 };
 
 export const useEmployeePerformance = (dateRange: DateRange) => {
+  const { tenant } = useTenant();
+
   return useQuery({
-    queryKey: ['employee-performance', dateRange],
+    queryKey: ['employee-performance', tenant?.id, dateRange],
     queryFn: async (): Promise<{ dineIn: EmployeePerformance[]; delivery: EmployeePerformance[] }> => {
-      const { data: orders, error } = await supabase
-        .from('orders')
-        .select('id, total, order_type, created_by')
-        .eq('status', 'delivered')
-        .gte('created_at', startOfDay(dateRange.start).toISOString())
-        .lte('created_at', endOfDay(dateRange.end).toISOString());
+      if (!tenant?.id) return { dineIn: [], delivery: [] };
 
-      if (error) throw error;
+      const ordersData = await listDeliveredOrders(tenant.id, dateRange);
+      const userIds = [...new Set(ordersData.map((o) => o.created_by).filter(Boolean))] as string[];
+      const profiles = await listProfilesByIds(userIds);
+      const profileMap = new Map((profiles || []).map((p) => [p.id, p.name]));
 
-      const ordersData = orders || [];
-
-      // Get unique user IDs
-      const userIds = [...new Set(ordersData.map(o => o.created_by).filter(Boolean))];
-      
-      // Fetch profiles
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, name')
-        .in('id', userIds);
-
-      const profileMap = new Map((profiles || []).map(p => [p.id, p.name]));
-
-      // Group by employee and order type
       const dineInMap = new Map<string, { revenue: number; count: number; name: string }>();
       const deliveryMap = new Map<string, { revenue: number; count: number; name: string }>();
 
-      ordersData.forEach(o => {
+      ordersData.forEach((o) => {
         if (!o.created_by) return;
-        
         const map = o.order_type === 'dine_in' ? dineInMap : deliveryMap;
         const employeeName = profileMap.get(o.created_by) || 'Desconhecido';
-        
+
         if (!map.has(o.created_by)) {
           map.set(o.created_by, { revenue: 0, count: 0, name: employeeName });
         }
         const entry = map.get(o.created_by)!;
-        entry.revenue += o.total || 0;
+        entry.revenue += Number(o.total || 0);
         entry.count += 1;
       });
 
@@ -399,5 +363,6 @@ export const useEmployeePerformance = (dateRange: DateRange) => {
         delivery: toPerformanceArray(deliveryMap),
       };
     },
+    enabled: !!tenant?.id,
   });
 };

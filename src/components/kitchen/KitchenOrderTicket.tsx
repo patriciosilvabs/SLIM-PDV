@@ -1,9 +1,13 @@
-import { format } from 'date-fns';
+﻿import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { usePrinterOptional } from '@/contexts/PrinterContext';
 import { KitchenTicketData } from '@/utils/escpos';
 import { escapeHtml } from '@/lib/htmlEscape';
-import { supabase } from '@/integrations/supabase/client';
+import { resolveCurrentTenantId } from '@/lib/tenantResolver';
+import {
+  listOrderItemSubExtrasBySubItemIds,
+  listOrderItemSubItemsByItemIds,
+} from '@/lib/firebaseTenantCrud';
 
 // Sub-item types for per-unit complements
 interface SubItemExtra {
@@ -44,22 +48,15 @@ interface KitchenOrderProps {
 async function fetchSubItemsForItems(items: OrderItem[]): Promise<OrderItem[]> {
   const itemIds = items.map(i => i.id);
   if (itemIds.length === 0) return items;
+  const tenantId = await resolveCurrentTenantId();
+  if (!tenantId) return items;
 
-  // Fetch sub-items
-  const { data: subItemsData } = await supabase
-    .from('order_item_sub_items')
-    .select('id, order_item_id, sub_item_index, notes')
-    .in('order_item_id', itemIds);
+  const subItemsData = await listOrderItemSubItemsByItemIds(tenantId, itemIds);
 
   if (!subItemsData || subItemsData.length === 0) return items;
 
   const subItemIds = subItemsData.map(si => si.id);
-
-  // Fetch extras for sub-items
-  const { data: extrasData } = await supabase
-    .from('order_item_sub_item_extras')
-    .select('sub_item_id, group_name, option_name, price, quantity')
-    .in('sub_item_id', subItemIds);
+  const extrasData = await listOrderItemSubExtrasBySubItemIds(tenantId, subItemIds);
 
   // Build sub-items with extras
   const subItemsMap = new Map<string, SubItem[]>();
@@ -95,7 +92,7 @@ function printWithBrowser(props: KitchenOrderProps) {
   
   const orderTypeLabels = {
     dine_in: tableNumber ? `MESA ${tableNumber}` : 'MESA',
-    takeaway: 'BALCÃO',
+    takeaway: 'BALCÃƒO',
     delivery: 'DELIVERY',
   };
 
@@ -107,12 +104,12 @@ function printWithBrowser(props: KitchenOrderProps) {
     if (item.sub_items && item.sub_items.length > 0) {
       const subItemsHtml = item.sub_items.map((si, idx) => {
         const extrasHtml = si.extras.map(e => 
-          `<div style="font-size: 12px; color: #333; padding-left: 16px;">• ${e.quantity > 1 ? `${e.quantity}x ` : ''}${escapeHtml(e.option_name)}</div>`
+          `<div style="font-size: 12px; color: #333; padding-left: 16px;">â€¢ ${e.quantity > 1 ? `${e.quantity}x ` : ''}${escapeHtml(e.option_name)}</div>`
         ).join('');
         
         return `
           <div style="margin-left: 8px; padding: 4px 0; border-left: 2px solid #666; padding-left: 8px; margin-bottom: 4px;">
-            <div style="font-weight: bold; font-size: 12px; color: #333;">🍕 PIZZA ${si.sub_item_index}:</div>
+            <div style="font-weight: bold; font-size: 12px; color: #333;">ðŸ• PIZZA ${si.sub_item_index}:</div>
             ${extrasHtml}
             ${si.notes ? `<div style="font-size: 11px; color: #c00; margin-top: 2px;">OBS: ${escapeHtml(si.notes)}</div>` : ''}
           </div>
@@ -124,10 +121,10 @@ function printWithBrowser(props: KitchenOrderProps) {
           <div style="font-weight: bold; font-size: 14px;">
             ${item.quantity}x ${escapeHtml(item.product?.name) || 'Produto'}
           </div>
-          ${item.variation ? `<div style="font-size: 12px; color: #666;">▸ ${escapeHtml(item.variation.name)}</div>` : ''}
+          ${item.variation ? `<div style="font-size: 12px; color: #666;">â–¸ ${escapeHtml(item.variation.name)}</div>` : ''}
           ${item.extras && item.extras.length > 0 ? item.extras.map(e => `
             <div style="font-size: 12px; color: #666; padding-left: 8px;">
-              • ${escapeHtml(e.extra_name.split(': ').slice(1).join(': ') || e.extra_name)}
+              â€¢ ${escapeHtml(e.extra_name.split(': ').slice(1).join(': ') || e.extra_name)}
             </div>
           `).join('') : ''}
           ${subItemsHtml}
@@ -143,10 +140,10 @@ function printWithBrowser(props: KitchenOrderProps) {
         <div style="font-weight: bold; font-size: 14px;">
           ${item.quantity}x ${escapeHtml(item.product?.name) || 'Produto'}
         </div>
-        ${item.variation ? `<div style="font-size: 12px; color: #666;">▸ ${escapeHtml(item.variation.name)}</div>` : ''}
+        ${item.variation ? `<div style="font-size: 12px; color: #666;">â–¸ ${escapeHtml(item.variation.name)}</div>` : ''}
         ${item.extras && item.extras.length > 0 ? item.extras.map(e => `
           <div style="font-size: 12px; color: #666; padding-left: 8px;">
-            • ${escapeHtml(e.extra_name.split(': ').slice(1).join(': ') || e.extra_name)}
+            â€¢ ${escapeHtml(e.extra_name.split(': ').slice(1).join(': ') || e.extra_name)}
           </div>
         `).join('') : ''}
         ${item.notes ? `<div style="font-size: 11px; color: #c00; margin-top: 4px;">OBS: ${escapeHtml(item.notes)}</div>` : ''}
@@ -229,7 +226,7 @@ function printWithBrowser(props: KitchenOrderProps) {
       
       ${notes ? `
         <div class="notes">
-          <div class="notes-title">OBSERVAÇÕES GERAIS:</div>
+          <div class="notes-title">OBSERVAÃ‡Ã•ES GERAIS:</div>
           <div>${escapeHtml(notes)}</div>
         </div>
       ` : ''}
@@ -266,7 +263,7 @@ function propsToTicketData(props: KitchenOrderProps): KitchenTicketData {
       // Add sub-items as formatted extras
       if (item.sub_items && item.sub_items.length > 0) {
         for (const si of item.sub_items) {
-          extras.push(`🍕 PIZZA ${si.sub_item_index}:`);
+          extras.push(`ðŸ• PIZZA ${si.sub_item_index}:`);
           for (const e of si.extras) {
             extras.push(`  ${e.quantity > 1 ? `${e.quantity}x ` : ''}${e.option_name}`);
           }
@@ -344,7 +341,11 @@ export function KitchenOrderTicketButton({
       className={className}
       title="Imprimir Comanda"
     >
-      🖨️
+      ðŸ–¨ï¸
     </button>
   );
 }
+
+
+
+

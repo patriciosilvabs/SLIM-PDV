@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useTenant } from './useTenant';
+import { createCategory as createCategoryFs, listCategories, updateCategory as updateCategoryFs } from '@/lib/firebaseTenantCrud';
 
 export interface Category {
   id: string;
@@ -14,17 +14,15 @@ export interface Category {
 }
 
 export function useCategories() {
+  const { tenantId } = useTenant();
+
   return useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .order('sort_order');
-      
-      if (error) throw error;
-      return data as Category[];
+      if (!tenantId) return [];
+      return (await listCategories(tenantId)) as Category[];
     },
+    enabled: !!tenantId,
   });
 }
 
@@ -35,16 +33,8 @@ export function useCategoryMutations() {
 
   const createCategory = useMutation({
     mutationFn: async (category: Omit<Category, 'id' | 'created_at'>) => {
-      if (!tenantId) throw new Error('Tenant não encontrado');
-      
-      const { data, error } = await supabase
-        .from('categories')
-        .insert({ ...category, tenant_id: tenantId })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      return createCategoryFs(tenantId, category);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories'] });
@@ -57,15 +47,8 @@ export function useCategoryMutations() {
 
   const updateCategory = useMutation({
     mutationFn: async ({ id, ...category }: Partial<Category> & { id: string }) => {
-      const { data, error } = await supabase
-        .from('categories')
-        .update(category)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      return updateCategoryFs(tenantId, id, category);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories'] });
@@ -78,13 +61,8 @@ export function useCategoryMutations() {
 
   const deleteCategory = useMutation({
     mutationFn: async (id: string) => {
-      // Usar soft delete direto para evitar problemas de FK e RLS
-      const { error } = await supabase
-        .from('categories')
-        .update({ is_active: false })
-        .eq('id', id);
-      
-      if (error) throw error;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await updateCategoryFs(tenantId, id, { is_active: false });
       return { softDeleted: true };
     },
     onSuccess: () => {
@@ -98,13 +76,9 @@ export function useCategoryMutations() {
 
   const updateSortOrder = useMutation({
     mutationFn: async (items: Array<{ id: string; sort_order: number }>) => {
+      if (!tenantId) throw new Error('Tenant nao encontrado');
       for (const item of items) {
-        const { error } = await supabase
-          .from('categories')
-          .update({ sort_order: item.sort_order })
-          .eq('id', item.id);
-        
-        if (error) throw error;
+        await updateCategoryFs(tenantId, item.id, { sort_order: item.sort_order });
       }
     },
     onSuccess: () => {

@@ -1,7 +1,12 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
 import { useTenant } from './useTenant';
+import {
+  createComplementOption,
+  deleteComplementOption,
+  listComplementOptions,
+  updateComplementOption,
+} from '@/lib/firebaseTenantCrud';
 
 export interface ComplementOption {
   id: string;
@@ -21,23 +26,16 @@ export interface ComplementOption {
 }
 
 export function useComplementOptions(includeInactive = false) {
+  const { tenantId } = useTenant();
+
   return useQuery({
-    queryKey: ['complement-options', { includeInactive }],
+    queryKey: ['complement-options', tenantId, { includeInactive }],
     queryFn: async () => {
-      let query = supabase
-        .from('complement_options')
-        .select('*')
-        .order('sort_order')
-        .order('name');
-      
-      if (!includeInactive) {
-        query = query.eq('is_active', true);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw error;
+      if (!tenantId) return [];
+      const data = await listComplementOptions(tenantId, includeInactive);
       return data as ComplementOption[];
-    }
+    },
+    enabled: !!tenantId,
   });
 }
 
@@ -47,63 +45,44 @@ export function useComplementOptionsMutations() {
 
   const createOption = useMutation({
     mutationFn: async (option: Omit<ComplementOption, 'id' | 'created_at' | 'updated_at'>) => {
-      if (!tenantId) throw new Error('Tenant não encontrado');
-      
-      const { data, error } = await supabase
-        .from('complement_options')
-        .insert({ ...option, tenant_id: tenantId })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      return await createComplementOption(tenantId, option);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['complement-options'] });
-      toast({ title: 'Opção criada com sucesso' });
+      toast({ title: 'Opcao criada com sucesso' });
     },
     onError: (error) => {
-      toast({ title: 'Erro ao criar opção', description: error.message, variant: 'destructive' });
-    }
+      toast({ title: 'Erro ao criar opcao', description: error.message, variant: 'destructive' });
+    },
   });
 
   const updateOption = useMutation({
     mutationFn: async ({ id, ...option }: Partial<ComplementOption> & { id: string }) => {
-      const { data, error } = await supabase
-        .from('complement_options')
-        .update(option)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      return await updateComplementOption(tenantId, id, option);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['complement-options'] });
-      toast({ title: 'Opção atualizada' });
+      toast({ title: 'Opcao atualizada' });
     },
     onError: (error) => {
       toast({ title: 'Erro ao atualizar', description: error.message, variant: 'destructive' });
-    }
+    },
   });
 
   const deleteOption = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('complement_options')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await deleteComplementOption(tenantId, id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['complement-options'] });
-      toast({ title: 'Opção excluída com sucesso!' });
+      toast({ title: 'Opcao excluida com sucesso!' });
     },
     onError: (error) => {
-      toast({ title: 'Erro ao excluir opção', description: error.message, variant: 'destructive' });
-    }
+      toast({ title: 'Erro ao excluir opcao', description: error.message, variant: 'destructive' });
+    },
   });
 
   return { createOption, updateOption, deleteOption };

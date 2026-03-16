@@ -22,6 +22,10 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
+function isMultipleRepeatSelection(selectionType: string | null | undefined) {
+  return selectionType === 'multiple_repeat' || selectionType === 'multiple_with_repetition';
+}
+
 function calculateGroupPrice(
   selections: Record<string, number>,
   options: Array<{ id: string; price: number }>,
@@ -321,7 +325,7 @@ export function StoreProductDetail({ product, store, open, onClose, onAddToCart 
               if (options.length === 0) return null;
               const selections = selectedComplements[group.id] || {};
               const selCount = Object.values(selections).reduce((s, q) => s + q, 0);
-              const isMultipleWithRepetition = group.selection_type === 'multiple_with_repetition';
+              const isMultipleWithRepetition = isMultipleRepeatSelection(group.selection_type);
 
               return (
                 <div key={group.id} className="space-y-3">

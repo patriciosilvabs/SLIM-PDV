@@ -1,10 +1,19 @@
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+﻿import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { CheckCircle, Clock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { backendClient } from '@/integrations/backend/client';
+import { getStoredKdsDeviceAuth, hasActiveKdsDeviceSession } from '@/lib/kdsDeviceSession';
+import {
+  listKdsStationLogs,
+  listOrderItemsByIds,
+  listOrdersByIds,
+  listProducts,
+  listProductVariations,
+  listTables,
+} from '@/lib/firebaseTenantCrud';
 
 interface KdsStationHistoryProps {
   stationId: string;
@@ -34,55 +43,83 @@ interface HistoryEntry {
 }
 
 export function KdsStationHistory({ stationId, stationColor, tenantId }: KdsStationHistoryProps) {
+  const isDeviceSession = hasActiveKdsDeviceSession();
+  const deviceAuth = getStoredKdsDeviceAuth();
+  const queryEnabled = !!tenantId;
+
   const { data: historyEntries = [], isLoading } = useQuery({
-    queryKey: ['kds-station-history', stationId],
+    queryKey: ['kds-station-history', tenantId, stationId, isDeviceSession ? deviceAuth?.deviceId : 'user'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('kds_station_logs')
-        .select(`
-          id, action, created_at, order_item_id,
-          order_item:order_items!kds_station_logs_order_item_id_fkey(
-            id, quantity, notes, order_id,
-            product:products(name),
-            variation:product_variations(name)
-          )
-        `)
-        .eq('station_id', stationId)
-        .eq('action', 'completed')
-        .order('created_at', { ascending: false })
-        .limit(30);
+      if (!tenantId) return [];
 
-      if (error) throw error;
+      if (isDeviceSession && deviceAuth?.deviceId && deviceAuth.tenantId === tenantId) {
+        const { data, error } = await backendClient.functions.invoke('kds-data', {
+          body: {
+            action: 'get_station_history',
+            device_id: deviceAuth.deviceId,
+            tenant_id: tenantId,
+            station_id: stationId,
+            limit: 30,
+          },
+        });
 
-      // Fetch order info for each unique order_id
-      const orderIds = [...new Set((data || [])
-        .map((d: any) => d.order_item?.order_id)
-        .filter(Boolean))];
-
-      let ordersMap: Record<string, any> = {};
-      if (orderIds.length > 0) {
-        const { data: orders } = await supabase
-          .from('orders')
-          .select('id, order_type, customer_name, table:tables(number)')
-          .in('id', orderIds);
-
-        if (orders) {
-          ordersMap = orders.reduce((acc: any, o: any) => {
-            acc[o.id] = o;
-            return acc;
-          }, {});
-        }
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        return (data?.history || []) as HistoryEntry[];
       }
 
-      return (data || []).map((entry: any) => ({
-        ...entry,
-        order_item: entry.order_item ? {
-          ...entry.order_item,
-          order: entry.order_item.order_id ? ordersMap[entry.order_item.order_id] || null : null,
-        } : null,
-      })) as HistoryEntry[];
+      const logs = await listKdsStationLogs(tenantId, {
+        stationId,
+        action: 'completed',
+        limitCount: 30,
+      });
+      const orderedLogs = [...logs].sort((a, b) => b.created_at.localeCompare(a.created_at));
+      const orderItems = await listOrderItemsByIds(tenantId, orderedLogs.map((entry) => entry.order_item_id));
+      const orders = await listOrdersByIds(
+        tenantId,
+        [...new Set(orderItems.map((item) => item.order_id).filter(Boolean))]
+      );
+      const [products, variations, tables] = await Promise.all([
+        listProducts(tenantId, true),
+        listProductVariations(tenantId),
+        listTables(tenantId),
+      ]);
+
+      const orderItemMap = new Map(orderItems.map((item) => [item.id, item]));
+      const orderMap = new Map(orders.map((order) => [order.id, order]));
+      const productMap = new Map(products.map((product) => [product.id, product]));
+      const variationMap = new Map(variations.map((variation) => [variation.id, variation]));
+      const tableMap = new Map(tables.map((table) => [table.id, table]));
+
+      return orderedLogs.map((entry) => {
+        const orderItem = orderItemMap.get(entry.order_item_id);
+        const order = orderItem ? orderMap.get(orderItem.order_id) : null;
+        const table = order?.table_id ? tableMap.get(order.table_id) : null;
+
+        return {
+          id: entry.id,
+          action: entry.action,
+          created_at: entry.created_at,
+          order_item_id: entry.order_item_id,
+          order_item: orderItem ? {
+            id: orderItem.id,
+            quantity: Number(orderItem.quantity || 1),
+            notes: orderItem.notes || null,
+            order_id: orderItem.order_id,
+            product: orderItem.product_id ? { name: productMap.get(orderItem.product_id)?.name || 'Produto' } : null,
+            variation: orderItem.variation_id ? { name: variationMap.get(orderItem.variation_id)?.name || '' } : null,
+            order: order ? {
+              id: order.id,
+              order_type: order.order_type || 'dine_in',
+              customer_name: order.customer_name || null,
+              table: table ? { number: table.number } : null,
+            } : null,
+          } : null,
+        };
+      }) as HistoryEntry[];
     },
-    refetchInterval: 15000, // Refresh every 15s
+    refetchInterval: queryEnabled ? 15000 : false,
+    enabled: queryEnabled,
   });
 
   if (isLoading) {
@@ -97,16 +134,16 @@ export function KdsStationHistory({ stationId, stationColor, tenantId }: KdsStat
     return (
       <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
         <Clock className="h-8 w-8 mb-2" />
-        <p>Nenhum histórico recente</p>
+        <p>Nenhum histÃ³rico recente</p>
       </div>
     );
   }
 
   const getOrderLabel = (entry: HistoryEntry) => {
     const order = entry.order_item?.order;
-    if (!order) return '—';
+    if (!order) return 'â€”';
     if (order.order_type === 'delivery') return 'DELIVERY';
-    if (order.order_type === 'takeaway') return 'BALCÃO';
+    if (order.order_type === 'takeaway') return 'BALCÃƒO';
     return `MESA ${order.table?.number || '?'}`;
   };
 
@@ -148,3 +185,7 @@ export function KdsStationHistory({ stationId, stationColor, tenantId }: KdsStat
     </ScrollArea>
   );
 }
+
+
+
+

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { listCancelledOrders, listProfilesByIds, listTables } from '@/lib/firebaseTenantCrud';
+import { useTenant } from '@/hooks/useTenant';
 
 export interface CancellationRecord {
   id: string;
@@ -23,79 +24,53 @@ export interface CancellationFilters {
 }
 
 export function useCancellationHistory(filters: CancellationFilters) {
+  const { tenant } = useTenant();
+
   return useQuery({
-    queryKey: ['cancellation-history', filters],
+    queryKey: ['cancellation-history', tenant?.id, filters],
     queryFn: async () => {
-      let query = supabase
-        .from('orders')
-        .select(`
-          id,
-          order_type,
-          customer_name,
-          total,
-          cancellation_reason,
-          cancelled_by,
-          cancelled_at,
-          created_at,
-          table:tables(number)
-        `)
-        .eq('status', 'cancelled')
-        .not('cancellation_reason', 'is', null)
-        .order('cancelled_at', { ascending: false });
+      if (!tenant?.id) return [];
 
-      // Date filters
-      if (filters.dateFrom) {
-        query = query.gte('cancelled_at', filters.dateFrom.toISOString());
-      }
+      let cancelledEndIso: string | undefined;
       if (filters.dateTo) {
-        const endOfDay = new Date(filters.dateTo);
-        endOfDay.setHours(23, 59, 59, 999);
-        query = query.lte('cancelled_at', endOfDay.toISOString());
+        const end = new Date(filters.dateTo);
+        end.setHours(23, 59, 59, 999);
+        cancelledEndIso = end.toISOString();
       }
 
-      // Reason filter (text search)
-      if (filters.reason) {
-        query = query.ilike('cancellation_reason', `%${filters.reason}%`);
-      }
+      const [orders, tables] = await Promise.all([
+        listCancelledOrders(tenant.id, {
+          cancelledStartIso: filters.dateFrom?.toISOString(),
+          cancelledEndIso,
+          reasonContains: filters.reason,
+          cancelledBy: filters.cancelledBy,
+          max: 1000,
+        }),
+        listTables(tenant.id),
+      ]);
 
-      // Cancelled by filter
-      if (filters.cancelledBy) {
-        query = query.eq('cancelled_by', filters.cancelledBy);
-      }
+      const filtered = orders.filter((o) => Boolean(o.cancellation_reason));
+      const tableById = new Map(tables.map((t) => [t.id, t.number]));
 
-      const { data, error } = await query;
+      const userIds = [...new Set(filtered.map((o) => o.cancelled_by).filter(Boolean) as string[])];
+      const profiles = userIds.length > 0 ? await listProfilesByIds(userIds) : [];
+      const profilesMap = Object.fromEntries((profiles || []).map((p) => [p.id, p.name]));
 
-      if (error) throw error;
-
-      // Fetch profile names for cancelled_by users
-      const userIds = [...new Set(data?.map(o => o.cancelled_by).filter(Boolean) as string[])];
-      let profilesMap: Record<string, string> = {};
-
-      if (userIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, name')
-          .in('id', userIds);
-
-        if (profiles) {
-          profilesMap = Object.fromEntries(profiles.map(p => [p.id, p.name]));
-        }
-      }
-
-      return (data || []).map((order): CancellationRecord => ({
+      return filtered.map((order): CancellationRecord => ({
         id: order.id,
         order_id: order.id,
-        order_type: order.order_type,
-        table_number: (order.table as any)?.number || null,
-        customer_name: order.customer_name,
-        total: order.total,
-        cancellation_reason: order.cancellation_reason,
-        cancelled_by: order.cancelled_by,
+        order_type: order.order_type || null,
+        table_number: order.table_id ? tableById.get(order.table_id) || null : null,
+        customer_name: order.customer_name || null,
+        total: order.total || 0,
+        cancellation_reason: order.cancellation_reason || null,
+        cancelled_by: order.cancelled_by || null,
         cancelled_by_name: order.cancelled_by ? profilesMap[order.cancelled_by] || null : null,
-        cancelled_at: order.cancelled_at,
-        created_at: order.created_at,
+        cancelled_at: order.cancelled_at || null,
+        created_at: order.created_at || null,
       }));
     },
+    enabled: !!tenant?.id,
   });
 }
 
@@ -103,9 +78,8 @@ export function useCancellationSummary(records: CancellationRecord[]) {
   const totalCancellations = records.length;
   const totalValue = records.reduce((sum, r) => sum + (r.total || 0), 0);
 
-  // Most common reasons
   const reasonCounts = records.reduce((acc, r) => {
-    const reason = r.cancellation_reason || 'Não informado';
+    const reason = r.cancellation_reason || 'Nao informado';
     acc[reason] = (acc[reason] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
@@ -116,7 +90,6 @@ export function useCancellationSummary(records: CancellationRecord[]) {
 
   const mostCommonReason = sortedReasons[0]?.[0] || 'N/A';
 
-  // Cancellations by user
   const userCounts = records.reduce((acc, r) => {
     const user = r.cancelled_by_name || 'Desconhecido';
     acc[user] = (acc[user] || 0) + 1;

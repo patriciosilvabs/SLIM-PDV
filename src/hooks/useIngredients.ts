@@ -1,7 +1,8 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { backendClient } from '@/integrations/backend/client';
 import { useToast } from '@/hooks/use-toast';
 import { useTenant } from './useTenant';
+import { createIngredient, createStockMovement, getIngredientById, listIngredients, updateIngredient } from '@/lib/firebaseTenantCrud';
 
 export interface Ingredient {
   id: string;
@@ -15,32 +16,29 @@ export interface Ingredient {
 }
 
 export function useIngredients() {
+  const { tenantId } = useTenant();
+
   return useQuery({
-    queryKey: ['ingredients'],
+    queryKey: ['ingredients', tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('ingredients')
-        .select('*')
-        .order('name');
-      
-      if (error) throw error;
-      return data as Ingredient[];
+      if (!tenantId) return [];
+      return (await listIngredients(tenantId)) as Ingredient[];
     },
+    enabled: !!tenantId,
   });
 }
 
 export function useLowStockIngredients() {
+  const { tenantId } = useTenant();
+
   return useQuery({
-    queryKey: ['ingredients', 'low-stock'],
+    queryKey: ['ingredients', tenantId, 'low-stock'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('ingredients')
-        .select('*')
-        .order('name');
-      
-      if (error) throw error;
-      return (data as Ingredient[]).filter(i => i.current_stock <= i.min_stock);
+      if (!tenantId) return [];
+      const data = (await listIngredients(tenantId)) as Ingredient[];
+      return data.filter((i) => i.current_stock <= i.min_stock);
     },
+    enabled: !!tenantId,
   });
 }
 
@@ -49,18 +47,10 @@ export function useIngredientMutations() {
   const { toast } = useToast();
   const { tenantId } = useTenant();
 
-  const createIngredient = useMutation({
+  const createIngredientMutation = useMutation({
     mutationFn: async (ingredient: Omit<Ingredient, 'id' | 'created_at' | 'updated_at'>) => {
-      if (!tenantId) throw new Error('Tenant não encontrado');
-      
-      const { data, error } = await supabase
-        .from('ingredients')
-        .insert({ ...ingredient, tenant_id: tenantId })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      return await createIngredient(tenantId, ingredient);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ingredients'] });
@@ -71,17 +61,10 @@ export function useIngredientMutations() {
     },
   });
 
-  const updateIngredient = useMutation({
+  const updateIngredientMutation = useMutation({
     mutationFn: async ({ id, ...ingredient }: Partial<Ingredient> & { id: string }) => {
-      const { data, error } = await supabase
-        .from('ingredients')
-        .update(ingredient)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      return await updateIngredient(tenantId, id, ingredient);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ingredients'] });
@@ -93,62 +76,40 @@ export function useIngredientMutations() {
   });
 
   const addStockMovement = useMutation({
-    mutationFn: async ({ 
-      ingredient_id, 
-      movement_type, 
-      quantity, 
-      notes 
-    }: { 
-      ingredient_id: string; 
-      movement_type: 'entry' | 'exit' | 'adjustment'; 
+    mutationFn: async ({
+      ingredient_id,
+      movement_type,
+      quantity,
+      notes,
+    }: {
+      ingredient_id: string;
+      movement_type: 'entry' | 'exit' | 'adjustment';
       quantity: number;
       notes?: string;
     }) => {
-      // Get current stock
-      const { data: ingredient } = await supabase
-        .from('ingredients')
-        .select('current_stock')
-        .eq('id', ingredient_id)
-        .single();
-      
-      if (!ingredient) throw new Error('Ingrediente não encontrado');
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+
+      const ingredient = await getIngredientById(tenantId, ingredient_id);
+      if (!ingredient) throw new Error('Ingrediente nao encontrado');
 
       const previousStock = Number(ingredient.current_stock);
       let newStock = previousStock;
 
-      if (movement_type === 'entry') {
-        newStock = previousStock + quantity;
-      } else if (movement_type === 'exit') {
-        newStock = previousStock - quantity;
-      } else {
-        newStock = quantity; // adjustment sets absolute value
-      }
+      if (movement_type === 'entry') newStock = previousStock + quantity;
+      else if (movement_type === 'exit') newStock = previousStock - quantity;
+      else newStock = quantity;
 
-      const { data: userData } = await supabase.auth.getUser();
-
-      // Create movement record
-      const { error: movementError } = await supabase
-        .from('stock_movements')
-        .insert({
-          ingredient_id,
-          movement_type,
-          quantity,
-          previous_stock: previousStock,
-          new_stock: newStock,
-          notes,
-          created_by: userData.user?.id,
-          tenant_id: tenantId
-        });
-      
-      if (movementError) throw movementError;
-
-      // Update ingredient stock
-      const { error: updateError } = await supabase
-        .from('ingredients')
-        .update({ current_stock: newStock })
-        .eq('id', ingredient_id);
-      
-      if (updateError) throw updateError;
+      const { data: userData } = await backendClient.auth.getUser();
+      await createStockMovement(tenantId, {
+        ingredient_id,
+        movement_type,
+        quantity,
+        previous_stock: previousStock,
+        new_stock: newStock,
+        notes: notes || null,
+        created_by: userData.user?.id || null,
+      } as never);
+      await updateIngredient(tenantId, ingredient_id, { current_stock: newStock });
 
       return { previousStock, newStock };
     },
@@ -161,5 +122,6 @@ export function useIngredientMutations() {
     },
   });
 
-  return { createIngredient, updateIngredient, addStockMovement };
+  return { createIngredient: createIngredientMutation, updateIngredient: updateIngredientMutation, addStockMovement };
 }
+

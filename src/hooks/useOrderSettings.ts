@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/hooks/useTenant';
+import { getGlobalSettingByKey, upsertGlobalSetting } from '@/lib/firebaseTenantCrud';
 
 export type PrintFontSize = 'normal' | 'large' | 'extra_large';
 export type LogoPrintMode = 'original' | 'grayscale' | 'dithered';
@@ -91,17 +91,7 @@ export function useOrderSettings() {
     queryFn: async () => {
       if (!tenantId) return { settings: defaultSettings };
 
-      const { data: record, error } = await supabase
-        .from('global_settings')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .eq('key', SETTINGS_KEY)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error fetching order settings:', error);
-        return { settings: defaultSettings };
-      }
+      const record = await getGlobalSettingByKey(tenantId, SETTINGS_KEY);
 
       if (!record) {
         return { settings: defaultSettings };
@@ -128,19 +118,7 @@ export function useOrderSettings() {
       const currentSettings = data?.settings ?? defaultSettings;
       const newSettings = { ...currentSettings, ...updates };
 
-      const { error } = await supabase
-        .from('global_settings')
-        .upsert(
-          {
-            tenant_id: tenantId,
-            key: SETTINGS_KEY,
-            value: newSettings,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'tenant_id,key' }
-        );
-
-      if (error) throw error;
+      await upsertGlobalSetting(tenantId, SETTINGS_KEY, newSettings);
       return newSettings;
     },
     onSuccess: () => {
@@ -321,3 +299,6 @@ export function useOrderSettings() {
     updateLogoPrintMode,
   };
 }
+
+
+

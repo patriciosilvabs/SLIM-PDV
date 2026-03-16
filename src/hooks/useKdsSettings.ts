@@ -1,6 +1,9 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { getKdsGlobalSettings, upsertKdsGlobalSettings } from '@/lib/firebaseTenantCrud';
+import { resolveCurrentTenantId } from '@/lib/tenantResolver';
+import { useAuth } from '@/contexts/AuthContext';
+import { getStoredKdsDeviceTenantId, hasActiveKdsDeviceSession } from '@/lib/kdsDeviceSession';
 
 export type KdsOperationMode = 'traditional' | 'production_line';
 export type OrderManagementViewMode = 'follow_kds' | 'kanban' | 'production_line';
@@ -59,20 +62,57 @@ export interface KdsDeviceSettings {
   deviceId: string;
   deviceName: string;
   assignedStationId: string | null;
+  compactMode?: boolean;
 }
 
 // Combined settings interface
 export interface KdsSettings extends KdsGlobalSettings, KdsDeviceSettings {}
 
 const DEVICE_STORAGE_KEY = 'pdv_kds_device_settings';
+const DEVICE_ID_STORAGE_KEY = 'pdv_kds_device_id';
+const DEVICE_AUTOREGISTER_DISABLED_KEY = 'pdv_kds_device_auto_register_disabled';
+
+function setDeviceAutoRegisterDisabled(disabled: boolean) {
+  if (typeof window === 'undefined') return;
+
+  if (disabled) {
+    window.localStorage.setItem(DEVICE_AUTOREGISTER_DISABLED_KEY, '1');
+    return;
+  }
+
+  window.localStorage.removeItem(DEVICE_AUTOREGISTER_DISABLED_KEY);
+}
+
+function isDeviceAutoRegisterDisabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage.getItem(DEVICE_AUTOREGISTER_DISABLED_KEY) === '1';
+}
+
+function getDisabledDeviceSettings(): KdsDeviceSettings {
+  return {
+    deviceId: '',
+    deviceName: 'KDS Device',
+    assignedStationId: null,
+  };
+}
+
+export function clearLocalKdsDeviceRegistration(options?: { suppressAutoRegister?: boolean }): KdsDeviceSettings {
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem(DEVICE_STORAGE_KEY);
+    window.localStorage.removeItem(DEVICE_ID_STORAGE_KEY);
+  }
+
+  setDeviceAutoRegisterDisabled(options?.suppressAutoRegister !== false);
+  return getDisabledDeviceSettings();
+}
 
 // Generate unique device ID
 const generateDeviceId = (): string => {
-  const stored = localStorage.getItem('pdv_kds_device_id');
+  const stored = localStorage.getItem(DEVICE_ID_STORAGE_KEY);
   if (stored) return stored;
   
   const newId = crypto.randomUUID();
-  localStorage.setItem('pdv_kds_device_id', newId);
+  localStorage.setItem(DEVICE_ID_STORAGE_KEY, newId);
   return newId;
 };
 
@@ -114,6 +154,10 @@ const defaultGlobalSettings: KdsGlobalSettings = {
 
 const getDeviceSettings = (): KdsDeviceSettings => {
   try {
+    if (isDeviceAutoRegisterDisabled()) {
+      return getDisabledDeviceSettings();
+    }
+
     const stored = localStorage.getItem(DEVICE_STORAGE_KEY);
     const deviceId = generateDeviceId();
     
@@ -160,48 +204,40 @@ const parseBottleneckSettings = (dbSettings: unknown): BottleneckSettings => {
   };
 };
 
-export function useKdsSettings(overrideTenantId?: string | null) {
+export function useKdsSettings(
+  overrideTenantId?: string | null,
+  options?: { enableTenantQuery?: boolean }
+) {
   const queryClient = useQueryClient();
   const [deviceSettings, setDeviceSettings] = useState<KdsDeviceSettings>(getDeviceSettings);
+  const { user } = useAuth();
+  const enableTenantQuery = options?.enableTenantQuery ?? !hasActiveKdsDeviceSession();
+  const storedDeviceTenantId = getStoredKdsDeviceTenantId();
+  const canQueryFirestore = enableTenantQuery && !!user?.id;
 
   // Get tenant_id for current user
   const { data: userTenantId } = useQuery({
     queryKey: ['user-tenant-id'],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_user_tenant_id');
-      if (error) throw error;
-      return data as string | null;
-    },
+    queryFn: resolveCurrentTenantId,
     staleTime: 1000 * 60 * 5, // 5 minutes
+    enabled: canQueryFirestore,
   });
 
-  // Use override tenant ID (from device auth) as fallback
-  const tenantId = userTenantId || overrideTenantId || null;
+  // Use override tenant ID (from device auth) and stored device auth as fallback
+  const tenantId = userTenantId || overrideTenantId || storedDeviceTenantId || null;
 
   // Fetch global settings from database filtered by tenant
   const { data: dbSettings, isLoading } = useQuery({
     queryKey: ['kds-global-settings', tenantId],
     queryFn: async () => {
       if (!tenantId) return null;
-      
-      const { data, error } = await supabase
-        .from('kds_global_settings')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error fetching KDS global settings:', error);
-        throw error;
-      }
-
-      return data;
+      return await getKdsGlobalSettings(tenantId);
     },
-    enabled: !!tenantId,
+    enabled: canQueryFirestore && !!tenantId,
     staleTime: 1000 * 60, // 1 minute
   });
 
-  // Parse global settings from database - usando 'in' operator para preservar valores explícitos
+  // Parse global settings from database - usando 'in' operator para preservar valores explÃ­citos
   const globalSettings: KdsGlobalSettings = useMemo(() => {
     if (!dbSettings) return defaultGlobalSettings;
 
@@ -282,20 +318,9 @@ export function useKdsSettings(overrideTenantId?: string | null) {
       if (updates.columnNameDelivered !== undefined) dbUpdates.column_name_delivered = updates.columnNameDelivered;
       if (updates.notesBadgeColor !== undefined) dbUpdates.notes_badge_color = updates.notesBadgeColor;
 
-      // Check if record exists for this tenant
-      if (dbSettings?.id) {
-        // Update existing record
-        const { error } = await supabase
-          .from('kds_global_settings')
-          .update(dbUpdates)
-          .eq('id', dbSettings.id);
-
-        if (error) throw error;
-      } else {
-        // Insert new record for this tenant with all default values
+      if (!dbSettings?.id) {
         const bottleneckData = updates.bottleneckSettings ?? defaultGlobalSettings.bottleneckSettings;
-        const insertData = {
-          tenant_id: tenantId,
+        Object.assign(dbUpdates, {
           operation_mode: updates.operationMode ?? defaultGlobalSettings.operationMode,
           order_management_view_mode: updates.orderManagementViewMode ?? defaultGlobalSettings.orderManagementViewMode,
           kanban_visible_columns: updates.kanbanVisibleColumns ?? defaultGlobalSettings.kanbanVisibleColumns,
@@ -322,14 +347,10 @@ export function useKdsSettings(overrideTenantId?: string | null) {
           column_name_ready: updates.columnNameReady ?? defaultGlobalSettings.columnNameReady,
           column_name_delivered: updates.columnNameDelivered ?? defaultGlobalSettings.columnNameDelivered,
           notes_badge_color: updates.notesBadgeColor ?? defaultGlobalSettings.notesBadgeColor,
-        };
-
-        const { error } = await supabase
-          .from('kds_global_settings')
-          .insert([insertData]);
-
-        if (error) throw error;
+        });
       }
+
+      await upsertKdsGlobalSettings(tenantId, dbUpdates);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kds-global-settings', tenantId] });
@@ -389,11 +410,19 @@ export function useKdsSettings(overrideTenantId?: string | null) {
 
   // Update device-specific settings only
   const updateDeviceSettings = useCallback((updates: Partial<KdsDeviceSettings>) => {
+    if (updates.deviceId && updates.deviceId.trim()) {
+      setDeviceAutoRegisterDisabled(false);
+    }
+
     setDeviceSettings(prev => {
       const newSettings = { ...prev, ...updates };
       saveDeviceSettings(newSettings);
       return newSettings;
     });
+  }, []);
+
+  const clearDeviceRegistration = useCallback((options?: { suppressAutoRegister?: boolean }) => {
+    setDeviceSettings(clearLocalKdsDeviceRegistration(options));
   }, []);
 
   // Update bottleneck settings
@@ -414,30 +443,16 @@ export function useKdsSettings(overrideTenantId?: string | null) {
     updateBottleneckSettings({ stationOverrides: newOverrides });
   }, [globalSettings.bottleneckSettings.stationOverrides, updateBottleneckSettings]);
 
-  // Set up realtime subscription for global settings changes
+  // Poll for settings changes while full realtime migration is in progress.
   useEffect(() => {
-    if (!tenantId) return;
-    
-    const channel = supabase
-      .channel('kds-global-settings-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'kds_global_settings',
-          filter: `tenant_id=eq.${tenantId}`,
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['kds-global-settings', tenantId] });
-        }
-      )
-      .subscribe();
+    if (!canQueryFirestore || !tenantId) return;
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient, tenantId]);
+    const intervalId = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ['kds-global-settings', tenantId] });
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [canQueryFirestore, queryClient, tenantId]);
 
   // Helper to get initial order status based on settings
   const getInitialOrderStatus = useCallback((): 'pending' | 'preparing' => {
@@ -473,9 +488,11 @@ export function useKdsSettings(overrideTenantId?: string | null) {
 
   return {
     settings,
+    deviceSettings,
     isLoading,
     updateSettings,
     updateDeviceSettings,
+    clearDeviceRegistration,
     updateBottleneckSettings,
     updateStationOverride,
     getInitialOrderStatus,
@@ -485,3 +502,7 @@ export function useKdsSettings(overrideTenantId?: string | null) {
     isProductionLineMode,
   };
 }
+
+
+
+

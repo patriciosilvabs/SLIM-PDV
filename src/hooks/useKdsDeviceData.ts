@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
 import { useCallback, useEffect, useRef } from 'react';
 import type { Order, OrderItem, OrderStatus } from './useOrders';
 
@@ -14,10 +14,17 @@ interface KdsDataResult {
   orders: Order[];
   settings: any;
   stations: any[];
+  device?: {
+    id: string;
+    device_id: string;
+    name: string;
+    station_id: string | null;
+    tenant_id?: string | null;
+  } | null;
 }
 
 async function fetchKdsData(deviceAuth: DeviceAuth, action: string, extra: Record<string, any> = {}) {
-  const { data, error } = await supabase.functions.invoke('kds-data', {
+  const { data, error } = await backendClient.functions.invoke('kds-data', {
     body: {
       action,
       device_id: deviceAuth.deviceId,
@@ -32,8 +39,8 @@ async function fetchKdsData(deviceAuth: DeviceAuth, action: string, extra: Recor
 }
 
 /**
- * Hook that fetches KDS data via edge function for device-only authentication.
- * Bypasses RLS since devices don't have a Supabase user session.
+ * Hook that fetches KDS data via function endpoint for device-only authentication.
+ * Bypasses user-session restrictions because dedicated devices do not use the regular app auth flow.
  */
 export function useKdsDeviceData(deviceAuth: DeviceAuth | null) {
   const queryClient = useQueryClient();
@@ -50,9 +57,29 @@ export function useKdsDeviceData(deviceAuth: DeviceAuth | null) {
       return result as KdsDataResult;
     },
     enabled: isDeviceMode,
-    refetchInterval: 5000, // Poll every 5 seconds since no realtime without session
-    staleTime: 2000,
+    refetchInterval: 1000,
+    refetchIntervalInBackground: true,
+    staleTime: 300,
   });
+
+  useEffect(() => {
+    if (!isDeviceMode) return;
+
+    const handleForegroundRefresh = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      void refetch();
+    };
+
+    document.addEventListener('visibilitychange', handleForegroundRefresh);
+    window.addEventListener('focus', handleForegroundRefresh);
+    window.addEventListener('online', handleForegroundRefresh);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleForegroundRefresh);
+      window.removeEventListener('focus', handleForegroundRefresh);
+      window.removeEventListener('online', handleForegroundRefresh);
+    };
+  }, [isDeviceMode, refetch]);
 
   // Mutations for device mode
   const updateOrderStatus = useMutation({
@@ -78,6 +105,80 @@ export function useKdsDeviceData(deviceAuth: DeviceAuth | null) {
       });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kds-device-data'] });
+    },
+  });
+
+  const claimItem = useMutation({
+    mutationFn: async ({ itemId }: { itemId: string }) => {
+      if (!deviceAuth) throw new Error('No device auth');
+      return fetchKdsData(deviceAuth, 'claim_item', {
+        item_id: itemId,
+      });
+    },
+    onMutate: async ({ itemId }) => {
+      await queryClient.cancelQueries({ queryKey: ['kds-device-data', deviceAuth?.deviceId, deviceAuth?.tenantId] });
+      const previous = queryClient.getQueryData(['kds-device-data', deviceAuth?.deviceId, deviceAuth?.tenantId]);
+      const now = new Date().toISOString();
+
+      queryClient.setQueryData(
+        ['kds-device-data', deviceAuth?.deviceId, deviceAuth?.tenantId],
+        (old: KdsDataResult | null | undefined) => {
+          if (!old) return old;
+          return {
+            ...old,
+            orders: old.orders.map((order: any) => ({
+              ...order,
+              order_items: order.order_items?.map((item: any) =>
+                item.id === itemId
+                  ? {
+                      ...item,
+                      current_device_id: deviceAuth?.deviceId ?? item.current_device_id,
+                      station_status: 'in_progress',
+                      station_started_at: item.station_started_at ?? now,
+                      claimed_by_device_id: deviceAuth?.deviceId ?? item.claimed_by_device_id,
+                      claimed_at: now,
+                    }
+                  : item
+              ),
+            })),
+          };
+        }
+      );
+
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(
+          ['kds-device-data', deviceAuth?.deviceId, deviceAuth?.tenantId],
+          context.previous
+        );
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kds-device-data'] });
+    },
+  });
+
+  const finalizeOrderFromStatus = useMutation({
+    mutationFn: async ({
+      orderId,
+      orderType,
+      currentStationId,
+    }: {
+      orderId: string;
+      orderType?: string;
+      currentStationId?: string;
+    }) => {
+      if (!deviceAuth) throw new Error('No device auth');
+      return fetchKdsData(deviceAuth, 'finalize_order_from_status', {
+        order_id: orderId,
+        order_type: orderType,
+        current_station_id: currentStationId,
+      });
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['kds-device-data'] });
     },
   });
@@ -140,12 +241,16 @@ export function useKdsDeviceData(deviceAuth: DeviceAuth | null) {
     orders: (allData?.orders || []) as Order[],
     settings: allData?.settings || null,
     stations: allData?.stations || [],
+    device: allData?.device || null,
     isLoading,
     refetch,
     updateOrderStatus,
+    finalizeOrderFromStatus,
     updateItemStation,
+    claimItem,
     smartMoveItem,
     logStation,
     isDeviceMode,
   };
 }
+

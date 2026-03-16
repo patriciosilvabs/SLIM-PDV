@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { listOrdersByStatusAndDateRange } from '@/lib/firebaseTenantCrud';
+import { useTenant } from '@/hooks/useTenant';
 
 export interface MonthlyRevenueData {
   month: string;
@@ -12,9 +13,13 @@ export interface MonthlyRevenueData {
 }
 
 export function useMonthlyRevenue(months: number = 6) {
+  const { tenant } = useTenant();
+
   return useQuery({
-    queryKey: ['monthly-revenue', months],
+    queryKey: ['monthly-revenue', tenant?.id, months],
     queryFn: async () => {
+      if (!tenant?.id) return [];
+
       const now = new Date();
       const data: MonthlyRevenueData[] = [];
 
@@ -22,30 +27,26 @@ export function useMonthlyRevenue(months: number = 6) {
         const currentDate = subMonths(now, i);
         const lastYearDate = subMonths(currentDate, 12);
 
-        // Current year data
         const currentStart = startOfMonth(currentDate);
         const currentEnd = endOfMonth(currentDate);
-
-        const { data: currentOrders } = await supabase
-          .from('orders')
-          .select('total')
-          .gte('created_at', currentStart.toISOString())
-          .lte('created_at', currentEnd.toISOString())
-          .eq('status', 'delivered');
-
-        // Last year data
         const lastStart = startOfMonth(lastYearDate);
         const lastEnd = endOfMonth(lastYearDate);
 
-        const { data: lastOrders } = await supabase
-          .from('orders')
-          .select('total')
-          .gte('created_at', lastStart.toISOString())
-          .lte('created_at', lastEnd.toISOString())
-          .eq('status', 'delivered');
+        const [currentOrders, lastOrders] = await Promise.all([
+          listOrdersByStatusAndDateRange(tenant.id, {
+            statuses: ['delivered'],
+            startIso: currentStart.toISOString(),
+            endIso: currentEnd.toISOString(),
+          }),
+          listOrdersByStatusAndDateRange(tenant.id, {
+            statuses: ['delivered'],
+            startIso: lastStart.toISOString(),
+            endIso: lastEnd.toISOString(),
+          }),
+        ]);
 
-        const currentYear = currentOrders?.reduce((sum, o) => sum + (o.total || 0), 0) || 0;
-        const lastYear = lastOrders?.reduce((sum, o) => sum + (o.total || 0), 0) || 0;
+        const currentYear = currentOrders.reduce((sum, o) => sum + Number(o.total || 0), 0);
+        const lastYear = lastOrders.reduce((sum, o) => sum + Number(o.total || 0), 0);
         const variation = lastYear > 0 ? ((currentYear - lastYear) / lastYear) * 100 : 0;
 
         data.push({
@@ -59,6 +60,7 @@ export function useMonthlyRevenue(months: number = 6) {
 
       return data;
     },
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    enabled: !!tenant?.id,
+    staleTime: 1000 * 60 * 5,
   });
 }

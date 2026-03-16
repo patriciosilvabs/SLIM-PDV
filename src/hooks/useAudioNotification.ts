@@ -54,7 +54,12 @@ const defaultSettings: NotificationSettings = {
   },
 };
 
-export function useAudioNotification() {
+interface UseAudioNotificationOptions {
+  enableRemote?: boolean;
+  tenantIdOverride?: string | null;
+}
+
+export function useAudioNotification(options?: UseAudioNotificationOptions) {
   // Usar persistência no banco de dados para configurações de áudio
   const { 
     settings, 
@@ -64,6 +69,8 @@ export function useAudioNotification() {
     settingsKey: 'notification_settings',
     defaults: defaultSettings,
     localStorageKey: 'pdv-notification-settings',
+    enableRemote: options?.enableRemote,
+    tenantIdOverride: options?.tenantIdOverride,
   });
 
   const playSound = useCallback(async (type: SoundType) => {
@@ -75,6 +82,9 @@ export function useAudioNotification() {
       audio.volume = settings.volume;
       await audio.play();
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'NotAllowedError') {
+        return;
+      }
       console.warn('Could not play notification sound:', error);
     }
   }, [settings]);

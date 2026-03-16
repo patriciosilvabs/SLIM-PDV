@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { 
   UtensilsCrossed, 
@@ -47,20 +47,20 @@ export const SECTION_INFO: Record<SettingsSection, { label: string; icon: Lucide
   stores: { label: 'Lojas', icon: Building2 },
   tables: { label: 'Mesas', icon: UtensilsCrossed },
   kds: { label: 'KDS', icon: ChefHat },
-  'kds-stations': { label: 'Praças', icon: Factory },
+  'kds-stations': { label: 'Setores', icon: Factory },
   'kds-devices': { label: 'Dispositivos', icon: Smartphone },
   orders: { label: 'Pedidos', icon: ShoppingCart },
   printers: { label: 'Impressoras', icon: Printer },
   'cash-register': { label: 'Caixa', icon: Wallet },
-  'production-targets': { label: 'Metas de Produção', icon: Target },
-  'production-api': { label: 'API de Produção', icon: Server },
+  'production-targets': { label: 'Metas de ProduÃ§Ã£o', icon: Target },
+  'production-api': { label: 'API de ProduÃ§Ã£o', icon: Server },
   notifications: { label: 'Sons', icon: Bell },
   announcements: { label: 'Avisos Agendados', icon: Megaphone },
   push: { label: 'Push', icon: Smartphone },
-  users: { label: 'Usuários', icon: Users },
-  roles: { label: 'Funções', icon: Shield },
+  users: { label: 'UsuÃ¡rios', icon: Users },
+  roles: { label: 'FunÃ§Ãµes', icon: Shield },
   invitations: { label: 'Convites', icon: Mail },
-  integrations: { label: 'Integrações', icon: Plug },
+  integrations: { label: 'IntegraÃ§Ãµes', icon: Plug },
 };
 
 interface SettingsSidebarProps {
@@ -80,17 +80,17 @@ const sections = [
     items: [
       { id: 'tables' as const, label: 'Mesas', icon: UtensilsCrossed },
       { id: 'kds' as const, label: 'KDS', icon: ChefHat },
-      { id: 'kds-stations' as const, label: 'Praças', icon: Factory },
+      { id: 'kds-stations' as const, label: 'Setores', icon: Factory },
       { id: 'kds-devices' as const, label: 'Dispositivos', icon: Smartphone },
       { id: 'orders' as const, label: 'Pedidos', icon: ShoppingCart },
       { id: 'printers' as const, label: 'Impressoras', icon: Printer },
       { id: 'cash-register' as const, label: 'Caixa', icon: Wallet },
-      { id: 'production-targets' as const, label: 'Metas de Produção', icon: Target },
-      { id: 'production-api' as const, label: 'API de Produção', icon: Server },
+      { id: 'production-targets' as const, label: 'Metas de ProduÃ§Ã£o', icon: Target },
+      { id: 'production-api' as const, label: 'API de ProduÃ§Ã£o', icon: Server },
     ],
   },
   {
-    group: 'Notificações',
+    group: 'NotificaÃ§Ãµes',
     items: [
       { id: 'notifications' as const, label: 'Sons', icon: Bell },
       { id: 'announcements' as const, label: 'Avisos Agendados', icon: Megaphone },
@@ -100,15 +100,15 @@ const sections = [
   {
     group: 'Equipe',
     items: [
-      { id: 'users' as const, label: 'Usuários', icon: Users },
-      { id: 'roles' as const, label: 'Funções', icon: Shield },
+      { id: 'users' as const, label: 'UsuÃ¡rios', icon: Users },
+      { id: 'roles' as const, label: 'FunÃ§Ãµes', icon: Shield },
       { id: 'invitations' as const, label: 'Convites', icon: Mail },
     ],
   },
   {
-    group: 'Integrações',
+    group: 'IntegraÃ§Ãµes',
     items: [
-      { id: 'integrations' as const, label: 'CardápioWeb', icon: Plug },
+      { id: 'integrations' as const, label: 'CardÃ¡pioWeb', icon: Plug },
     ],
   },
 ];
@@ -159,7 +159,7 @@ export function SettingsSidebar({ activeSection, onSectionChange }: SettingsSide
       {filteredSections.length === 0 && (
         <div className="text-center py-8 text-muted-foreground">
           <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
-          <p className="text-sm">Nenhuma configuração encontrada</p>
+          <p className="text-sm">Nenhuma configuraÃ§Ã£o encontrada</p>
           <button 
             onClick={() => setSearchQuery('')}
             className="text-xs text-primary hover:underline mt-1"
@@ -200,3 +200,4 @@ export function SettingsSidebar({ activeSection, onSectionChange }: SettingsSide
     </nav>
   );
 }
+

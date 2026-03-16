@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { listProfilesByIds, listTables, listTableSwitches } from '@/lib/firebaseTenantCrud';
+import { resolveCurrentTenantId } from '@/lib/tenantResolver';
 
 export interface TableSwitch {
   id: string;
@@ -18,44 +19,37 @@ export function useTableSwitches(startDate?: Date, endDate?: Date) {
   return useQuery({
     queryKey: ['table-switches', startDate?.toISOString(), endDate?.toISOString()],
     queryFn: async (): Promise<TableSwitch[]> => {
-      let query = supabase
-        .from('table_switches')
-        .select(`
-          *,
-          from_table:tables!table_switches_from_table_id_fkey(number),
-          to_table:tables!table_switches_to_table_id_fkey(number)
-        `)
-        .order('switched_at', { ascending: false });
-      
-      if (startDate) {
-        query = query.gte('switched_at', startDate.toISOString());
-      }
-      if (endDate) {
-        query = query.lte('switched_at', endDate.toISOString());
-      }
-      
-      const { data, error } = await query.limit(100);
-      
-      if (error) throw error;
-      
-      // Fetch profile names for switched_by
-      const switches = data || [];
-      const userIds = [...new Set(switches.filter(s => s.switched_by).map(s => s.switched_by!))];
-      
-      let profileMap = new Map<string, string>();
-      if (userIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, name')
-          .in('id', userIds);
-        
-        profiles?.forEach(p => profileMap.set(p.id, p.name));
-      }
-      
-      return switches.map(s => ({
+      const tenantId = await resolveCurrentTenantId();
+      if (!tenantId) return [];
+
+      const switches = await listTableSwitches(tenantId, {
+        startDateIso: startDate?.toISOString(),
+        endDateIso: endDate?.toISOString(),
+        max: 100,
+      });
+
+      const userIds = [...new Set(switches.filter((s) => s.switched_by).map((s) => s.switched_by as string))];
+      const tableIds = [
+        ...new Set(
+          switches.flatMap((s) => [s.from_table_id, s.to_table_id]).filter((id): id is string => Boolean(id))
+        ),
+      ];
+
+      const [profiles, tables] = await Promise.all([
+        userIds.length ? listProfilesByIds(userIds) : Promise.resolve([]),
+        tableIds.length ? listTables(tenantId) : Promise.resolve([]),
+      ]);
+
+      const profileMap = new Map((profiles || []).map((p) => [p.id, p.name]));
+      const tableMap = new Map((tables || []).map((t) => [t.id, t.number]));
+
+      return switches.map((s) => ({
         ...s,
+        from_table: s.from_table_id ? { number: tableMap.get(s.from_table_id) || 0 } : null,
+        to_table: s.to_table_id ? { number: tableMap.get(s.to_table_id) || 0 } : null,
         switched_by_name: s.switched_by ? profileMap.get(s.switched_by) || null : null,
       })) as TableSwitch[];
     },
   });
 }
+

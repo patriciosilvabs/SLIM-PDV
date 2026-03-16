@@ -1,7 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
 import { useToast } from '@/hooks/use-toast';
 import { useTenant } from './useTenant';
+import {
+  closeCashRegister as closeCashRegisterDoc,
+  createCashRegister,
+  createPayment as createPaymentDoc,
+  getCashRegisterById,
+  getOpenCashRegister,
+  getOrderById,
+  listPaymentsByCashRegister,
+  updateOrderById,
+  updateTable as updateTenantTable,
+} from '@/lib/firebaseTenantCrud';
 
 export type CashRegisterStatus = 'open' | 'closed';
 export type PaymentMethod = 'cash' | 'credit_card' | 'debit_card' | 'pix';
@@ -31,18 +42,15 @@ export interface Payment {
 }
 
 export function useOpenCashRegister() {
+  const { tenantId } = useTenant();
+
   return useQuery({
-    queryKey: ['cash-register', 'open'],
+    queryKey: ['cash-register', 'open', tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('cash_registers')
-        .select('*')
-        .eq('status', 'open')
-        .maybeSingle();
-      
-      if (error) throw error;
-      return data as CashRegister | null;
+      if (!tenantId) return null;
+      return (await getOpenCashRegister(tenantId)) as CashRegister | null;
     },
+    enabled: !!tenantId,
   });
 }
 
@@ -53,22 +61,14 @@ export function useCashRegisterMutations() {
 
   const openCashRegister = useMutation({
     mutationFn: async (openingAmount: number) => {
-      if (!tenantId) throw new Error('Tenant não encontrado');
-      
-      const { data: userData } = await supabase.auth.getUser();
-      const { data, error } = await supabase
-        .from('cash_registers')
-        .insert({
-          opened_by: userData.user?.id,
-          opening_amount: openingAmount,
-          status: 'open',
-          tenant_id: tenantId
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      const { data: userData } = await backendClient.auth.getUser();
+      if (!userData.user?.id) throw new Error('Usuario nao autenticado');
+
+      return await createCashRegister(tenantId, {
+        opened_by: userData.user.id,
+        opening_amount: openingAmount,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cash-register'] });
@@ -81,42 +81,26 @@ export function useCashRegisterMutations() {
 
   const closeCashRegister = useMutation({
     mutationFn: async ({ id, closingAmount }: { id: string; closingAmount: number }) => {
-      const { data: userData } = await supabase.auth.getUser();
-      
-      // Get payments for this cash register
-      const { data: payments } = await supabase
-        .from('payments')
-        .select('amount')
-        .eq('cash_register_id', id);
-      
-      const totalPayments = payments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
-      
-      // Get cash register opening amount
-      const { data: cashRegister } = await supabase
-        .from('cash_registers')
-        .select('opening_amount')
-        .eq('id', id)
-        .single();
-      
-      const expectedAmount = Number(cashRegister?.opening_amount || 0) + totalPayments;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      const { data: userData } = await backendClient.auth.getUser();
+      if (!userData.user?.id) throw new Error('Usuario nao autenticado');
+
+      const [payments, cashRegister] = await Promise.all([
+        listPaymentsByCashRegister(tenantId, id),
+        getCashRegisterById(tenantId, id),
+      ]);
+      if (!cashRegister) throw new Error('Caixa nao encontrado');
+
+      const totalPayments = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      const expectedAmount = Number(cashRegister.opening_amount || 0) + totalPayments;
       const difference = closingAmount - expectedAmount;
 
-      const { data, error } = await supabase
-        .from('cash_registers')
-        .update({
-          closed_by: userData.user?.id,
-          closing_amount: closingAmount,
-          expected_amount: expectedAmount,
-          difference,
-          status: 'closed',
-          closed_at: new Date().toISOString()
-        })
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      return await closeCashRegisterDoc(tenantId, id, {
+        closed_by: userData.user.id,
+        closing_amount: closingAmount,
+        expected_amount: expectedAmount,
+        difference,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cash-register'] });
@@ -127,56 +111,34 @@ export function useCashRegisterMutations() {
     },
   });
 
-  const createPayment = useMutation({
+  const createPaymentMutation = useMutation({
     mutationFn: async (payment: Omit<Payment, 'id' | 'created_at' | 'received_by'>) => {
-      if (!tenantId) throw new Error('Tenant não encontrado');
-      
-      const { data: userData } = await supabase.auth.getUser();
-      const { data, error } = await supabase
-        .from('payments')
-        .insert({
-          order_id: payment.order_id,
-          cash_register_id: payment.cash_register_id,
-          payment_method: payment.payment_method,
-          amount: payment.amount,
-          is_partial: payment.is_partial || false,
-          received_by: userData.user?.id,
-          tenant_id: tenantId
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      const { data: userData } = await backendClient.auth.getUser();
+      if (!userData.user?.id) throw new Error('Usuario nao autenticado');
 
-      // Only close the order/table if NOT a partial payment
+      const data = await createPaymentDoc(tenantId, {
+        order_id: payment.order_id,
+        cash_register_id: payment.cash_register_id,
+        payment_method: payment.payment_method,
+        amount: payment.amount,
+        is_partial: payment.is_partial || false,
+        received_by: userData.user.id,
+      });
+
       if (!payment.is_partial) {
-        // Get order type and table_id first
-        const { data: order } = await supabase
-          .from('orders')
-          .select('table_id, order_type')
-          .eq('id', payment.order_id)
-          .single();
-        
-        // Only mark as delivered if it's a dine_in order (mesa)
-        // Takeaway and delivery orders need to go through KDS first
-        if (order?.order_type === 'dine_in') {
-          await supabase
-            .from('orders')
-            .update({ 
-              status: 'delivered',
-              delivered_at: new Date().toISOString(),
-              table_id: null // Desassociar da mesa para evitar conflitos futuros
-            })
-            .eq('id', payment.order_id);
-        }
-        // For takeaway/delivery: status stays as 'pending' to appear in KDS
+        const order = await getOrderById(tenantId, payment.order_id);
 
-        // Update table status if it's a dine-in order with a table
+        if (order?.order_type === 'dine_in') {
+          await updateOrderById(tenantId, payment.order_id, {
+            status: 'delivered',
+            delivered_at: new Date().toISOString(),
+            table_id: null,
+          });
+        }
+
         if (order?.table_id) {
-          await supabase
-            .from('tables')
-            .update({ status: 'available' })
-            .eq('id', order.table_id);
+          await updateTenantTable(tenantId, order.table_id, { status: 'available' });
         }
       }
 
@@ -198,5 +160,5 @@ export function useCashRegisterMutations() {
     },
   });
 
-  return { openCashRegister, closeCashRegister, createPayment };
+  return { openCashRegister, closeCashRegister, createPayment: createPaymentMutation };
 }

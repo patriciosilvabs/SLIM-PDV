@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
 import PDVLayout from '@/components/layout/PDVLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ import { useProductComplementGroups, useProductComplementGroupsMutations } from 
 import { usePrintSectors } from '@/hooks/usePrintSectors';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { useGroupStores } from '@/hooks/useGroupStores';
+import { useTenant } from '@/hooks/useTenant';
 import { AccessDenied } from '@/components/auth/AccessDenied';
 import { Plus, Edit, Trash2, Search, Package, GripVertical, MoreVertical, Star, Percent, Eye, EyeOff, Printer, Copy, X, Building2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -34,6 +35,13 @@ import { Badge } from '@/components/ui/badge';
 import { ComplementGroupDialog } from '@/components/menu/ComplementGroupDialog';
 import { ComplementOptionDialog } from '@/components/menu/ComplementOptionDialog';
 import { ReplicateMenuDialog } from '@/components/menu/ReplicateMenuDialog';
+import {
+  listAllComplementGroupOptions,
+  listAllProductComplementGroups,
+  listComplementGroupOptions,
+  listGroupsForProduct,
+  listProductComplementGroups,
+} from '@/lib/firebaseTenantCrud';
 
 
 function formatCurrency(value: number) {
@@ -67,6 +75,7 @@ const LABEL_OPTIONS = [
 ];
 
 export default function Menu() {
+  const { tenantId } = useTenant();
   const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
   const { data: products } = useProducts(true); // Include inactive for management
   const { data: categories } = useCategories();
@@ -140,17 +149,18 @@ export default function Menu() {
   // Fetch group counts
   useEffect(() => {
     const fetchCounts = async () => {
-      const [optionsResult, productsResult] = await Promise.all([
-        supabase.from('complement_group_options').select('group_id'),
-        supabase.from('product_complement_groups').select('group_id')
+      if (!tenantId) return;
+      const [allOptions, allProducts] = await Promise.all([
+        listAllComplementGroupOptions(tenantId),
+        listAllProductComplementGroups(tenantId),
       ]);
       
       const counts: Record<string, { options: number, products: number }> = {};
-      optionsResult.data?.forEach(o => {
+      allOptions.forEach(o => {
         counts[o.group_id] = counts[o.group_id] || { options: 0, products: 0 };
         counts[o.group_id].options++;
       });
-      productsResult.data?.forEach(p => {
+      allProducts.forEach(p => {
         counts[p.group_id] = counts[p.group_id] || { options: 0, products: 0 };
         counts[p.group_id].products++;
       });
@@ -159,7 +169,7 @@ export default function Menu() {
     if (complementGroups?.length) {
       fetchCounts();
     }
-  }, [complementGroups]);
+  }, [complementGroups, tenantId]);
 
   // Auto-select first category when categories load and none is selected
   useEffect(() => {
@@ -294,10 +304,7 @@ export default function Menu() {
         const newProduct = await createProduct.mutateAsync(newProductData);
         
         // 4. Copy complement group links
-        const { data: linkedGroups } = await supabase
-          .from('product_complement_groups')
-          .select('group_id, sort_order')
-          .eq('product_id', product.id);
+        const linkedGroups = tenantId ? await listGroupsForProduct(tenantId, product.id) : [];
         
         if (linkedGroups?.length) {
           await setGroupsForProduct.mutateAsync({ 
@@ -337,11 +344,7 @@ export default function Menu() {
       const newGroup = await createGroup.mutateAsync(newGroupData);
       
       // 2. Get linked options from original group
-      const { data: groupOptions } = await supabase
-        .from('complement_group_options')
-        .select('option_id')
-        .eq('group_id', group.id)
-        .order('sort_order');
+      const groupOptions = tenantId ? await listComplementGroupOptions(tenantId, group.id) : [];
       
       // 3. Link same options to new group
       if (groupOptions?.length) {
@@ -427,12 +430,8 @@ export default function Menu() {
       print_sector_id: product.print_sector_id || null,
     });
     // Load linked groups
-    const { data: linkedGroups } = await supabase
-      .from('product_complement_groups')
-      .select('group_id')
-      .eq('product_id', product.id)
-      .order('sort_order');
-    setProductLinkedGroupIds(linkedGroups?.map(g => g.group_id) || []);
+    const linkedGroups = tenantId ? await listGroupsForProduct(tenantId, product.id) : [];
+    setProductLinkedGroupIds(linkedGroups.map(g => g.group_id) || []);
     setProductDialogTab('info');
     setIsProductDialogOpen(true);
   };
@@ -912,23 +911,16 @@ export default function Menu() {
                               onClick={async () => { 
                                 setEditingGroup(group);
                                 // Carregar opções vinculadas ao grupo com configs
-                                const { data: groupOptions } = await supabase
-                                  .from('complement_group_options')
-                                  .select('option_id, max_quantity, price_override')
-                                  .eq('group_id', group.id)
-                                  .order('sort_order');
+                                const groupOptions = tenantId ? await listComplementGroupOptions(tenantId, group.id) : [];
                                 // Carregar produtos vinculados ao grupo
-                                const { data: groupProducts } = await supabase
-                                  .from('product_complement_groups')
-                                  .select('product_id')
-                                  .eq('group_id', group.id);
-                                setGroupLinkedOptionIds(groupOptions?.map(o => o.option_id) || []);
-                                setGroupLinkedOptionConfigs(groupOptions?.map(o => ({ 
+                                const groupProducts = tenantId ? await listProductComplementGroups(tenantId, group.id) : [];
+                                setGroupLinkedOptionIds(groupOptions.map(o => o.option_id) || []);
+                                setGroupLinkedOptionConfigs(groupOptions.map(o => ({ 
                                   option_id: o.option_id, 
                                   max_quantity: o.max_quantity, 
                                   price_override: o.price_override 
                                 })) || []);
-                                setGroupLinkedProductIds(groupProducts?.map(p => p.product_id) || []);
+                                setGroupLinkedProductIds(groupProducts.map(p => p.product_id) || []);
                                 setIsGroupDialogOpen(true); 
                               }}
                             >
@@ -1276,13 +1268,9 @@ export default function Menu() {
                                         e.stopPropagation();
                                         setEditingGroup(group);
                                         // Carregar opções vinculadas ao grupo com configs
-                                        const { data: groupOptions } = await supabase
-                                          .from('complement_group_options')
-                                          .select('option_id, max_quantity, price_override')
-                                          .eq('group_id', group.id)
-                                          .order('sort_order');
-                                        setGroupLinkedOptionIds(groupOptions?.map(o => o.option_id) || []);
-                                        setGroupLinkedOptionConfigs(groupOptions?.map(o => ({ 
+                                        const groupOptions = tenantId ? await listComplementGroupOptions(tenantId, group.id) : [];
+                                        setGroupLinkedOptionIds(groupOptions.map(o => o.option_id) || []);
+                                        setGroupLinkedOptionConfigs(groupOptions.map(o => ({ 
                                           option_id: o.option_id, 
                                           max_quantity: o.max_quantity, 
                                           price_override: o.price_override 
@@ -1462,3 +1450,6 @@ export default function Menu() {
     </PDVLayout>
   );
 }
+
+
+

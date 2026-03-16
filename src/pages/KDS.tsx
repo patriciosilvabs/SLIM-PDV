@@ -8,12 +8,12 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useOrders, useOrderMutations, Order } from '@/hooks/useOrders';
+import { useOrders, useOrderMutations, Order, OrderItem } from '@/hooks/useOrders';
+import { useTenant } from '@/hooks/useTenant';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useAuth } from '@/contexts/AuthContext';
 import { AccessDenied } from '@/components/auth/AccessDenied';
-import { supabase } from '@/integrations/supabase/client';
 import { RefreshCw, UtensilsCrossed, Store, Truck, Clock, Play, CheckCircle, ChefHat, Volume2, VolumeX, Maximize2, Minimize2, Filter, Timer, AlertTriangle, TrendingUp, ChevronDown, ChevronUp, Ban, History, Trash2, CalendarDays, LogOut, Layers, Circle, Check } from 'lucide-react';
 import logoSlim from '@/assets/logo-slim.png';
 import { APP_VERSION } from '@/lib/appVersion';
@@ -34,12 +34,23 @@ import { KdsBottleneckIndicator } from '@/components/kds/KdsBottleneckIndicator'
 import { useBottleneckAlerts } from '@/hooks/useBottleneckAlerts';
 import { useItemDelayAlert } from '@/hooks/useItemDelayAlert';
 import { useKdsDeviceData } from '@/hooks/useKdsDeviceData';
+import {
+  updateOrderItemById,
+} from '@/lib/firebaseTenantCrud';
 
 type OrderTypeFilter = 'all' | 'table' | 'takeaway' | 'delivery';
 
 interface MetricDataPoint {
   time: string;
   avgWait: number;
+}
+
+interface DeviceDataIdentity {
+  id: string;
+  device_id: string;
+  name: string;
+  station_id: string | null;
+  tenant_id?: string | null;
 }
 
 interface CancellationHistoryItem {
@@ -56,6 +67,7 @@ interface CancellationHistoryItem {
 interface ItemCancellationAlert {
   itemId: string;
   orderId: string;
+  stationId?: string | null;
   productName: string;
   variationName?: string | null;
   quantity: number;
@@ -69,6 +81,8 @@ const CANCELLATION_HISTORY_KEY = 'kds-cancellation-history';
 const UNCONFIRMED_CANCELLATIONS_KEY = 'kds-unconfirmed-cancellations';
 const CONFIRMED_CANCELLATIONS_KEY = 'kds-confirmed-cancellations';
 const UNCONFIRMED_ITEM_CANCELLATIONS_KEY = 'kds-unconfirmed-item-cancellations';
+const DEVICE_AUTH_STORAGE_KEY = 'kds_device_auth';
+const KDS_DEVICE_SETTINGS_STORAGE_KEY = 'pdv_kds_device_settings';
 const MAX_WAIT_ALERT_THRESHOLD = 25; // minutes
 const MAX_WAIT_ALERT_COOLDOWN = 300000; // 5 minutes in ms
 const RECENT_CANCELLATION_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
@@ -89,17 +103,22 @@ export default function KDS() {
   // Device authentication state
   const [deviceAuth, setDeviceAuth] = useState(() => getStoredDeviceAuth());
   const { user } = useAuth();
+  const { tenantId } = useTenant();
+  const effectiveTenantId = deviceAuth?.tenantId || tenantId;
   
-  // Determine if we're in device-only mode (no user session)
-  const isDeviceOnlyMode = !!deviceAuth?.tenantId && !!deviceAuth?.deviceId && !user;
+  // A device-authenticated KDS must take precedence over any regular browser session.
+  const isDeviceOnlyMode = !!deviceAuth?.tenantId && !!deviceAuth?.deviceId;
   
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURN
-  const { hasPermission, isLoading: permissionsLoading } = useUserPermissions();
-  const { isAdmin } = useUserRole();
+  const { hasPermission, isLoading: permissionsLoading } = useUserPermissions({ enabled: !isDeviceOnlyMode });
+  const { isAdmin } = useUserRole({ enabled: !isDeviceOnlyMode });
   const isManager = isDeviceOnlyMode ? false : isAdmin; // Device-only mode = not a manager
   
   // Regular data hooks (will return empty when no user session due to RLS)
-  const { data: userOrders = [], isLoading: userOrdersLoading, refetch: userRefetch } = useOrders(['pending', 'preparing', 'ready', 'delivered', 'cancelled']);
+  const { data: userOrders = [], isLoading: userOrdersLoading, refetch: userRefetch } = useOrders(
+    ['pending', 'preparing', 'ready', 'delivered', 'cancelled'],
+    { enabled: !isDeviceOnlyMode }
+  );
   const { updateOrder, updateOrderItem } = useOrderMutations();
   
   // Device-only data hook (fetches via edge function, bypassing RLS)
@@ -124,9 +143,21 @@ export default function KDS() {
       return 'all';
     }
   });
-  const { playKdsNewOrderSound, playMaxWaitAlertSound, playOrderCancelledSound, playStationChangeSound, settings } = useAudioNotification();
-  const { settings: kdsSettingsFromHook, hasSpecialBorder, updateSettings: updateKdsSettings, updateDeviceSettings } = useKdsSettings(deviceAuth?.tenantId);
-  const { activeStations: userActiveStations, productionStations: userProductionStations } = useKdsStations();
+  const { playKdsNewOrderSound, playMaxWaitAlertSound, playOrderCancelledSound, playStationChangeSound, settings } = useAudioNotification({
+    enableRemote: !isDeviceOnlyMode,
+    tenantIdOverride: deviceAuth?.tenantId,
+  });
+  const {
+    settings: kdsSettingsFromHook,
+    deviceSettings,
+    hasSpecialBorder,
+    updateSettings: updateKdsSettings,
+    updateDeviceSettings,
+  } = useKdsSettings(deviceAuth?.tenantId, { enableTenantQuery: !isDeviceOnlyMode });
+  const { activeStations: userActiveStations, productionStations: userProductionStations } = useKdsStations({
+    enabled: !isDeviceOnlyMode,
+    tenantIdOverride: deviceAuth?.tenantId,
+  });
   
   // Override settings and stations from device data when in device-only mode
   const kdsSettings = useMemo(() => {
@@ -162,6 +193,94 @@ export default function KDS() {
       columnNameDelivered: dbSettings.column_name_delivered || 'ENTREGUES HOJE',
     };
   }, [isDeviceOnlyMode, deviceData.settings, kdsSettingsFromHook]);
+
+  const resolvedDeviceData = (deviceData as typeof deviceData & { device?: DeviceDataIdentity | null }).device ?? null;
+
+  const effectiveAssignedStationId = useMemo(() => {
+    if (!isDeviceOnlyMode) {
+      return kdsSettings.assignedStationId ?? null;
+    }
+
+    const liveDeviceStationId =
+      typeof resolvedDeviceData?.station_id === 'string' && resolvedDeviceData.station_id
+        ? resolvedDeviceData.station_id
+        : null;
+    if (liveDeviceStationId) {
+      return liveDeviceStationId;
+    }
+
+    // Right after device login the hook state can still reflect the pre-login device.
+    // In that first render we use the authenticated device station once. After that,
+    // local device settings become the source of truth so selecting "all" keeps working.
+    if (kdsSettings.deviceId !== deviceAuth?.deviceId) {
+      return deviceAuth?.stationId ?? null;
+    }
+    return kdsSettings.assignedStationId ?? null;
+  }, [
+    deviceAuth?.deviceId,
+    deviceAuth?.stationId,
+    isDeviceOnlyMode,
+    kdsSettings.assignedStationId,
+    kdsSettings.deviceId,
+    resolvedDeviceData?.station_id,
+  ]);
+
+  useEffect(() => {
+    if (!isDeviceOnlyMode || !deviceAuth?.deviceId) return;
+    if (kdsSettingsFromHook.deviceId === deviceAuth.deviceId) return;
+
+    updateDeviceSettings({
+      deviceId: deviceAuth.deviceId,
+      deviceName: deviceAuth.deviceName,
+      assignedStationId: deviceAuth.stationId ?? null,
+    });
+  }, [
+    deviceAuth?.deviceId,
+    deviceAuth?.deviceName,
+    deviceAuth?.stationId,
+    isDeviceOnlyMode,
+    kdsSettingsFromHook.deviceId,
+    updateDeviceSettings,
+  ]);
+
+  useEffect(() => {
+    if (!isDeviceOnlyMode || !deviceAuth?.deviceId) return;
+    const liveStationId =
+      typeof resolvedDeviceData?.station_id === 'string' && resolvedDeviceData.station_id
+        ? resolvedDeviceData.station_id
+        : null;
+    if (!liveStationId || deviceAuth.stationId === liveStationId) return;
+
+    const nextAuth = {
+      ...deviceAuth,
+      stationId: liveStationId,
+    };
+
+    setDeviceAuth(nextAuth);
+
+    try {
+      localStorage.setItem(DEVICE_AUTH_STORAGE_KEY, JSON.stringify(nextAuth));
+      localStorage.setItem(
+        KDS_DEVICE_SETTINGS_STORAGE_KEY,
+        JSON.stringify({
+          deviceId: nextAuth.deviceId,
+          deviceName: nextAuth.deviceName,
+          assignedStationId: liveStationId,
+        })
+      );
+    } catch {}
+
+    updateDeviceSettings({
+      deviceId: nextAuth.deviceId,
+      deviceName: nextAuth.deviceName,
+      assignedStationId: liveStationId,
+    });
+  }, [
+    deviceAuth,
+    isDeviceOnlyMode,
+    resolvedDeviceData?.station_id,
+    updateDeviceSettings,
+  ]);
   
   const activeStations = isDeviceOnlyMode && deviceData.stations.length > 0
     ? deviceData.stations.filter((s: any) => s.is_active)
@@ -169,13 +288,70 @@ export default function KDS() {
   const productionStations = isDeviceOnlyMode && deviceData.stations.length > 0
     ? deviceData.stations.filter((s: any) => s.is_active && s.station_type !== 'order_status')
     : userProductionStations;
+  const effectiveAssignedDeviceId = isDeviceOnlyMode ? deviceAuth?.deviceId || null : null;
+
+  const getItemStationId = useCallback((item: OrderItem, includeCancelledStation = false) => {
+    if (item.current_station_id) return item.current_station_id;
+    if (!includeCancelledStation) return null;
+    return (item as OrderItem & { cancelled_station_id?: string | null }).cancelled_station_id || null;
+  }, []);
+
+  const getItemDeviceId = useCallback((item: OrderItem, includeCancelledDevice = false) => {
+    if (item.current_device_id) return item.current_device_id;
+    if (!includeCancelledDevice) return null;
+    return (item as OrderItem & { cancelled_device_id?: string | null }).cancelled_device_id || null;
+  }, []);
+
+  const orderHasItemsForCurrentStation = useCallback((order: Order, includeCancelledStation = false) => {
+    if (effectiveAssignedDeviceId) {
+      return (order.order_items || []).some(
+        (item) => getItemDeviceId(item, includeCancelledStation) === effectiveAssignedDeviceId
+      );
+    }
+    if (!effectiveAssignedStationId) return (order.order_items?.length ?? 0) > 0;
+    return (order.order_items || []).some(
+      (item) => getItemStationId(item, includeCancelledStation) === effectiveAssignedStationId
+    );
+  }, [effectiveAssignedDeviceId, effectiveAssignedStationId, getItemDeviceId, getItemStationId]);
+
+  const filterOrderItemsForCurrentStation = useCallback((order: Order, includeCancelledStation = false) => {
+    if (effectiveAssignedDeviceId) {
+      return (order.order_items || []).filter(
+        (item) => getItemDeviceId(item, includeCancelledStation) === effectiveAssignedDeviceId
+      );
+    }
+    if (!effectiveAssignedStationId) return order.order_items || [];
+    return (order.order_items || []).filter(
+      (item) => getItemStationId(item, includeCancelledStation) === effectiveAssignedStationId
+    );
+  }, [effectiveAssignedDeviceId, effectiveAssignedStationId, getItemDeviceId, getItemStationId]);
+
+  useEffect(() => {
+    if (!isDeviceOnlyMode || !deviceAuth?.tenantId) return;
+
+    if (deviceData.settings) {
+      queryClient.setQueryData(['kds-global-settings', deviceAuth.tenantId], {
+        tenant_id: deviceAuth.tenantId,
+        ...deviceData.settings,
+      });
+    }
+
+    if (deviceData.stations.length > 0) {
+      queryClient.setQueryData(['kds-stations', deviceAuth.tenantId], deviceData.stations);
+    }
+  }, [deviceAuth?.tenantId, deviceData.settings, deviceData.stations, isDeviceOnlyMode, queryClient]);
   
   // Bottleneck alerts for production line mode
   const isProductionLineMode = kdsSettings.operationMode === 'production_line';
-  const { bottlenecks, hasActiveAlerts } = useBottleneckAlerts(isProductionLineMode, soundEnabled);
+  const { bottlenecks, hasActiveAlerts } = useBottleneckAlerts(
+    isProductionLineMode,
+    soundEnabled,
+    !isDeviceOnlyMode,
+    deviceAuth?.tenantId
+  );
   
   // Item delay alert (plays sound when items exceed time threshold)
-  useItemDelayAlert();
+  useItemDelayAlert(!isDeviceOnlyMode, deviceAuth?.tenantId);
   
   const [metricsDialogOpen, setMetricsDialogOpen] = useState(false);
   const notifiedOrdersRef = useRef<Set<string>>(new Set());
@@ -183,6 +359,31 @@ export default function KDS() {
   const initialLoadRef = useRef(true);
   const previousStationItemsRef = useRef<Set<string>>(new Set());
   const stationItemsInitializedRef = useRef(false);
+
+  const effectiveCompactMode = useMemo(() => {
+    if (!isDeviceOnlyMode) {
+      return kdsSettings.compactMode;
+    }
+
+    return deviceSettings.compactMode ?? (deviceData.settings?.compact_mode ?? kdsSettings.compactMode);
+  }, [deviceData.settings, deviceSettings.compactMode, isDeviceOnlyMode, kdsSettings.compactMode]);
+
+  const handleAssignedStationChange = useCallback((value: string) => {
+    updateDeviceSettings({
+      assignedStationId: value === 'all' ? null : value,
+    });
+    previousStationItemsRef.current = new Set();
+    stationItemsInitializedRef.current = false;
+  }, [updateDeviceSettings]);
+
+  const handleCompactModeToggle = useCallback(() => {
+    if (isDeviceOnlyMode) {
+      updateDeviceSettings({ compactMode: !effectiveCompactMode });
+      return;
+    }
+
+    updateKdsSettings({ compactMode: !effectiveCompactMode });
+  }, [effectiveCompactMode, isDeviceOnlyMode, updateDeviceSettings, updateKdsSettings]);
   
   // Unconfirmed cancellations tracking - persists until kitchen confirms (loaded from localStorage)
   const [unconfirmedCancellations, setUnconfirmedCancellations] = useState<Map<string, Order>>(() => {
@@ -236,6 +437,8 @@ export default function KDS() {
     return new Map();
   });
   const itemCancelledSoundIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const knownCancelledItemsRef = useRef<Map<string, string>>(new Map());
+  const cancelledItemsBootstrappedRef = useRef(false);
   
   const canChangeStatus = hasPermission('kds_change_status');
   const lastMetricUpdateRef = useRef<string>('');
@@ -250,14 +453,16 @@ export default function KDS() {
   const activeOrdersList = orders.filter(o => 
     (o.status === 'pending' || o.status === 'preparing' || o.status === 'ready') &&
     (o.order_items?.length ?? 0) > 0 &&
-    o.is_draft !== true
+    o.is_draft !== true &&
+    orderHasItemsForCurrentStation(o)
   );
   
   // List for alerts (ONLY pending and preparing - ready orders should not trigger alerts)
   const ordersForAlerts = orders.filter(o => 
     (o.status === 'pending' || o.status === 'preparing') &&
     (o.order_items?.length ?? 0) > 0 &&
-    o.is_draft !== true
+    o.is_draft !== true &&
+    orderHasItemsForCurrentStation(o)
   );
   
   // Use updated_at for wait time calculation - this resets when new items are added to a ready order
@@ -278,7 +483,7 @@ export default function KDS() {
   };
 
   // Listen for scheduled announcements - MUST be called before any conditional returns
-  useScheduledAnnouncements('kds', orderCounts);
+  useScheduledAnnouncements('kds', orderCounts, !isDeviceOnlyMode);
   // Helper function to get color status based on metric thresholds
   const getMetricStatus = (type: 'avg' | 'max' | 'delayed', value: number) => {
     if (type === 'avg') {
@@ -399,19 +604,21 @@ export default function KDS() {
     if (!isActive) return false;
     if (order.is_draft === true) return false;
     if ((order.order_items?.length ?? 0) === 0) return false;
+    if (!orderHasItemsForCurrentStation(order)) return false;
 
     if (orderTypeFilter === 'all') return true;
     if (orderTypeFilter === 'table') return order.order_type === 'dine_in';
     if (orderTypeFilter === 'takeaway') return order.order_type === 'takeaway';
     if (orderTypeFilter === 'delivery') return order.order_type === 'delivery';
     return true;
-  }), [orders, orderTypeFilter]);
+  }), [orders, orderHasItemsForCurrentStation, orderTypeFilter]);
 
   // Count by type (unfiltered) - only orders with items and not drafts
   const allActiveOrders = orders.filter(
     order => (order.status === 'pending' || order.status === 'preparing' || order.status === 'ready') &&
              (order.order_items?.length ?? 0) > 0 &&
-             order.is_draft !== true
+             order.is_draft !== true &&
+             orderHasItemsForCurrentStation(order)
   );
   const tableCount = allActiveOrders.filter(o => o.order_type === 'dine_in').length;
   const takeawayCount = allActiveOrders.filter(o => o.order_type === 'takeaway').length;
@@ -419,23 +626,19 @@ export default function KDS() {
 
   // Filter orders by assigned station (if set)
   const ordersForDisplay = useMemo(() => {
-    if (!kdsSettings.assignedStationId) {
+    if (!effectiveAssignedStationId) {
       return activeOrders; // Show all if no station assigned
     }
     
     // Filter orders that have items in this station
     return activeOrders.filter(order => 
-      order.order_items?.some(item => 
-        item.current_station_id === kdsSettings.assignedStationId
-      )
+      orderHasItemsForCurrentStation(order)
     ).map(order => ({
       ...order,
       // Also filter items within each order to show only those for this station
-      order_items: order.order_items?.filter(item => 
-        item.current_station_id === kdsSettings.assignedStationId
-      )
+      order_items: filterOrderItemsForCurrentStation(order)
     }));
-  }, [activeOrders, kdsSettings.assignedStationId]);
+  }, [activeOrders, effectiveAssignedStationId, filterOrderItemsForCurrentStation, orderHasItemsForCurrentStation]);
 
   const pendingOrders = ordersForDisplay.filter(o => o.status === 'pending');
   // When showPendingColumn is false, merge pending into preparing
@@ -492,7 +695,7 @@ export default function KDS() {
       ordersForAlerts.length > 0
     ) {
       playMaxWaitAlertSound();
-      toast.warning(`⚠️ Pedido esperando há mais de ${MAX_WAIT_ALERT_THRESHOLD} minutos!`, { duration: 5000 });
+      toast.warning(`Pedido esperando ha mais de ${MAX_WAIT_ALERT_THRESHOLD} minutos!`, { duration: 5000 });
       setMaxWaitAlertCooldown(true);
       setTimeout(() => setMaxWaitAlertCooldown(false), MAX_WAIT_ALERT_COOLDOWN);
     }
@@ -500,13 +703,15 @@ export default function KDS() {
 
   // Sound notification when new items arrive at assigned station
   useEffect(() => {
-    if (!kdsSettings.assignedStationId || !soundEnabled || !settings.enabled) return;
+    if ((!effectiveAssignedStationId && !effectiveAssignedDeviceId) || !soundEnabled || !settings.enabled) return;
     
     // Collect IDs of all items currently in the assigned station
     const currentItemIds = new Set(
       activeOrders.flatMap(order => 
         order.order_items?.filter(item => 
-          item.current_station_id === kdsSettings.assignedStationId
+          effectiveAssignedDeviceId
+            ? item.current_device_id === effectiveAssignedDeviceId
+            : item.current_station_id === effectiveAssignedStationId
         ).map(item => item.id) ?? []
       )
     );
@@ -522,14 +727,16 @@ export default function KDS() {
     // Play sound only if there are new items and it's not the initial load
     if (hasNewItems && stationItemsInitializedRef.current) {
       playStationChangeSound();
-      const stationName = activeStations.find(s => s.id === kdsSettings.assignedStationId)?.name;
+      const stationName = effectiveAssignedStationId
+        ? activeStations.find(s => s.id === effectiveAssignedStationId)?.name
+        : deviceAuth?.deviceName;
       toast.info(`Novo item chegou em ${stationName}!`, { duration: 3000 });
     }
     
     // Mark as initialized and update reference
     stationItemsInitializedRef.current = true;
     previousStationItemsRef.current = currentItemIds;
-  }, [activeOrders, kdsSettings.assignedStationId, soundEnabled, settings.enabled, playStationChangeSound, activeStations]);
+  }, [activeOrders, activeStations, deviceAuth?.deviceName, effectiveAssignedDeviceId, effectiveAssignedStationId, soundEnabled, settings.enabled, playStationChangeSound]);
 
   // Realtime subscription is now handled in useOrders.ts - removed duplicate here
 
@@ -540,6 +747,12 @@ export default function KDS() {
       orders.forEach(order => {
         const prevOrder = previousOrdersRef.current.find(o => o.id === order.id);
         if (prevOrder && prevOrder.status !== order.status) {
+          const isRelevantToCurrentStation =
+            orderHasItemsForCurrentStation(order, true) || orderHasItemsForCurrentStation(prevOrder, true);
+          if (!isRelevantToCurrentStation) {
+            return;
+          }
+
           const statusLabels: Record<string, string> = {
             pending: 'Novo',
             preparing: 'Em Preparo',
@@ -553,7 +766,6 @@ export default function KDS() {
           if (order.status === 'cancelled' && prevOrder.status !== 'cancelled') {
             const wasInProduction = prevOrder.status === 'pending' || prevOrder.status === 'preparing';
             const hasItems = (order.order_items?.length ?? 0) > 0;
-            
             // Only show cancellation alerts if enabled in settings AND order had items
             // Skip empty orders (waiter opened table but customer left before ordering)
             if (wasInProduction && hasItems && kdsSettings.cancellationAlertsEnabled !== false) {
@@ -565,7 +777,7 @@ export default function KDS() {
               });
               
               // Persistent toast until confirmed
-              toast.error(`🚫 PEDIDO #${order.id.slice(-4).toUpperCase()} CANCELADO!`, { 
+              toast.error(`PEDIDO #${order.id.slice(-4).toUpperCase()} CANCELADO!`, { 
                 description: (order as any).cancellation_reason || 'Confirme que viu este cancelamento',
                 duration: Infinity,
                 id: `cancel-${order.id}`,
@@ -573,7 +785,7 @@ export default function KDS() {
             }
           } else if (!notifiedOrdersRef.current.has(`${order.id}-${order.status}`)) {
             // Only notify for non-cancellation status changes we didn't trigger
-            toast.info(`Pedido #${order.id.slice(-4).toUpperCase()} → ${statusLabels[order.status] || order.status}`);
+            toast.info(`Pedido #${order.id.slice(-4).toUpperCase()} -> ${statusLabels[order.status] || order.status}`);
           }
         }
       });
@@ -581,16 +793,19 @@ export default function KDS() {
 
     // Sound + visual for new orders (pending or preparing depending on settings)
     // Exclude drafts - they're not real orders yet
+    const useGlobalNewOrderToast = !effectiveAssignedStationId;
     const targetStatus = kdsSettings.showPendingColumn ? 'pending' : 'preparing';
-    const newOrders = orders.filter(
-      o => o.status === targetStatus && !o.is_draft && !notifiedOrdersRef.current.has(o.id)
-    );
+    const newOrders = useGlobalNewOrderToast
+      ? orders.filter(
+          o => o.status === targetStatus && !o.is_draft && !notifiedOrdersRef.current.has(o.id)
+        )
+      : [];
 
     if (newOrders.length > 0) {
       if (soundEnabled && settings.enabled) {
         playKdsNewOrderSound();
       }
-      toast.success(`🔔 ${newOrders.length} novo(s) pedido(s)!`, { duration: 4000 });
+      toast.success(`${newOrders.length} novo(s) pedido(s)!`, { duration: 4000 });
       newOrders.forEach(o => notifiedOrdersRef.current.add(o.id));
     }
 
@@ -605,7 +820,17 @@ export default function KDS() {
         notifiedOrdersRef.current.delete(id);
       }
     });
-  }, [orders, soundEnabled, settings.enabled, playKdsNewOrderSound, kdsSettings.showPendingColumn, kdsSettings.cancellationAlertsEnabled]);
+  }, [
+    orders,
+    orderHasItemsForCurrentStation,
+    soundEnabled,
+    settings.enabled,
+    playKdsNewOrderSound,
+    kdsSettings.showPendingColumn,
+    kdsSettings.cancellationAlertsEnabled,
+    kdsSettings.operationMode,
+    effectiveAssignedStationId,
+  ]);
 
   // Detect recent cancellations on initial load and restore unconfirmed ones
   useEffect(() => {
@@ -652,6 +877,7 @@ export default function KDS() {
         // Order was already ready/delivered when cancelled - kitchen doesn't need to know
         return false;
       }
+      if (!orderHasItemsForCurrentStation(o, true)) return false;
       
       // Check if it's in the stored unconfirmed list
       if (storedUnconfirmedIds.includes(o.id)) return true;
@@ -673,7 +899,7 @@ export default function KDS() {
           if (!newMap.has(order.id) || !newMap.get(order.id)) {
             newMap.set(order.id, order);
             // Show toast for each
-            toast.error(`🚫 PEDIDO #${order.id.slice(-4).toUpperCase()} CANCELADO!`, { 
+            toast.error(`PEDIDO #${order.id.slice(-4).toUpperCase()} CANCELADO!`, { 
               description: (order as any).cancellation_reason || 'Confirme que viu este cancelamento',
               duration: Infinity,
               id: `cancel-${order.id}`,
@@ -683,7 +909,7 @@ export default function KDS() {
         return newMap;
       });
     }
-  }, [orders, kdsSettings.cancellationAlertsEnabled]);
+  }, [orders, kdsSettings.cancellationAlertsEnabled, orderHasItemsForCurrentStation]);
 
   // Persist unconfirmed cancellations to localStorage
   useEffect(() => {
@@ -715,106 +941,149 @@ export default function KDS() {
     }
   }, [unconfirmedItemCancellations]);
 
-  // Realtime subscription for item cancellations
+  useEffect(() => {
+    if (!effectiveAssignedStationId && !effectiveAssignedDeviceId) return;
+
+    setUnconfirmedCancellations((prev) => {
+      let changed = false;
+      const next = new Map<string, Order>();
+      prev.forEach((order, orderId) => {
+        if (order && orderHasItemsForCurrentStation(order, true)) {
+          next.set(orderId, order);
+        } else {
+          changed = true;
+          toast.dismiss(`cancel-${orderId}`);
+        }
+      });
+      return changed ? next : prev;
+    });
+
+    setUnconfirmedItemCancellations((prev) => {
+      let changed = false;
+      const next = new Map<string, ItemCancellationAlert>();
+      prev.forEach((alert, itemId) => {
+        const matchedItem = orders.flatMap((order) => order.order_items || []).find((item) => item.id === itemId);
+        const deviceId =
+          matchedItem?.current_device_id ||
+          (matchedItem as OrderItem & { cancelled_device_id?: string | null } | undefined)?.cancelled_device_id ||
+          null;
+        const stationId =
+          alert.stationId ||
+          matchedItem?.current_station_id ||
+          (matchedItem as OrderItem & { cancelled_station_id?: string | null } | undefined)?.cancelled_station_id ||
+          null;
+        const matchesCurrentDevice = effectiveAssignedDeviceId ? deviceId === effectiveAssignedDeviceId : true;
+        const matchesCurrentStation = effectiveAssignedStationId ? stationId === effectiveAssignedStationId : true;
+        if (matchesCurrentDevice && matchesCurrentStation) {
+          next.set(itemId, { ...alert, stationId });
+        } else {
+          changed = true;
+          toast.dismiss(`item-cancel-${itemId}`);
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [effectiveAssignedDeviceId, effectiveAssignedStationId, orderHasItemsForCurrentStation, orders]);
+
   useEffect(() => {
     if (kdsSettings.cancellationAlertsEnabled === false) return;
-    
-    const channel = supabase
-      .channel('kds-item-cancellations')
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'order_items',
-      }, async (payload) => {
-        const newData = payload.new as any;
-        const oldData = payload.old as any;
-        
-        // Detectar cancelamento: cancelled_at mudou de null para um valor
-        if (!oldData?.cancelled_at && newData?.cancelled_at) {
-          console.log('[KDS] Item cancelado detectado:', newData.id);
-          
-          // Só alertar se o item ainda estava em produção (não já concluído/despachado)
-          // Se station_status é 'done', o item já foi produzido - não faz sentido alertar
-          if (newData.station_status === 'done') {
-            console.log('[KDS] Item cancelado já estava concluído, ignorando alerta:', newData.id);
-            return;
-          }
-          
-          // Se o item está em uma estação order_status, já passou pela produção
-          if (newData.current_station_id) {
-            const { data: stationData } = await supabase
-              .from('kds_stations')
-              .select('station_type')
-              .eq('id', newData.current_station_id)
-              .single();
-            
-            if (stationData?.station_type === 'order_status') {
-              console.log('[KDS] Item cancelado já estava no despacho, ignorando alerta:', newData.id);
-              return;
-            }
-          }
-          
-          // Buscar dados completos do item cancelado
-          const { data: itemData } = await supabase
-            .from('order_items')
-            .select(`
-              id,
-              order_id,
-              quantity,
-              cancellation_reason,
-              product:products(name),
-              variation:product_variations(name),
-              order:orders(order_type, table_id, customer_name, table:tables(number))
-            `)
-            .eq('id', newData.id)
-            .single();
-          
-          if (itemData) {
-            const order = itemData.order as any;
-            const origin = order?.order_type === 'delivery' 
-              ? 'DELIVERY' 
-              : order?.order_type === 'takeaway' 
-                ? 'BALCÃO' 
-                : `MESA ${order?.table?.number || '?'}`;
-            
-            const alert: ItemCancellationAlert = {
-              itemId: newData.id,
-              orderId: itemData.order_id,
-              productName: (itemData.product as any)?.name || 'Produto',
-              variationName: (itemData.variation as any)?.name,
-              quantity: itemData.quantity,
-              reason: itemData.cancellation_reason || 'Não informado',
-              cancelledAt: new Date(newData.cancelled_at),
-              origin
-            };
-            
-            // Adicionar ao mapa de não confirmados
-            setUnconfirmedItemCancellations(prev => {
-              const newMap = new Map(prev);
-              newMap.set(newData.id, alert);
-              return newMap;
-            });
-            
-            // Tocar som de alerta
-            if (soundEnabled && settings.enabled) {
-              playOrderCancelledSound();
-            }
-            
-            // Toast persistente
-            toast.error(`🚫 ITEM CANCELADO!`, { 
-              description: `${alert.quantity}x ${alert.productName}${alert.variationName ? ` (${alert.variationName})` : ''} - ${alert.origin}`,
-              duration: Infinity,
-              id: `item-cancel-${newData.id}`,
-            });
-          }
-        }
-      })
-      .subscribe();
-    
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [kdsSettings.cancellationAlertsEnabled, soundEnabled, settings.enabled, playOrderCancelledSound]);
+
+    const stationMap = new Map(
+      (isDeviceOnlyMode && deviceData.stations.length > 0 ? deviceData.stations : activeStations).map((station) => [
+        station.id,
+        station,
+      ])
+    );
+
+    const cancelledItems = orders
+      .flatMap((order) =>
+        (order.order_items || []).map((item) => ({
+          item,
+          order,
+        }))
+      )
+      .filter(({ item }) => item.id && item.cancelled_at)
+      .sort((a, b) => (b.item.cancelled_at || '').localeCompare(a.item.cancelled_at || ''));
+
+    const currentMap = new Map(
+      cancelledItems.map(({ item }) => [item.id as string, item.cancelled_at as string])
+    );
+
+    if (!cancelledItemsBootstrappedRef.current) {
+      knownCancelledItemsRef.current = currentMap;
+      cancelledItemsBootstrappedRef.current = true;
+      return;
+    }
+
+    for (const { item, order } of cancelledItems) {
+      const itemId = item.id as string;
+      const cancelledAt = item.cancelled_at as string | null;
+      if (!itemId || !cancelledAt) continue;
+
+      const previousCancelledAt = knownCancelledItemsRef.current.get(itemId);
+      if (previousCancelledAt === cancelledAt) continue;
+
+      if (item.served_at) continue;
+      if (item.station_status === 'done') continue;
+      if ((item as OrderItem & { cancelled_station_status?: string | null }).cancelled_station_status === 'completed') continue;
+      if ((item as OrderItem & { cancelled_station_status?: string | null }).cancelled_station_status === 'done') continue;
+      const relevantDeviceId = getItemDeviceId(item, true);
+      const relevantStationId = getItemStationId(item, true);
+      if (effectiveAssignedDeviceId && relevantDeviceId !== effectiveAssignedDeviceId) continue;
+      if (effectiveAssignedStationId && relevantStationId !== effectiveAssignedStationId) continue;
+      const currentStation = relevantStationId ? stationMap.get(relevantStationId) : null;
+      if (currentStation?.station_type === 'order_status') continue;
+
+      const origin = order.order_type === 'delivery'
+        ? 'DELIVERY'
+        : order.order_type === 'takeaway'
+          ? 'BALCAO'
+          : `MESA ${order.table?.number || '?'}`;
+
+      const alert: ItemCancellationAlert = {
+        itemId,
+        orderId: item.order_id,
+        stationId: relevantStationId,
+        productName: item.product?.name || 'Produto',
+        variationName: item.variation?.name || null,
+        quantity: item.quantity,
+        reason: item.cancellation_reason || 'Nao informado',
+        cancelledAt: new Date(cancelledAt),
+        origin,
+      };
+
+      setUnconfirmedItemCancellations((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(itemId, alert);
+        return newMap;
+      });
+
+      if (soundEnabled && settings.enabled) {
+        playOrderCancelledSound();
+      }
+
+      toast.error('ITEM CANCELADO!', {
+        description: `${alert.quantity}x ${alert.productName}${alert.variationName ? ` (${alert.variationName})` : ''} - ${alert.origin}`,
+        duration: Infinity,
+        id: `item-cancel-${itemId}`,
+      });
+    }
+
+    knownCancelledItemsRef.current = currentMap;
+  }, [
+    activeStations,
+    deviceData.stations,
+    effectiveAssignedDeviceId,
+    effectiveAssignedStationId,
+    getItemDeviceId,
+    getItemStationId,
+    isDeviceOnlyMode,
+    kdsSettings.cancellationAlertsEnabled,
+    orders,
+    settings.enabled,
+    soundEnabled,
+    playOrderCancelledSound,
+  ]);
 
   // Sound loop for unconfirmed cancellations (orders + items)
   useEffect(() => {
@@ -868,7 +1137,7 @@ export default function KDS() {
   }
 
   // Permission check AFTER all hooks - skip for device-only auth (no user session)
-  if (!deviceAuth && !permissionsLoading && !hasPermission('kds_view')) {
+  if (!isDeviceOnlyMode && !permissionsLoading && !hasPermission('kds_view')) {
     return <AccessDenied permission="kds_view" />;
   }
 
@@ -1132,10 +1401,19 @@ export default function KDS() {
       
       // Mark ALL items in this order as 'delivered' so they don't appear again
       // if the customer adds more items later
-      await supabase
-        .from('order_items')
-        .update({ status: 'delivered' })
-        .eq('order_id', orderId);
+      if (effectiveTenantId) {
+        const targetOrder = orders.find((order) => order.id === orderId);
+        if (targetOrder?.order_items?.length) {
+          await Promise.all(
+            targetOrder.order_items.map((item) =>
+              updateOrderItemById(effectiveTenantId, item.id, {
+                status: 'delivered',
+                updated_at: new Date().toISOString(),
+              })
+            )
+          );
+        }
+      }
       
       // Record ready_at timestamp when marking as ready
       await updateOrder.mutateAsync({ 
@@ -1180,7 +1458,7 @@ export default function KDS() {
   }) => {
     const origin = getOrderOrigin(order);
     const OriginIcon = origin.icon;
-    const isCompact = kdsSettings.compactMode;
+    const isCompact = effectiveCompactMode;
     
     // Get items to display based on order status
     // For ready orders, show ready items; for others, show pending/preparing items
@@ -1259,7 +1537,7 @@ export default function KDS() {
                       {/* Sabores */}
                       {!isCompact && flavors.length > 0 && (
                         <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
-                          🍕 {flavors.join(' + ')}
+                          Pizza: {flavors.join(' + ')}
                         </p>
                       )}
                     </div>
@@ -1381,7 +1659,7 @@ export default function KDS() {
     showStartButton?: boolean;
     showReadyButton?: boolean;
   }) => {
-    const isCompact = kdsSettings.compactMode;
+    const isCompact = effectiveCompactMode;
     
     return (
       <div className={cn("flex-1", isCompact ? "min-w-[200px] lg:min-w-[240px]" : "min-w-[280px] lg:min-w-[320px]")}>
@@ -1492,68 +1770,63 @@ export default function KDS() {
           
           {/* Quick Station Switcher */}
           <div className="flex items-center gap-1.5">
-            <Select
-              value={kdsSettings.assignedStationId || 'all'}
-              onValueChange={(value) => {
-                updateDeviceSettings({ 
-                  assignedStationId: value === 'all' ? undefined : value 
-                });
-                // Reset station items tracking when changing stations
-                previousStationItemsRef.current = new Set();
-                stationItemsInitializedRef.current = false;
-              }}
-            >
-              <SelectTrigger className="w-[160px] h-8 text-sm">
-                <div className="flex items-center gap-2">
-                  <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-                  <SelectValue placeholder="Todas praças" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">
-                  <span className="flex items-center gap-2">
-                    <Circle className="h-3 w-3 text-muted-foreground" />
-                    Todas as praças
-                  </span>
-                </SelectItem>
-                {productionStations.map(station => (
-                  <SelectItem key={station.id} value={station.id}>
+            {!isDeviceOnlyMode && (
+              <Select
+                value={effectiveAssignedStationId || 'all'}
+                onValueChange={handleAssignedStationChange}
+              >
+                <SelectTrigger className="w-[160px] h-8 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                    <SelectValue placeholder="Todas as etapas" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
                     <span className="flex items-center gap-2">
-                      <Circle 
-                        className="h-3 w-3" 
-                        style={{ color: station.color, fill: station.color }}
-                      />
-                      {station.name}
+                      <Circle className="h-3 w-3 text-muted-foreground" />
+                      Todas as etapas
                     </span>
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  {productionStations.map(station => (
+                    <SelectItem key={station.id} value={station.id}>
+                      <span className="flex items-center gap-2">
+                        <Circle 
+                          className="h-3 w-3" 
+                          style={{ color: station.color, fill: station.color }}
+                        />
+                        {station.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           
           {/* Station Badge (when assigned) */}
-          {kdsSettings.assignedStationId && (
+          {!isDeviceOnlyMode && effectiveAssignedStationId && (
             <Badge 
               variant="outline" 
               className="hidden md:flex text-sm font-medium border-2"
               style={{ 
-                borderColor: activeStations.find(s => s.id === kdsSettings.assignedStationId)?.color,
-                color: activeStations.find(s => s.id === kdsSettings.assignedStationId)?.color
+                borderColor: activeStations.find(s => s.id === effectiveAssignedStationId)?.color,
+                color: activeStations.find(s => s.id === effectiveAssignedStationId)?.color
               }}
             >
-              {activeStations.find(s => s.id === kdsSettings.assignedStationId)?.name}
+              {activeStations.find(s => s.id === effectiveAssignedStationId)?.name}
             </Badge>
           )}
           
           {/* Compact Mode Toggle */}
           <Button
-            variant={kdsSettings.compactMode ? 'default' : 'outline'}
+            variant={effectiveCompactMode ? 'default' : 'outline'}
             size="sm"
-            onClick={() => updateKdsSettings({ compactMode: !kdsSettings.compactMode })}
+            onClick={handleCompactModeToggle}
             className="gap-1.5"
           >
             <Layers className="h-4 w-4" />
-            <span className="hidden sm:inline">{kdsSettings.compactMode ? 'Compacto' : 'Normal'}</span>
+            <span className="hidden sm:inline">{effectiveCompactMode ? 'Compacto' : 'Normal'}</span>
           </Button>
           
           <Button
@@ -1669,7 +1942,7 @@ export default function KDS() {
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle className="h-6 w-6 text-destructive animate-bounce" />
             <h2 className="text-lg font-bold text-destructive">
-              ⚠️ PEDIDO(S) CANCELADO(S) - ATENÇÃO!
+              ATENCAO: PEDIDO(S) CANCELADO(S)!
             </h2>
             <Badge variant="destructive" className="ml-auto text-base">
               {Array.from(unconfirmedCancellations.values()).filter(o => o !== null).length}
@@ -1695,7 +1968,7 @@ export default function KDS() {
           <div className="flex items-center gap-2 mb-3">
             <Ban className="h-6 w-6 text-orange-500 animate-bounce" />
             <h2 className="text-lg font-bold text-orange-600 dark:text-orange-400">
-              ⚠️ ITEM(NS) CANCELADO(S) - CONFIRME!
+              ATENCAO: ITEM(NS) CANCELADO(S) - CONFIRME!
             </h2>
             <Badge className="ml-auto text-base bg-orange-500 hover:bg-orange-600">
               {unconfirmedItemCancellations.size}
@@ -1760,17 +2033,26 @@ export default function KDS() {
           isLoading={isLoading} 
           overrideTenantId={deviceAuth?.tenantId}
           overrideStations={isDeviceOnlyMode ? deviceData.stations : undefined}
+          deviceStageName={isDeviceOnlyMode ? deviceAuth?.deviceName || null : null}
+          singleDeviceId={isDeviceOnlyMode ? effectiveAssignedDeviceId : null}
+          forceSingleStationView={isDeviceOnlyMode}
           overrideSettings={isDeviceOnlyMode ? {
-            assignedStationId: deviceAuth?.stationId || kdsSettings.assignedStationId,
+            assignedStationId: effectiveAssignedStationId,
             highlightSpecialBorders: kdsSettings.highlightSpecialBorders,
             borderKeywords: kdsSettings.borderKeywords,
             showPartySize: kdsSettings.showPartySize,
             showWaiterName: kdsSettings.showWaiterName,
-            compactMode: kdsSettings.compactMode,
+            compactMode: effectiveCompactMode,
             timerGreenMinutes: kdsSettings.timerGreenMinutes,
             timerYellowMinutes: kdsSettings.timerYellowMinutes,
           } : undefined}
           overrideWorkflow={isDeviceOnlyMode ? {
+            startItemAtStation: {
+              mutate: ({ itemId }: { itemId: string; stationId: string }) => {
+                deviceData.claimItem.mutate({ itemId });
+              },
+              isPending: deviceData.claimItem.isPending,
+            },
             moveItemToNextStation: {
               mutate: ({ itemId, currentStationId }: { itemId: string; currentStationId: string }) => {
                 // Use smart routing via edge function (load balancing)
@@ -1784,10 +2066,10 @@ export default function KDS() {
               },
             },
             finalizeOrderFromStatus: {
-              mutate: ({ orderId }: { orderId: string; orderType?: string; currentStationId?: string }) => {
-                deviceData.updateOrderStatus.mutate({ orderId, status: 'delivered' });
+              mutate: ({ orderId, orderType, currentStationId }: { orderId: string; orderType?: string; currentStationId?: string }) => {
+                deviceData.finalizeOrderFromStatus.mutate({ orderId, orderType, currentStationId });
               },
-              isPending: deviceData.updateOrderStatus.isPending,
+              isPending: deviceData.finalizeOrderFromStatus.isPending,
             },
             serveItem: {
               mutate: (_itemId: string) => {
@@ -1899,3 +2181,9 @@ export default function KDS() {
     </PDVLayout>
   );
 }
+
+
+
+
+
+

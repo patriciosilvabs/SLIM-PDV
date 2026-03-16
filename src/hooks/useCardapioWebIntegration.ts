@@ -1,6 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { backendClient } from '@/integrations/backend/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/hooks/useTenant';
+import {
+  deleteCardapioWebIntegration as deleteIntegrationDoc,
+  deleteCardapioWebMapping,
+  getCardapioWebIntegration,
+  listCardapioWebLogs,
+  listCardapioWebMappings,
+  upsertCardapioWebIntegration,
+  updateCardapioWebMapping,
+} from '@/lib/firebaseTenantCrud';
 
 export interface CardapioWebIntegration {
   id: string;
@@ -38,22 +48,17 @@ export interface CardapioWebLog {
 export function useCardapioWebIntegration() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
 
-  // Fetch integration config
   const { data: integration, isLoading, error } = useQuery({
-    queryKey: ['cardapioweb-integration'],
+    queryKey: ['cardapioweb-integration', tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('cardapioweb_integrations')
-        .select('*')
-        .maybeSingle();
-
-      if (error) throw error;
-      return data as CardapioWebIntegration | null;
+      if (!tenantId) return null;
+      return (await getCardapioWebIntegration(tenantId)) as CardapioWebIntegration | null;
     },
+    enabled: !!tenantId,
   });
 
-  // Save integration
   const saveIntegration = useMutation({
     mutationFn: async (values: {
       api_token: string;
@@ -61,90 +66,57 @@ export function useCardapioWebIntegration() {
       webhook_secret?: string;
       is_active: boolean;
     }) => {
-      // Get tenant_id
-      const { data: tenantData } = await supabase
-        .from('tenant_members')
-        .select('tenant_id')
-        .limit(1)
-        .single();
-
-      if (!tenantData?.tenant_id) {
-        throw new Error('Tenant não encontrado');
-      }
-
-      const payload = {
-        tenant_id: tenantData.tenant_id,
-        api_token: values.api_token,
-        store_id: values.store_id || null,
-        webhook_secret: values.webhook_secret || null,
-        is_active: values.is_active,
-      };
-
-      if (integration?.id) {
-        const { error } = await supabase
-          .from('cardapioweb_integrations')
-          .update(payload)
-          .eq('id', integration.id);
-
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('cardapioweb_integrations')
-          .insert(payload);
-
-        if (error) throw error;
-      }
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await upsertCardapioWebIntegration(
+        tenantId,
+        {
+          api_token: values.api_token,
+          store_id: values.store_id || null,
+          webhook_secret: values.webhook_secret || null,
+          is_active: values.is_active,
+        },
+        integration?.id
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cardapioweb-integration'] });
-      toast({ title: 'Integração salva com sucesso!' });
+      toast({ title: 'Integracao salva com sucesso!' });
     },
     onError: (error: Error) => {
-      toast({ 
-        title: 'Erro ao salvar integração', 
+      toast({
+        title: 'Erro ao salvar integracao',
         description: error.message,
         variant: 'destructive',
       });
     },
   });
 
-  // Delete integration
   const deleteIntegration = useMutation({
     mutationFn: async () => {
-      if (!integration?.id) return;
-
-      const { error } = await supabase
-        .from('cardapioweb_integrations')
-        .delete()
-        .eq('id', integration.id);
-
-      if (error) throw error;
+      if (!tenantId || !integration?.id) return;
+      await deleteIntegrationDoc(tenantId, integration.id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cardapioweb-integration'] });
-      toast({ title: 'Integração removida' });
+      toast({ title: 'Integracao removida' });
     },
     onError: (error: Error) => {
-      toast({ 
-        title: 'Erro ao remover integração', 
+      toast({
+        title: 'Erro ao remover integracao',
         description: error.message,
         variant: 'destructive',
       });
     },
   });
 
-  // Test connection
   const testConnection = useMutation({
     mutationFn: async (apiToken: string) => {
-      const response = await fetch(
-        'https://integracao.cardapioweb.com/api/partner/v1/merchant',
-        {
-          headers: {
-            'X-API-KEY': apiToken,
-            'Accept': 'application/json',
-          },
-        }
-      );
+      const response = await fetch('https://integracao.cardapioweb.com/api/partner/v1/merchant', {
+        headers: {
+          'X-API-KEY': apiToken,
+          Accept: 'application/json',
+        },
+      });
 
       if (!response.ok) {
         throw new Error(`API retornou status ${response.status}`);
@@ -153,14 +125,14 @@ export function useCardapioWebIntegration() {
       return await response.json();
     },
     onSuccess: (data) => {
-      toast({ 
-        title: 'Conexão bem sucedida!', 
+      toast({
+        title: 'Conexao bem sucedida!',
         description: `Loja: ${data.name || data.id}`,
       });
     },
     onError: (error: Error) => {
-      toast({ 
-        title: 'Falha na conexão', 
+      toast({
+        title: 'Falha na conexao',
         description: error.message,
         variant: 'destructive',
       });
@@ -180,22 +152,17 @@ export function useCardapioWebIntegration() {
 export function useCardapioWebMappings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { tenantId } = useTenant();
 
-  // Fetch mappings
   const { data: mappings, isLoading } = useQuery({
-    queryKey: ['cardapioweb-mappings'],
+    queryKey: ['cardapioweb-mappings', tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('cardapioweb_product_mappings')
-        .select('*')
-        .order('cardapioweb_item_name');
-
-      if (error) throw error;
-      return data as CardapioWebProductMapping[];
+      if (!tenantId) return [];
+      return (await listCardapioWebMappings(tenantId)) as CardapioWebProductMapping[];
     },
+    enabled: !!tenantId,
   });
 
-  // Update mapping
   const updateMapping = useMutation({
     mutationFn: async ({
       id,
@@ -206,43 +173,34 @@ export function useCardapioWebMappings() {
       local_product_id: string | null;
       local_variation_id: string | null;
     }) => {
-      const { error } = await supabase
-        .from('cardapioweb_product_mappings')
-        .update({ local_product_id, local_variation_id })
-        .eq('id', id);
-
-      if (error) throw error;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await updateCardapioWebMapping(tenantId, id, { local_product_id, local_variation_id });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cardapioweb-mappings'] });
       toast({ title: 'Mapeamento atualizado' });
     },
     onError: (error: Error) => {
-      toast({ 
-        title: 'Erro ao atualizar mapeamento', 
+      toast({
+        title: 'Erro ao atualizar mapeamento',
         description: error.message,
         variant: 'destructive',
       });
     },
   });
 
-  // Delete mapping
   const deleteMapping = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('cardapioweb_product_mappings')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      if (!tenantId) throw new Error('Tenant nao encontrado');
+      await deleteCardapioWebMapping(tenantId, id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cardapioweb-mappings'] });
       toast({ title: 'Mapeamento removido' });
     },
     onError: (error: Error) => {
-      toast({ 
-        title: 'Erro ao remover mapeamento', 
+      toast({
+        title: 'Erro ao remover mapeamento',
         description: error.message,
         variant: 'destructive',
       });
@@ -258,19 +216,16 @@ export function useCardapioWebMappings() {
 }
 
 export function useCardapioWebLogs() {
-  const { data: logs, isLoading } = useQuery({
-    queryKey: ['cardapioweb-logs'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('cardapioweb_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50);
+  const { tenantId } = useTenant();
 
-      if (error) throw error;
-      return data as CardapioWebLog[];
+  const { data: logs, isLoading } = useQuery({
+    queryKey: ['cardapioweb-logs', tenantId],
+    queryFn: async () => {
+      if (!tenantId) return [];
+      return (await listCardapioWebLogs(tenantId, 50)) as CardapioWebLog[];
     },
-    refetchInterval: 30000, // Refresh every 30s
+    enabled: !!tenantId,
+    refetchInterval: 30000,
   });
 
   return {
@@ -280,8 +235,6 @@ export function useCardapioWebLogs() {
 }
 
 export function useSyncOrderStatus() {
-  const { toast } = useToast();
-
   return useMutation({
     mutationFn: async ({
       order_id,
@@ -292,7 +245,7 @@ export function useSyncOrderStatus() {
       new_status: string;
       cancellation_reason?: string;
     }) => {
-      const { data, error } = await supabase.functions.invoke('cardapioweb-sync-status', {
+      const { data, error } = await backendClient.functions.invoke('cardapioweb-sync-status', {
         body: { order_id, new_status, cancellation_reason },
       });
 
@@ -300,8 +253,7 @@ export function useSyncOrderStatus() {
       return data;
     },
     onError: (error: Error) => {
-      console.error('[CardápioWeb] Sync error:', error);
-      // Don't show error toast - the local update succeeded
+      console.error('[CardapioWeb] Sync error:', error);
     },
   });
 }
@@ -326,7 +278,7 @@ export function useSyncOrders() {
       start_date: string;
       end_date: string;
     }): Promise<SyncOrdersResult> => {
-      const { data, error } = await supabase.functions.invoke('cardapioweb-sync-orders', {
+      const { data, error } = await backendClient.functions.invoke('cardapioweb-sync-orders', {
         body: { start_date, end_date },
       });
 
@@ -338,14 +290,14 @@ export function useSyncOrders() {
       queryClient.invalidateQueries({ queryKey: ['cardapioweb-logs'] });
       queryClient.invalidateQueries({ queryKey: ['cardapioweb-mappings'] });
       toast({
-        title: 'Sincronização concluída!',
-        description: `${data.imported} pedidos importados, ${data.skipped} já existiam.`,
+        title: 'Sincronizacao concluida!',
+        description: `${data.imported} pedidos importados, ${data.skipped} ja existiam.`,
       });
     },
     onError: (error: Error) => {
-      console.error('[CardápioWeb] Sync orders error:', error);
+      console.error('[CardapioWeb] Sync orders error:', error);
       toast({
-        title: 'Erro na sincronização',
+        title: 'Erro na sincronizacao',
         description: error.message,
         variant: 'destructive',
       });

@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { resolveCurrentTenantId } from '@/lib/tenantResolver';
+import { listCategories, listProducts, listTables } from '@/lib/firebaseTenantCrud';
 
 const CACHE_PREFIX = 'pdv-cache-';
-const CACHE_EXPIRY = 60 * 60 * 1000; // 1 hour
+const CACHE_EXPIRY = 60 * 60 * 1000;
 
 interface CacheEntry<T> {
   data: T;
@@ -13,13 +14,13 @@ function getFromCache<T>(key: string): T | null {
   try {
     const cached = localStorage.getItem(CACHE_PREFIX + key);
     if (!cached) return null;
-    
+
     const entry: CacheEntry<T> = JSON.parse(cached);
     if (Date.now() - entry.timestamp > CACHE_EXPIRY) {
       localStorage.removeItem(CACHE_PREFIX + key);
       return null;
     }
-    
+
     return entry.data;
   } catch {
     return null;
@@ -30,7 +31,7 @@ function setToCache<T>(key: string, data: T): void {
   try {
     const entry: CacheEntry<T> = {
       data,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
     localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(entry));
   } catch (error) {
@@ -45,16 +46,14 @@ export function useProductsCache() {
   const refresh = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*, category:categories(name)')
-        .eq('is_available', true)
-        .order('name');
-      
-      if (!error && data) {
-        setProducts(data);
-        setToCache('products', data);
+      const tenantId = await resolveCurrentTenantId();
+      if (!tenantId) {
+        setProducts([]);
+        return;
       }
+      const data = await listProducts(tenantId);
+      setProducts(data);
+      setToCache('products', data);
     } catch (error) {
       console.error('Error fetching products:', error);
     } finally {
@@ -66,7 +65,7 @@ export function useProductsCache() {
     if (products.length === 0) {
       refresh();
     }
-  }, []);
+  }, [products.length, refresh]);
 
   return { products, isLoading, refresh };
 }
@@ -78,16 +77,15 @@ export function useCategoriesCache() {
   const refresh = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('is_active', true)
-        .order('sort_order');
-      
-      if (!error && data) {
-        setCategories(data);
-        setToCache('categories', data);
+      const tenantId = await resolveCurrentTenantId();
+      if (!tenantId) {
+        setCategories([]);
+        return;
       }
+      const data = await listCategories(tenantId);
+      const active = data.filter((c) => c.is_active);
+      setCategories(active);
+      setToCache('categories', active);
     } catch (error) {
       console.error('Error fetching categories:', error);
     } finally {
@@ -99,7 +97,7 @@ export function useCategoriesCache() {
     if (categories.length === 0) {
       refresh();
     }
-  }, []);
+  }, [categories.length, refresh]);
 
   return { categories, isLoading, refresh };
 }
@@ -111,15 +109,14 @@ export function useTablesCache() {
   const refresh = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('tables')
-        .select('*')
-        .order('number');
-      
-      if (!error && data) {
-        setTables(data);
-        setToCache('tables', data);
+      const tenantId = await resolveCurrentTenantId();
+      if (!tenantId) {
+        setTables([]);
+        return;
       }
+      const data = await listTables(tenantId);
+      setTables(data);
+      setToCache('tables', data);
     } catch (error) {
       console.error('Error fetching tables:', error);
     } finally {
@@ -131,14 +128,14 @@ export function useTablesCache() {
     if (tables.length === 0) {
       refresh();
     }
-  }, []);
+  }, [tables.length, refresh]);
 
   return { tables, isLoading, refresh };
 }
 
 export function clearAllCache() {
   const keys = Object.keys(localStorage);
-  keys.forEach(key => {
+  keys.forEach((key) => {
     if (key.startsWith(CACHE_PREFIX)) {
       localStorage.removeItem(key);
     }
